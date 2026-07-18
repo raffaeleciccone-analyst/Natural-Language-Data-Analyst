@@ -1,0 +1,11 @@
+# Core
+streamlit>=1.36
+pandas>=2.0
+plotly>=5.20         # grafici interattivi
+openpyxl>=3.1        # lettura file Excel (.xlsx)
+
+# Provider LLM (installa solo quelli che usi)
+ollama>=0.3          # modelli locali
+anthropic>=0.40      # Claude (opzionale)
+openai>=1.40         # GPT (opzionale)
+google-genai>=0.3    # Gemini (opzionale)
