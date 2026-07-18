@@ -51,7 +51,7 @@ with st.sidebar:
     st.divider()
     st.subheader("Modello LLM")
     if DEMO_MODE:
-        provider = _secret("PROVIDER", "openai").strip().lower()
+        provider = _secret("PROVIDER", "gemini").strip().lower()
         model_name = _secret("MODEL", DEFAULT_MODELS.get(provider, ""))
         api_key = _secret(_KEY_ENV.get(provider, ""), "")
         st.success(f"🚀 Demo pubblica · **{provider}** · `{model_name}`")

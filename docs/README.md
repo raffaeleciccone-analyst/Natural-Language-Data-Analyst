@@ -1,18 +1,19 @@
-# Immagini per il README
+# Immagini del README
 
-Metti qui gli screenshot mostrati nel README principale. Nomi attesi:
+Il README mostra due **anteprime del design** (SVG, generate a mano):
 
-| File | Cosa catturare |
-|------|----------------|
-| `preview-report.png` | Il **Report iniziale sui dati** (KPI + sintesi + grafici) su un dataset caricato |
-| `preview-chat.png`   | Una **domanda** con la risposta testuale e il grafico Plotly |
-| `preview-dark.png`   | La stessa vista con il **tema scuro** attivo |
+- `preview-report.svg` — report iniziale, tema chiaro
+- `preview-dark.svg` — risposta + grafico, tema scuro
 
-## Come catturarli
+## Vuoi screenshot reali dell'app?
+Sono anteprime del design, non catture dell'app in esecuzione. Per sostituirle con
+screenshot veri:
+
 1. Avvia l'app: `streamlit run main.py`
-2. Carica un dataset (o usa quello di default) e fai una domanda con grafico.
-3. Fai lo screenshot della finestra del browser e salvalo qui con il nome esatto della tabella.
+2. Carica un dataset (o usa quello di default) e fai una domanda con grafico;
+   per il tema scuro attiva il toggle "🌙 Tema scuro".
+3. Cattura la finestra del browser (finestra ~1280px) e salva le immagini qui,
+   poi aggiorna i link nel `README.md` (sezione **Anteprima**) ai nuovi file
+   (es. `docs/preview-report.png`).
 
-Consigli: usa una finestra ~1280px di larghezza; per il tema scuro attiva il
-toggle "🌙 Tema scuro" nella barra laterale. PNG o GIF vanno bene (GitHub li mostra
-inline nel README).
+PNG o GIF vanno bene: GitHub li mostra inline nel README.

@@ -12,10 +12,11 @@ classifiche e andamento temporale dei dati.
 
 ## Anteprima
 
-<!-- Sostituisci queste immagini con screenshot reali (vedi docs/README.md). -->
-![Report iniziale sui dati](docs/preview-report.png)
-![Domanda con grafico](docs/preview-chat.png)
-![Tema scuro](docs/preview-dark.png)
+Anteprime del design (light/dark) — sostituibili con screenshot reali dell'app
+(vedi [docs/README.md](docs/README.md)).
+
+![Report iniziale sui dati](docs/preview-report.svg)
+![Tema scuro con risposta](docs/preview-dark.svg)
 
 ## Cosa fa
 
@@ -86,16 +87,18 @@ Per far provare l'app a chiunque dal browser, con un link:
    ```toml
    DEMO_MODE = "true"
    DEMO_MAX_QUESTIONS = "15"
-   PROVIDER = "openai"
-   MODEL = "gpt-4o-mini"
-   OPENAI_API_KEY = "sk-..."
+   PROVIDER = "gemini"
+   MODEL = "gemini-2.5-flash"
+   GOOGLE_API_KEY = "AIza..."
    ```
 4. **Deploy**. In modalità demo l'app usa la tua chiave, nasconde i campi sensibili
    e limita le domande per sessione.
 
-> ⚠️ La chiave la paghi tu: usa un **modello economico** (`gpt-4o-mini`,
-> `claude-haiku-4-5`, `gemini-2.5-flash`) e imposta un **tetto di spesa** sul
-> pannello del provider. Ollama non è disponibile sul cloud (gira solo in locale).
+> 💡 **Gratis**: la chiave **Google Gemini** ha un tier gratuito (senza carta) da
+> <https://aistudio.google.com/apikey> — perfetta per una demo a costo zero
+> (con rate limit). In alternativa, a pagamento, `gpt-4o-mini` o `claude-haiku-4-5`;
+> in quel caso imposta un **tetto di spesa** sul pannello del provider.
+> Ollama non è disponibile sul cloud (gira solo in locale).
 
 ## Struttura
 ```
