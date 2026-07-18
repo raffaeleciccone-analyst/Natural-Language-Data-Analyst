@@ -56,54 +56,83 @@ with st.sidebar:
 ex.set_theme(dark_mode)
 
 
-# --- Stile personalizzato (chiaro / scuro) ---
+# --- Stile personalizzato "Console" (chiaro / scuro) ---
 def inject_css(dark: bool):
     if dark:
-        c = dict(page="#0d0d0d", surface="#1a1a19", border="#2c2c2a",
-                 ink="#ffffff", secondary="#c3c2b7", accent="#3987e5", tint="#16233d")
+        c = dict(page="#0d0d0d", surface="#1a1a19", surface2="#202020",
+                 border="#2c2c2a", strong="#3a3a38", ink="#ffffff", ink2="#c3c2b7",
+                 muted="#898781", accent="#22b0bc", deep="#4cc7d1", tint="#123032")
     else:
-        c = dict(page="#f9f9f7", surface="#ffffff", border="#e1e0d9",
-                 ink="#0b0b0b", secondary="#52514e", accent="#2a78d6", tint="#eef4fc")
+        c = dict(page="#eff1ee", surface="#ffffff", surface2="#f7f8f6",
+                 border="#e2e6e1", strong="#d3d8d1", ink="#16191c", ink2="#59626b",
+                 muted="#8a929a", accent="#0e7c86", deep="#0a5960", tint="#e2f0f0")
 
     st.markdown(
         f"""
         <style>
+          @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+          :root {{
+            --sans:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+            --display:"Space Grotesk",system-ui,sans-serif;
+            --mono:"IBM Plex Mono",ui-monospace,"SF Mono",monospace;
+          }}
           .stApp, [data-testid="stAppViewContainer"] {{ background: {c['page']}; }}
-          .block-container {{ padding-top: 2.2rem; max-width: 1150px; }}
+          .stApp, .stApp p, .stApp label, .stApp li, .stMarkdown {{
+              font-family: var(--sans); color: {c['ink']};
+          }}
+          .block-container {{ padding-top: 2rem; max-width: 1150px; }}
           section[data-testid="stSidebar"] {{
               background: {c['surface']}; border-right: 1px solid {c['border']};
           }}
-          h1, h2, h3, h4 {{ color: {c['ink']}; letter-spacing: -0.01em; }}
-          .stApp p, .stApp label, .stApp li, .stMarkdown {{ color: {c['ink']}; }}
-          .app-subtitle {{ color: {c['secondary']} !important; font-size: 0.95rem; margin-top: -0.6rem; }}
-          code {{ color: {c['accent']}; }}
-          div[data-testid="stMetric"] {{
+          h1, h2, h3, h4 {{ font-family: var(--display); color: {c['ink']}; letter-spacing: -0.015em; }}
+          .app-subtitle {{ font-family: var(--mono); color: {c['ink2']} !important;
+              font-size: 0.82rem; margin-top: -0.6rem; letter-spacing: 0.02em; }}
+          code, .app-subtitle code {{ font-family: var(--mono); color: {c['deep']}; }}
+          [data-testid="stCaptionContainer"] {{ font-family: var(--mono); color: {c['muted']}; }}
+
+          /* Readout KPI (firma "console") */
+          .readout {{
               background: {c['surface']}; border: 1px solid {c['border']};
-              border-radius: 14px; padding: 14px 18px;
-              box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+              border-radius: 14px; padding: 15px 18px 14px;
+              box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 10px 26px -20px rgba(0,0,0,0.35);
           }}
-          div[data-testid="stMetricValue"] {{ color: {c['accent']}; font-weight: 700; }}
-          div[data-testid="stMetricLabel"] {{ color: {c['secondary']}; }}
+          .readout .r-k {{ font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em;
+              text-transform: uppercase; color: {c['ink2']}; }}
+          .readout .r-v {{ font-family: var(--mono); font-weight: 600; font-size: 1.85rem;
+              letter-spacing: -0.02em; margin-top: 7px; line-height: 1;
+              font-variant-numeric: tabular-nums; color: {c['ink']}; }}
+          .readout .r-tick {{ height: 6px; margin-top: 12px; border-radius: 2px;
+              background: linear-gradient(90deg, var(--bar,{c['accent']}) 60%, {c['border']} 60%); }}
+          .readout .r-sub {{ font-family: var(--mono); font-size: 0.7rem; color: {c['muted']}; margin-top: 8px; }}
+
+          /* Motivo a scala di misurazione */
+          .scale {{ height: 10px; margin: 8px 0 2px;
+              background-image: repeating-linear-gradient(90deg, {c['strong']} 0 1px, transparent 1px 9px); }}
+
+          /* Riquadro risposta / sintesi */
+          .answer-card {{
+              background: {c['tint']}; border: 1px solid {c['border']};
+              border-left: 3px solid {c['accent']}; border-radius: 13px;
+              padding: 15px 18px; margin: 4px 0 14px 0;
+          }}
+          .answer-label {{
+              font-family: var(--mono); color: {c['accent']}; font-weight: 600;
+              font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em;
+              margin-bottom: 7px; display: flex; align-items: center; gap: 8px;
+          }}
+          .answer-label::before {{ content:""; width:14px; height:2px; background:{c['accent']}; }}
+          .answer-body {{ color: {c['ink']}; font-size: 1.0rem; line-height: 1.6; }}
+          .answer-body b {{ font-family: var(--mono); color: {c['deep']}; font-weight: 600; }}
+
+          /* Metriche native (fallback), tabelle, chat */
+          div[data-testid="stMetricValue"] {{ font-family: var(--mono); color: {c['accent']}; font-weight: 600; }}
+          div[data-testid="stMetricLabel"] {{ font-family: var(--mono); color: {c['ink2']}; }}
           div[data-testid="stChatMessage"] {{
               background: {c['surface']}; border: 1px solid {c['border']};
               border-radius: 14px; padding: 6px 14px;
           }}
           .stExpander {{ border-radius: 12px; border: 1px solid {c['border']}; }}
-          [data-testid="stCaptionContainer"] {{ color: {c['secondary']}; }}
-          /* Riquadro della risposta testuale */
-          .answer-card {{
-              background: {c['tint']};
-              border: 1px solid {c['border']};
-              border-left: 4px solid {c['accent']};
-              border-radius: 12px;
-              padding: 14px 18px;
-              margin: 4px 0 14px 0;
-          }}
-          .answer-label {{
-              color: {c['accent']}; font-weight: 700; font-size: 0.72rem;
-              text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
-          }}
-          .answer-body {{ color: {c['ink']}; font-size: 1.02rem; line-height: 1.55; }}
+          [data-testid="stChatInput"] textarea {{ font-family: var(--sans); }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -120,6 +149,18 @@ def answer_card(label: str, text: str):
         f"<div class='answer-card'>"
         f"<div class='answer-label'>{html.escape(label)}</div>"
         f"<div class='answer-body'>{safe}</div></div>",
+        unsafe_allow_html=True,
+    )
+
+
+def readout(col, label: str, value: str, sub: str = "", tick: str = "#0e7c86"):
+    """Card KPI in stile 'console': valore monospazio + tacca colorata."""
+    sub_html = f"<div class='r-sub'>{html.escape(sub)}</div>" if sub else ""
+    col.markdown(
+        f"<div class='readout'>"
+        f"<div class='r-k'>{html.escape(label)}</div>"
+        f"<div class='r-v'>{html.escape(value)}</div>"
+        f"<div class='r-tick' style='--bar:{tick}'></div>{sub_html}</div>",
         unsafe_allow_html=True,
     )
 
@@ -167,17 +208,17 @@ if df is None:
 
 st.caption(f"📁 {source_label} — {len(df):,} righe · {df.shape[1]} colonne")
 
-# --- Riga di KPI ---
+# --- Riga di KPI (readout in stile console) ---
 kpi_cols = st.columns(4)
-kpi_cols[0].metric("Righe", f"{len(df):,}")
-kpi_cols[1].metric("Colonne", f"{df.shape[1]}")
+readout(kpi_cols[0], "Righe", f"{len(df):,}", tick="#2a78d6")
+readout(kpi_cols[1], "Colonne", f"{df.shape[1]}", tick="#008300")
 # Colonne-misura reali (identificatori come Row ID / CAP esclusi), senza duplicati.
-# Diamo priorità ai nomi noti se presenti.
 measures = measure_columns(df)
 priorita = [c for c in ["Sales", "Profit", "Revenue", "Amount", "Total"] if c in measures]
 ordinate = priorita + [c for c in measures if c not in priorita]
-for slot, col in zip(kpi_cols[2:], ordinate[:2]):
-    slot.metric(f"Totale {col}", f"{df[col].sum():,.0f}")
+_kpi_ticks = ["#0e7c86", "#eda100"]
+for i, (slot, col) in enumerate(zip(kpi_cols[2:], ordinate[:2])):
+    readout(slot, f"Totale {col}", f"{df[col].sum():,.0f}", tick=_kpi_ticks[i])
 
 # --- Anteprima dati ---
 with st.expander("👀 Anteprima dei dati (prime 10 righe)"):
@@ -228,7 +269,7 @@ if st.session_state.get("overview_sig") != overview_sig:
     else:
         st.session_state.overview_text = None
 
-st.divider()
+st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
 st.subheader("📋 Report iniziale sui dati")
 
 # Narrativa AI con i numeri chiave
@@ -261,7 +302,7 @@ if top_fig is not None or trend_fig is not None:
 with st.expander("🔎 Struttura delle colonne (tipi, mancanti, valori)"):
     st.dataframe(st.session_state.get("profile"), use_container_width=True, hide_index=True)
 
-st.divider()
+st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
 st.subheader("💬 Fai una domanda ai tuoi dati")
 
 

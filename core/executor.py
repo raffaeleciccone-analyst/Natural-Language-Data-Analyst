@@ -24,13 +24,17 @@ CATEGORICAL_DARK = [
     "#199e70", "#d95926", "#9085e9", "#e66767",
 ]
 
-# Colori di superficie/inchiostro per i due temi
+# Colori di superficie/inchiostro per i due temi (coerenti con l'UI "Console")
 _THEMES = {
-    "light": dict(surface="#fcfcfb", ink="#0b0b0b", secondary="#52514e",
-                  grid="#e1e0d9", axis="#c3c2b7", colorway=CATEGORICAL_LIGHT),
+    "light": dict(surface="#ffffff", ink="#16191c", secondary="#59626b",
+                  grid="#e2e6e1", axis="#d3d8d1", colorway=CATEGORICAL_LIGHT),
     "dark": dict(surface="#1a1a19", ink="#ffffff", secondary="#c3c2b7",
-                 grid="#2c2c2a", axis="#383835", colorway=CATEGORICAL_DARK),
+                 grid="#2c2c2a", axis="#3a3a38", colorway=CATEGORICAL_DARK),
 }
+
+# Tipografia dei grafici (allineata all'UI: Plex Sans + Plex Mono per i numeri)
+_FONT_SANS = "'IBM Plex Sans', system-ui, -apple-system, sans-serif"
+_FONT_MONO = "'IBM Plex Mono', ui-monospace, monospace"
 
 # Tema corrente dei grafici (impostato dall'app prima dell'esecuzione)
 _DARK = False
@@ -61,15 +65,14 @@ def apply_theme(fig):
         colorway=t["colorway"],
         paper_bgcolor=t["surface"],
         plot_bgcolor=t["surface"],
-        font=dict(color=t["ink"],
-                  family="system-ui, -apple-system, 'Segoe UI', sans-serif", size=13),
+        font=dict(color=t["ink"], family=_FONT_SANS, size=13),
         margin=dict(l=12, r=12, t=48, b=12),
         title=dict(font=dict(size=16, color=t["ink"])),
         legend=dict(bgcolor="rgba(0,0,0,0)", title_text=""),
-        hoverlabel=dict(font_size=13),
+        hoverlabel=dict(font_size=13, font_family=_FONT_MONO),
     )
-    axis_style = dict(gridcolor=t["grid"], zerolinecolor=t["axis"],
-                      linecolor=t["axis"], tickfont=dict(color=t["secondary"]))
+    axis_style = dict(gridcolor=t["grid"], zerolinecolor=t["axis"], linecolor=t["axis"],
+                      tickfont=dict(color=t["secondary"], family=_FONT_MONO, size=11))
     fig.update_xaxes(**axis_style)
     fig.update_yaxes(**axis_style)
     return fig
