@@ -1,9 +1,20 @@
 import ast
+import os
+import pickle
 import re
+import subprocess
+import sys
 
 import pandas as pd
 
 from core.utils import clean_code
+
+# Esecuzione isolata in un sottoprocesso con timeout (chiude i DoS da loop/allocazioni
+# e aggiunge una barriera di processo). Metti a False per eseguire in-process (più
+# veloce, per uso locale con file fidati). Il fallback in-process scatta comunque se
+# il sottoprocesso non è avviabile.
+SANDBOX_SUBPROCESS = True
+EXEC_TIMEOUT = 12  # secondi
 
 # Import lazy di Plotly: se non è installato, i grafici falliscono con un
 # messaggio chiaro ma il resto dell'app continua a funzionare.
@@ -208,9 +219,11 @@ def _last_assigned_name(tree: ast.AST):
     return name
 
 
-def execute_pandas_code(code_string: str, df: pd.DataFrame):
-    code = clean_code(code_string)
-
+def _run_code(code: str, df: pd.DataFrame):
+    """
+    Parsifica, valida ed esegue il codice. Ritorna il risultato (valore/figura) o
+    una stringa d'errore. È il cuore eseguito sia in-process sia nel sottoprocesso.
+    """
     try:
         tree = ast.parse(code, mode="exec")
     except SyntaxError as e:
@@ -230,13 +243,7 @@ def execute_pandas_code(code_string: str, df: pd.DataFrame):
 
     # Contesto isolato per l'esecuzione (builtin ridotti al minimo; niente 'st')
     safe_globals = {"__builtins__": SAFE_BUILTINS}
-    local_context = {
-        "df": df,
-        "pd": pd,
-        "px": px,
-        "go": go,
-        "to_chart": to_chart,
-    }
+    local_context = {"df": df, "pd": pd, "px": px, "go": go, "to_chart": to_chart}
 
     try:
         # Caso 1: singola espressione pura (es. df['Sales'].sum() o px.bar(...))
@@ -246,11 +253,9 @@ def execute_pandas_code(code_string: str, df: pd.DataFrame):
         # Caso 2: statement (assegnazioni, grafici, ecc.) -> exec
         exec(code, safe_globals, local_context)
 
-        # Preferiamo restituire una figura, se ne è stata creata una (variabile 'fig')
         if "fig" in local_context and is_plotly_figure(local_context["fig"]):
             return apply_theme(local_context["fig"])
 
-        # Altrimenti restituiamo l'ultima variabile assegnata (filtri, aggregazioni, ...)
         last_name = _last_assigned_name(tree)
         if last_name is not None and last_name in local_context:
             return _finalize(local_context[last_name])
@@ -259,3 +264,67 @@ def execute_pandas_code(code_string: str, df: pd.DataFrame):
 
     except Exception as e:
         return f"Errore di esecuzione sul codice generato: {e} \nCodice tentato: {code}"
+
+
+def serialize_result(result):
+    """Prepara il risultato per il trasferimento dal sottoprocesso (le figure via JSON)."""
+    if is_plotly_figure(result):
+        return ("fig", result.to_json())
+    try:
+        pickle.dumps(result)
+        return ("val", result)
+    except Exception:
+        return ("val", str(result))
+
+
+def _deserialize_result(kind, payload):
+    if kind == "fig":
+        import plotly.io as pio
+        return apply_theme(pio.from_json(payload))
+    return payload
+
+
+def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int):
+    """Esegue il codice in un interprete separato con timeout. Solleva se non avviabile."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = dict(os.environ, PYTHONPATH=root + os.pathsep + os.environ.get("PYTHONPATH", ""))
+    payload = pickle.dumps((code, df, _DARK))
+    proc = subprocess.run(
+        [sys.executable, "-m", "core._sandbox_worker"],
+        input=payload, capture_output=True, cwd=root, env=env, timeout=timeout,
+    )
+    if proc.returncode != 0 or not proc.stdout:
+        err = (proc.stderr or b"").decode(errors="replace").strip()[-200:]
+        return ("val", "Errore: esecuzione terminata in modo anomalo "
+                       f"(possibile esaurimento memoria). {err}".strip())
+    return pickle.loads(proc.stdout)
+
+
+def execute_pandas_code(code_string: str, df: pd.DataFrame):
+    code = clean_code(code_string)
+
+    # Pre-controllo rapido (fail-fast, senza avviare un processo)
+    try:
+        tree = ast.parse(code, mode="exec")
+    except SyntaxError as e:
+        return f"Errore di sintassi nel codice generato: {e} \nCodice tentato: {code}"
+    if not tree.body:
+        msg = code.lstrip("# ").strip() or "il modello non ha prodotto codice eseguibile"
+        return f"Errore: {msg}"
+    try:
+        _validate_ast(tree)
+    except UnsafeCodeError as e:
+        return f"Errore di sicurezza: {e}. \nCodice tentato: {code}"
+
+    # Esecuzione isolata in sottoprocesso (con timeout); fallback in-process.
+    if SANDBOX_SUBPROCESS:
+        try:
+            kind, payload = _run_in_subprocess(code, df, EXEC_TIMEOUT)
+            return _deserialize_result(kind, payload)
+        except subprocess.TimeoutExpired:
+            return (f"Errore: esecuzione interrotta dopo {EXEC_TIMEOUT}s "
+                    "(codice troppo lento o troppo pesante).")
+        except Exception:
+            pass  # sottoprocesso non avviabile -> esecuzione in-process
+
+    return _run_code(code, df)
