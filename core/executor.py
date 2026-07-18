@@ -79,7 +79,8 @@ def apply_theme(fig):
         plot_bgcolor=t["surface"],
         font=dict(color=t["ink"], family=_FONT_SANS, size=13),
         margin=dict(l=12, r=12, t=48, b=12),
-        title=dict(font=dict(size=16, color=t["ink"])),
+        # Preserva il titolo esistente ma evita "undefined" quando non c'è testo
+        title=dict(text=(fig.layout.title.text or ""), font=dict(size=16, color=t["ink"])),
         legend=dict(bgcolor="rgba(0,0,0,0)", title_text=""),
         hoverlabel=dict(font_size=13, font_family=_FONT_MONO),
     )

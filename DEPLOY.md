@@ -14,7 +14,7 @@ progetto, non per gli utenti finali.
    DEMO_MODE = "true"
    DEMO_MAX_QUESTIONS = "15"
    PROVIDER = "gemini"
-   MODEL = "gemini-2.5-flash"
+   MODEL = "gemini-2.0-flash"
    GOOGLE_API_KEY = "AIza..."
    ```
 4. **Deploy**. In modalità demo l'app usa la chiave dei secrets, nasconde i campi

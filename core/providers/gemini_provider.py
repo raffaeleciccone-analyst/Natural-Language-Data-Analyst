@@ -4,9 +4,9 @@ from .base import LLMProvider
 
 
 class GeminiProvider(LLMProvider):
-    """Modelli Google Gemini via SDK google-genai (gemini-2.5-flash, ...)."""
+    """Modelli Google Gemini via SDK google-genai (gemini-2.0-flash, ...)."""
 
-    def __init__(self, model_name: str = "gemini-2.5-flash",
+    def __init__(self, model_name: str = "gemini-2.0-flash",
                  temperature: float = 0.0, api_key: str | None = None):
         super().__init__(model_name, temperature)
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")

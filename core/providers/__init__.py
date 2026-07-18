@@ -17,7 +17,7 @@ DEFAULT_MODELS = {
     "ollama": "qwen2.5:3b",
     "anthropic": "claude-opus-4-8",
     "openai": "gpt-4o-mini",
-    "gemini": "gemini-2.5-flash",
+    "gemini": "gemini-2.0-flash",
 }
 
 # Registro nome -> classe

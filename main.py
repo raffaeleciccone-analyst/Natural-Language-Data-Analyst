@@ -44,7 +44,7 @@ DEMO_MAX_QUESTIONS = int(_secret("DEMO_MAX_QUESTIONS", "15") or "15")
 with st.sidebar:
     st.header("⚙️ Configurazione")
 
-    dark_mode = st.toggle("🌙 Tema scuro", value=False)
+    dark_mode = False  # tema scuro disattivato: Streamlit non theme-a i widget nativi via CSS
     spiega_ai = st.toggle("💡 Spiegazione AI", value=True,
                           help="Genera una risposta testuale che interpreta il risultato.")
 
