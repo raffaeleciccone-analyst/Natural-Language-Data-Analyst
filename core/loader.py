@@ -38,6 +38,39 @@ def read_any(uploaded_file) -> pd.DataFrame:
     return _clean_columns(df)
 
 
+def _kind(s: pd.Series) -> str:
+    if pd.api.types.is_bool_dtype(s):
+        return "booleana"
+    if pd.api.types.is_datetime64_any_dtype(s):
+        return "data"
+    if pd.api.types.is_numeric_dtype(s):
+        return "numerica"
+    return "testo"
+
+
+def profile(df: pd.DataFrame) -> pd.DataFrame:
+    """Profilo deterministico del dataset: una riga per colonna con tipo, mancanti, unici, dettaglio."""
+    n = len(df)
+    rows = []
+    for col in df.columns:
+        s = df[col]
+        miss = int(s.isna().sum())
+        kind = _kind(s)
+        if kind == "numerica" and s.notna().any():
+            dettaglio = f"min {s.min():.2f} · media {s.mean():.2f} · max {s.max():.2f}"
+        else:
+            valori = s.dropna().astype(str)
+            dettaglio = f"più frequente: {valori.mode().iat[0]}" if not valori.empty else "—"
+        rows.append({
+            "Colonna": col,
+            "Tipo": kind,
+            "Mancanti": f"{miss} ({miss / n * 100:.0f}%)" if n else "0",
+            "Valori unici": int(s.nunique(dropna=True)),
+            "Dettaglio": dettaglio,
+        })
+    return pd.DataFrame(rows)
+
+
 def load_dataset(file_name: str = "sales.csv") -> pd.DataFrame:
     """
     Carica il dataset dalla cartella 'data', pulisce le colonne e ottimizza i tipi di dati.

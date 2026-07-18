@@ -113,6 +113,41 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
 
         return _clean_code(raw or "")
 
+    def fix_code(self, user_question: str, df: pd.DataFrame,
+                 broken_code: str, error_message: str) -> str:
+        """Chiede al modello di correggere il codice che ha generato un errore."""
+        system_prompt = self._get_system_prompt(df)
+        user_prompt = (
+            f"La richiesta dell'utente era:\n{user_question}\n\n"
+            f"Questo codice ha prodotto un errore:\n{broken_code}\n\n"
+            f"Messaggio di errore:\n{error_message}\n\n"
+            "Correggi il codice tenendo conto dello schema del dataset qui sopra. "
+            "Restituisci SOLO il codice Python corretto, senza spiegazioni."
+        )
+        try:
+            raw = self.provider.generate(system_prompt, user_prompt)
+        except Exception as e:
+            return f"# Errore di comunicazione con il provider LLM ({self.provider.name}): {e}"
+        return _clean_code(raw or "")
+
+    def overview(self, dataset_summary: str) -> str:
+        """Genera una panoramica introduttiva del dataset in linguaggio naturale."""
+        system_prompt = (
+            "Sei un analista dati esperto. Ti viene fornito il profilo di un dataset. "
+            "Scrivi in italiano una panoramica introduttiva chiara e utile (4-6 frasi): "
+            "di cosa parlano i dati, quali sono le colonne principali e il loro significato, "
+            "e 2-3 spunti di analisi interessanti che l'utente potrebbe esplorare. "
+            "NON mostrare codice."
+        )
+        user_prompt = (
+            f"Profilo del dataset:\n{dataset_summary}\n\n"
+            "Scrivi la panoramica introduttiva."
+        )
+        try:
+            return self.provider.generate(system_prompt, user_prompt).strip()
+        except Exception as e:
+            return f"_(Impossibile generare la panoramica: {e})_"
+
     def explain(self, user_question: str, result_summary: str) -> str:
         """
         Genera una risposta testuale in linguaggio naturale che interpreta il

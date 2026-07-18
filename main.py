@@ -3,10 +3,11 @@ import html
 import pandas as pd
 import streamlit as st
 
-from core.loader import load_dataset, read_any, SUPPORTED_EXTENSIONS
+from core.loader import load_dataset, read_any, profile, SUPPORTED_EXTENSIONS
 from core.agent import DataAgent
 from core import executor as ex
-from core.executor import execute_pandas_code, is_plotly_figure, summarize_result, apply_theme
+from core.executor import (execute_pandas_code, is_plotly_figure,
+                           summarize_result, apply_theme, to_chart)
 from core.providers import available_providers, DEFAULT_MODELS, REQUIRES_API_KEY
 
 # --- Configurazione pagina ---
@@ -111,6 +112,17 @@ def inject_css(dark: bool):
 inject_css(dark_mode)
 
 
+def answer_card(label: str, text: str):
+    """Renderizza un testo in un riquadro dedicato (con escaping HTML)."""
+    safe = html.escape(text).replace("\n", "<br>")
+    st.markdown(
+        f"<div class='answer-card'>"
+        f"<div class='answer-label'>{html.escape(label)}</div>"
+        f"<div class='answer-body'>{safe}</div></div>",
+        unsafe_allow_html=True,
+    )
+
+
 # --- Inizializzazione dell'agente (cache per provider/modello/chiave) ---
 @st.cache_resource
 def init_agent(provider: str, model_name: str, api_key: str):
@@ -169,6 +181,45 @@ for slot, col in zip(kpi_cols[2:], ["Sales", "Profit"]):
 with st.expander("👀 Anteprima dei dati (prime 10 righe)"):
     st.dataframe(df.head(10), use_container_width=True)
 
+# --- Report panoramico iniziale (rigenerato solo al cambio di dataset) ---
+dataset_sig = (source_label, df.shape, tuple(df.columns))
+if st.session_state.get("dataset_sig") != dataset_sig:
+    st.session_state.dataset_sig = dataset_sig
+    st.session_state.messages = []  # nuova sorgente dati -> nuova conversazione
+
+    prof = profile(df)
+    st.session_state.profile = prof
+
+    # Panoramica testuale (LLM), se le spiegazioni sono attive
+    if spiega_ai:
+        summary_text = (f"Righe: {len(df)}, Colonne: {df.shape[1]}\n"
+                        + prof.to_string(index=False))
+        with st.spinner("L'AI sta preparando la panoramica del dataset..."):
+            st.session_state.overview_text = agent.overview(summary_text)
+    else:
+        st.session_state.overview_text = None
+
+    # Grafico panoramico: prima colonna categoriale vs prima numerica
+    fig = None
+    num_cols = df.select_dtypes("number").columns.tolist()
+    cat_cols = df.select_dtypes(exclude="number").columns.tolist()
+    if num_cols and cat_cols:
+        try:
+            data = df.groupby(cat_cols[0], as_index=False)[num_cols[0]].sum()
+            fig = to_chart(data, kind="bar")
+        except Exception:
+            fig = None
+    st.session_state.overview_fig = fig
+
+st.divider()
+st.subheader("📋 Panoramica iniziale")
+if st.session_state.get("overview_text"):
+    answer_card("📊 Panoramica del dataset", st.session_state.overview_text)
+if st.session_state.get("overview_fig") is not None:
+    st.plotly_chart(apply_theme(st.session_state.overview_fig), use_container_width=True)
+with st.expander("🔎 Dettaglio delle colonne"):
+    st.dataframe(st.session_state.get("profile"), use_container_width=True)
+
 st.divider()
 st.subheader("💬 Fai una domanda ai tuoi dati")
 
@@ -177,13 +228,7 @@ st.subheader("💬 Fai una domanda ai tuoi dati")
 def render_result(code: str, result, explanation: str | None = None):
     # 1. Risposta testuale (in un riquadro dedicato)
     if explanation:
-        safe = html.escape(explanation).replace("\n", "<br>")
-        st.markdown(
-            f"<div class='answer-card'>"
-            f"<div class='answer-label'>📝 Risposta</div>"
-            f"<div class='answer-body'>{safe}</div></div>",
-            unsafe_allow_html=True,
-        )
+        answer_card("📝 Risposta", explanation)
 
     # 2. Risultato visuale
     if is_plotly_figure(result):
@@ -245,6 +290,18 @@ if prompt and prompt.strip():
 
         with st.spinner("Esecuzione sui dati..."):
             risultato = execute_pandas_code(codice, df)
+
+        # Retry automatico: se l'esecuzione fallisce, rimandiamo l'errore all'LLM
+        MAX_RETRY = 2
+        tentativo = 0
+        while (isinstance(risultato, str) and risultato.startswith("Errore")
+               and tentativo < MAX_RETRY):
+            tentativo += 1
+            with st.spinner(f"Correzione automatica del codice (tentativo {tentativo})..."):
+                codice = agent.fix_code(prompt, df, codice, risultato)
+                risultato = execute_pandas_code(codice, df)
+        if tentativo and not (isinstance(risultato, str) and risultato.startswith("Errore")):
+            st.caption(f"✅ Codice corretto automaticamente dopo {tentativo} tentativo/i.")
 
         # Spiegazione testuale (seconda chiamata LLM), se abilitata e il calcolo è andato a buon fine
         spiegazione = None
