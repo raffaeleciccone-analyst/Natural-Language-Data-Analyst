@@ -232,12 +232,11 @@ if prompt and prompt.strip():
         richiede_grafico = any(p in prompt.lower() for p in PAROLE_GRAFICO)
 
         with st.spinner("L'AI sta generando il codice..."):
-            colonne = df.columns.tolist()
             domanda = prompt
             if richiede_grafico:
                 domanda += " (Raggruppa i dati usando as_index=False)"
 
-            codice = agent.ask_code(domanda, colonne)
+            codice = agent.ask_code(domanda, df)
 
             if richiede_grafico and "fig" not in codice and "px." not in codice and "st." not in codice:
                 base = codice.strip().rstrip(";")

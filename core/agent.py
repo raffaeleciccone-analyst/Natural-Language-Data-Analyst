@@ -1,5 +1,7 @@
 import re
 
+import pandas as pd
+
 from core.providers import LLMProvider, get_provider
 
 
@@ -9,23 +11,54 @@ def _clean_code(text: str) -> str:
     return cleaned.strip()
 
 
+def _column_kind(series: pd.Series) -> str:
+    """Classifica il tipo di una colonna in una categoria comprensibile per l'LLM."""
+    if pd.api.types.is_bool_dtype(series):
+        return "booleana"
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return "data"
+    if pd.api.types.is_numeric_dtype(series):
+        return "numerica"
+    return "testo"
+
+
+def _describe_schema(df: pd.DataFrame) -> str:
+    """Costruisce la descrizione dello schema: nome, tipo ed esempi per ogni colonna."""
+    lines = []
+    for col in df.columns:
+        kind = _column_kind(df[col])
+        try:
+            samples = df[col].dropna().unique()[:3]
+            sample_str = ", ".join(str(s) for s in samples)
+        except Exception:
+            sample_str = ""
+        lines.append(f"- '{col}' (tipo: {kind}) — esempi: {sample_str}")
+    return "\n".join(lines)
+
+
+def _example_columns(df: pd.DataFrame):
+    """Sceglie una colonna categoriale e una numerica reali per un esempio calzante."""
+    cat = num = None
+    for col in df.columns:
+        kind = _column_kind(df[col])
+        if kind == "testo" and cat is None:
+            cat = col
+        if kind == "numerica" and num is None:
+            num = col
+    return cat, num
+
+
 class DataAgent:
     """
     Agente che traduce una domanda in linguaggio naturale in codice Pandas.
-    È indipendente dal provider LLM: riceve (o costruisce) un LLMProvider e
-    gli delega la generazione del testo.
+    È indipendente dal provider LLM e si adatta allo schema del dataset caricato
+    (nomi, tipi ed esempi delle colonne vengono passati al modello a ogni domanda).
     """
 
     def __init__(self, provider: "str | LLMProvider" = "ollama",
                  model_name: str | None = None,
                  temperature: float = 0.0,
                  api_key: str | None = None):
-        """
-        :param provider: nome del provider ("ollama", "anthropic", "openai", ...)
-                         oppure un'istanza già pronta di LLMProvider.
-        :param model_name: nome del modello; se None usa il default del provider.
-        :param api_key: chiave API per i provider cloud (Anthropic, OpenAI).
-        """
         if isinstance(provider, LLMProvider):
             self.provider = provider
         else:
@@ -34,35 +67,45 @@ class DataAgent:
                 temperature=temperature, api_key=api_key,
             )
 
-    def _get_system_prompt(self, df_columns: list) -> str:
-        columns_str = ", ".join([f"'{col}'" for col in df_columns])
+    def _get_system_prompt(self, df: pd.DataFrame) -> str:
+        schema = _describe_schema(df)
+        cat, num = _example_columns(df)
 
-        return f"""Sei un assistente esperto di Python, Pandas e Streamlit. Il tuo unico compito è tradurre la richiesta dell'utente in codice Python eseguibile.
-Il DataFrame si chiama sempre e solo 'df'.
+        # Esempio di grafico costruito sulle colonne REALI del dataset caricato,
+        # così il modello non viene spinto verso nomi di colonne inesistenti.
+        if cat and num:
+            esempio = (
+                f"data = df.groupby('{cat}', as_index=False)['{num}'].sum(); "
+                f"fig = px.bar(data, x='{cat}', y='{num}', title='{num} per {cat}')"
+            )
+        elif num:
+            esempio = (
+                f"data = df['{num}'].describe().reset_index(); "
+                f"fig = px.bar(data, x='index', y='{num}')"
+            )
+        else:
+            esempio = "fig = px.bar(df.iloc[:, :2])"
 
-Colonne disponibili: [{columns_str}]
+        return f"""Sei un assistente esperto di Python, Pandas e Plotly. Il tuo unico compito è tradurre la richiesta dell'utente in codice Python eseguibile.
+Il DataFrame si chiama sempre e solo 'df'. Hai a disposizione Plotly Express già importato come 'px'.
 
-Hai a disposizione la libreria Plotly Express già importata come 'px'.
+SCHEMA DEL DATASET (usa ESCLUSIVAMENTE queste colonne, con i nomi esatti):
+{schema}
 
 REGOLE TASSATIVE:
 1. Restituisci SOLO il codice Python puro. Nessun blocco markdown, nessuna introduzione o spiegazione.
-2. Se la richiesta dell'utente contiene parole come "mostrami", "grafico", "andamento", "visualizza", "plot", "barre", "linee", DEVI creare un grafico con Plotly Express.
-3. Per i grafici: prepara SEMPRE prima i dati aggregati con groupby(..., as_index=False), poi assegna la figura alla variabile 'fig' usando 'px', specificando gli argomenti x e y. NON usare mai funzioni di Streamlit (niente st.*). Usa px.line per andamenti/serie temporali, px.bar per confronti tra categorie.
+2. Usa unicamente le colonne elencate sopra, rispettandone il nome esatto (maiuscole/minuscole comprese). Non inventare colonne.
+3. Scegli le colonne in base al tipo: aggrega/somma solo colonne numeriche; raggruppa per colonne di testo o data.
+4. Se la richiesta contiene parole come "mostrami", "grafico", "andamento", "visualizza", "plot", "barre", "linee", DEVI creare un grafico con Plotly Express: prepara prima i dati aggregati con groupby(..., as_index=False), poi assegna la figura alla variabile 'fig' usando 'px' con gli argomenti x e y. NON usare funzioni di Streamlit (niente st.*). Usa px.line per andamenti/serie temporali, px.bar per confronti tra categorie.
+5. Se l'utente NON chiede un grafico, restituisci una singola espressione Pandas (es: df['<colonna_numerica>'].sum()).
 
-ESEMPI RIGIDI DI CODICE PER GRAFICI:
-- Domanda: "Mostrami le vendite per regione"
-  Risposta: data = df.groupby('Region', as_index=False)['Sales'].sum(); fig = px.bar(data, x='Region', y='Sales', title='Vendite per Regione')
-- Domanda: "Grafico dei profitti per categoria"
-  Risposta: data = df.groupby('Category', as_index=False)['Profit'].sum(); fig = px.bar(data, x='Category', y='Profit', title='Profitti per Categoria')
-- Domanda: "Andamento vendite"
-  Risposta: data = df.groupby('Order Date', as_index=False)['Sales'].sum(); fig = px.line(data, x='Order Date', y='Sales', title='Andamento Vendite')
-
-Se l'utente NON chiede un grafico, restituisci una singola espressione Pandas (es: df['Sales'].sum()).
+ESEMPIO DI GRAFICO (adattato a questo dataset):
+{esempio}
 """
 
-    def ask_code(self, user_question: str, df_columns: list) -> str:
+    def ask_code(self, user_question: str, df: pd.DataFrame) -> str:
         """Invia la domanda al provider LLM e riceve la stringa di codice Pandas pulita."""
-        system_prompt = self._get_system_prompt(df_columns)
+        system_prompt = self._get_system_prompt(df)
         try:
             raw = self.provider.generate(system_prompt, user_question)
         except Exception as e:
