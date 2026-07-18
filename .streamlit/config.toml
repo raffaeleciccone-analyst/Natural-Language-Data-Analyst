@@ -5,3 +5,7 @@ backgroundColor = "#EFF1EE"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#16191C"
 font = "sans serif"
+
+[server]
+# Limite upload (MB): utile per una demo pubblica
+maxUploadSize = 25

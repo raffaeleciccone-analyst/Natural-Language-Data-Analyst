@@ -1,4 +1,5 @@
 import html
+import os
 
 import pandas as pd
 import streamlit as st
@@ -19,6 +20,26 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+_KEY_ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY",
+            "gemini": "GOOGLE_API_KEY"}
+
+
+def _secret(key: str, default: str = "") -> str:
+    """Legge un valore da st.secrets (deploy) o dalle variabili d'ambiente (locale)."""
+    try:
+        val = st.secrets.get(key)  # type: ignore[attr-defined]
+        if val is not None:
+            return str(val)
+    except Exception:
+        pass
+    return os.getenv(key, default)
+
+
+# Modalità demo (deploy pubblico): attivata dai secrets. Usa provider/modello/chiave
+# configurati, nasconde i campi sensibili e limita le domande per contenere i costi.
+DEMO_MODE = _secret("DEMO_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+DEMO_MAX_QUESTIONS = int(_secret("DEMO_MAX_QUESTIONS", "15") or "15")
+
 # --- Sidebar: configurazione (letta prima di applicare il tema) ---
 with st.sidebar:
     st.header("⚙️ Configurazione")
@@ -29,20 +50,30 @@ with st.sidebar:
 
     st.divider()
     st.subheader("Modello LLM")
-    provider = st.selectbox(
-        "Provider",
-        available_providers(),
-        help="Ollama gira in locale; Anthropic, OpenAI e Gemini richiedono una API key.",
-    )
-    model_name = st.text_input("Modello", value=DEFAULT_MODELS[provider])
-    api_key = ""
-    if provider in REQUIRES_API_KEY:
-        api_key = st.text_input(
-            "API Key",
-            type="password",
-            help="Lascia vuoto per usare la variabile d'ambiente "
-                 "(ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY).",
+    if DEMO_MODE:
+        provider = _secret("PROVIDER", "openai").strip().lower()
+        model_name = _secret("MODEL", DEFAULT_MODELS.get(provider, ""))
+        api_key = _secret(_KEY_ENV.get(provider, ""), "")
+        st.success(f"🚀 Demo pubblica · **{provider}** · `{model_name}`")
+        st.caption(f"Limite: {DEMO_MAX_QUESTIONS} domande per sessione. "
+                   "Clona il repo per uso illimitato e per usare Ollama in locale.")
+    else:
+        provider = st.selectbox(
+            "Provider",
+            available_providers(),
+            help="Ollama gira in locale; Anthropic, OpenAI e Gemini richiedono una API key.",
         )
+        model_name = st.text_input("Modello", value=DEFAULT_MODELS[provider])
+        api_key = ""
+        if provider in REQUIRES_API_KEY:
+            api_key = st.text_input(
+                "API Key",
+                type="password",
+                help="Lascia vuoto per usare la variabile d'ambiente "
+                     "(ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY).",
+            )
+            if not api_key:  # ripiego su secret/env
+                api_key = _secret(_KEY_ENV.get(provider, ""), "")
 
     st.divider()
     st.subheader("Dataset")
@@ -357,7 +388,15 @@ PAROLE_LINEA = ["andamento", "linee", "trend", "tempo", "temporale"]
 
 prompt = st.chat_input("Es. 'Qual è il mese con più vendite?' oppure 'Mostrami le vendite per regione'")
 
+if prompt and prompt.strip() and DEMO_MODE and \
+        st.session_state.get("_demo_q", 0) >= DEMO_MAX_QUESTIONS:
+    st.warning(f"Hai raggiunto il limite della demo ({DEMO_MAX_QUESTIONS} domande). "
+               "Clona il repo da GitHub per uso illimitato. Grazie per aver provato! 🙌")
+    prompt = None
+
 if prompt and prompt.strip():
+    if DEMO_MODE:
+        st.session_state["_demo_q"] = st.session_state.get("_demo_q", 0) + 1
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)

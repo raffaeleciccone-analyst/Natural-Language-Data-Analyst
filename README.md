@@ -1,5 +1,7 @@
 # AI Data Analyst Assistant
 
+**▶️ Demo online:** _inserisci qui il link a Streamlit Cloud dopo il deploy_
+
 Interroga i tuoi dati in **linguaggio naturale**. Fai una domanda (es. *"Qual è il
 mese con più vendite?"* o *"Mostrami le vendite per regione"*), un modello LLM
 traduce la richiesta in codice Pandas, l'app lo esegue in una sandbox e ti mostra
@@ -7,6 +9,13 @@ traduce la richiesta in codice Pandas, l'app lo esegue in una sandbox e ti mostr
 
 Al caricamento di un file ricevi anche un **report automatico** con statistiche,
 classifiche e andamento temporale dei dati.
+
+## Anteprima
+
+<!-- Sostituisci queste immagini con screenshot reali (vedi docs/README.md). -->
+![Report iniziale sui dati](docs/preview-report.png)
+![Domanda con grafico](docs/preview-chat.png)
+![Tema scuro](docs/preview-dark.png)
 
 ## Cosa fa
 
@@ -65,6 +74,28 @@ Si apre nel browser su <http://localhost:8501>.
 - All'avvio è già caricato un **dataset di esempio** (`data/sales.csv`, vendite Superstore).
 - Per usare i tuoi: **carica un CSV/Excel/JSON** dalla barra laterale. L'app rileva
   colonne, tipi e date automaticamente.
+
+## Demo pubblica su Streamlit Cloud (senza installare nulla)
+
+Per far provare l'app a chiunque dal browser, con un link:
+
+1. Vai su <https://share.streamlit.io> e accedi con GitHub.
+2. **New app** → seleziona questo repo, branch `main`, file `main.py`.
+3. In **Advanced settings → Secrets** incolla la configurazione (vedi
+   [`.streamlit/secrets.toml.example`](.streamlit/secrets.toml.example)):
+   ```toml
+   DEMO_MODE = "true"
+   DEMO_MAX_QUESTIONS = "15"
+   PROVIDER = "openai"
+   MODEL = "gpt-4o-mini"
+   OPENAI_API_KEY = "sk-..."
+   ```
+4. **Deploy**. In modalità demo l'app usa la tua chiave, nasconde i campi sensibili
+   e limita le domande per sessione.
+
+> ⚠️ La chiave la paghi tu: usa un **modello economico** (`gpt-4o-mini`,
+> `claude-haiku-4-5`, `gemini-2.5-flash`) e imposta un **tetto di spesa** sul
+> pannello del provider. Ollama non è disponibile sul cloud (gira solo in locale).
 
 ## Struttura
 ```
