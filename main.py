@@ -165,17 +165,21 @@ def readout(col, label: str, value: str, sub: str = "", tick: str = "#0e7c86"):
     )
 
 
-# --- Inizializzazione dell'agente (cache per provider/modello/chiave) ---
-@st.cache_resource
-def init_agent(provider: str, model_name: str, api_key: str):
-    return DataAgent(
-        provider=provider,
-        model_name=model_name or None,
-        api_key=api_key or None,
-    )
+# --- Inizializzazione dell'agente (per-sessione, non in cache globale) ---
+# Nota di sicurezza: NON usiamo st.cache_resource, che è una cache condivisa fra
+# tutte le sessioni del server: la API key finirebbe in memoria globale. Teniamo
+# l'agente in st.session_state (isolato per sessione) e lo ricreiamo se cambia la config.
+def get_agent(provider: str, model_name: str, api_key: str) -> DataAgent:
+    key = (provider, model_name or None, api_key or None)
+    if st.session_state.get("_agent_key") != key:
+        st.session_state["_agent_key"] = key
+        st.session_state["_agent"] = DataAgent(
+            provider=provider, model_name=model_name or None, api_key=api_key or None,
+        )
+    return st.session_state["_agent"]
 
 
-agent = init_agent(provider, model_name, api_key)
+agent = get_agent(provider, model_name, api_key)
 
 # --- Header ---
 st.title("📊 AI Data Analyst Assistant")
