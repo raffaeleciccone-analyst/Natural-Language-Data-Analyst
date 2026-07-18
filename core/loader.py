@@ -1,6 +1,7 @@
 import pandas as pd
 import os
 import json
+import re
 
 # Estensioni file supportate per l'upload
 SUPPORTED_EXTENSIONS = ["csv", "xlsx", "xls", "json"]
@@ -69,6 +70,99 @@ def profile(df: pd.DataFrame) -> pd.DataFrame:
             "Dettaglio": dettaglio,
         })
     return pd.DataFrame(rows)
+
+
+def _insights_text(df: pd.DataFrame, res: dict) -> str:
+    """Costruisce un riepilogo testuale dei NUMERI calcolati, per l'LLM."""
+    lines = [f"Righe totali: {len(df)}."]
+    if "numeric_stats" in res:
+        lines.append("Statistiche delle colonne numeriche:")
+        for _, r in res["numeric_stats"].iterrows():
+            lines.append(f"  - {r['Colonna']}: somma {r['Somma']:.2f}, media {r['Media']:.2f}, "
+                         f"min {r['Minimo']:.2f}, max {r['Massimo']:.2f}")
+    if "top" in res:
+        cat, num, top = res["top"]
+        parti = ", ".join(f"{row[cat]}={row[num]:.2f}" for _, row in top.head(5).iterrows())
+        lines.append(f"Classifica di {num} per {cat} (primi 5): {parti}.")
+    if "trend" in res:
+        dcol, num, per = res["trend"]
+        if not per.empty:
+            best = per.loc[per[num].idxmax()]
+            worst = per.loc[per[num].idxmin()]
+            lines.append(f"Andamento di {num} nel tempo: periodo migliore "
+                         f"{best[dcol].date()}={best[num]:.2f}, peggiore "
+                         f"{worst[dcol].date()}={worst[num]:.2f}.")
+    return "\n".join(lines)
+
+
+_ID_PATTERN = re.compile(r'(^|[_\s])(id|code|zip|postal|index|codice|cap|isbn)($|[_\s])', re.I)
+
+
+def _is_identifier(name, series: pd.Series, n: int) -> bool:
+    """Riconosce colonne numeriche che sono in realtà identificatori (ID, CAP, codici)."""
+    if _ID_PATTERN.search(str(name)):
+        return True
+    # valori quasi tutti distinti -> è una chiave, non una misura
+    if n and series.nunique(dropna=True) / n > 0.9:
+        return True
+    return False
+
+
+def _measure_columns(df: pd.DataFrame, num_cols: list) -> list:
+    """Colonne numeriche 'misura' (esclude gli identificatori); ripiega su tutte se vuota."""
+    n = len(df)
+    measures = [c for c in num_cols if not _is_identifier(c, df[c], n)]
+    return measures or num_cols
+
+
+def _best_category(df: pd.DataFrame, cat_cols: list):
+    """Sceglie una colonna categoriale con cardinalità utile per un raggruppamento."""
+    coppie = [(c, df[c].nunique(dropna=True)) for c in cat_cols]
+    buone = [c for c, u in coppie if 2 <= u <= 30]
+    if buone:
+        return buone[0]
+    return min(coppie, key=lambda t: t[1])[0] if coppie else None
+
+
+def analyze(df: pd.DataFrame) -> dict:
+    """
+    Calcola insight quantitativi sul CONTENUTO del dataset:
+    statistiche numeriche, classifica principale e andamento temporale.
+    Ignora le colonne-identificatore (ID, CAP, codici) per non produrre numeri privi di senso.
+    """
+    res = {}
+    num_cols = df.select_dtypes("number").columns.tolist()
+    cat_cols = [c for c in df.columns if _kind(df[c]) == "testo"]
+    date_cols = [c for c in df.columns if _kind(df[c]) == "data"]
+
+    measures = _measure_columns(df, num_cols) if num_cols else []
+    main_num = measures[0] if measures else None
+    cat = _best_category(df, cat_cols)
+
+    # 1. Statistiche delle colonne-misura (somma, media, min, max)
+    if measures:
+        stats = df[measures].agg(["sum", "mean", "min", "max"]).T
+        stats.columns = ["Somma", "Media", "Minimo", "Massimo"]
+        res["numeric_stats"] = stats.reset_index().rename(columns={"index": "Colonna"})
+
+    # 2. Classifica: categoria migliore vs misura principale (top 10 per somma)
+    if cat and main_num:
+        top = (df.groupby(cat, as_index=False)[main_num].sum()
+                 .sort_values(main_num, ascending=False).head(10))
+        res["top"] = (cat, main_num, top)
+
+    # 3. Andamento temporale: prima colonna data vs misura principale (per mese)
+    if date_cols and main_num:
+        dcol = date_cols[0]
+        s = df.dropna(subset=[dcol]).copy()
+        if not s.empty:
+            s["_periodo"] = s[dcol].dt.to_period("M").dt.to_timestamp()
+            per = (s.groupby("_periodo", as_index=False)[main_num].sum()
+                     .rename(columns={"_periodo": dcol}))
+            res["trend"] = (dcol, main_num, per)
+
+    res["text"] = _insights_text(df, res)
+    return res
 
 
 def load_dataset(file_name: str = "sales.csv") -> pd.DataFrame:

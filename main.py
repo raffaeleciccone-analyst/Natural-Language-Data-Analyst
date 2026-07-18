@@ -3,7 +3,7 @@ import html
 import pandas as pd
 import streamlit as st
 
-from core.loader import load_dataset, read_any, profile, SUPPORTED_EXTENSIONS
+from core.loader import load_dataset, read_any, profile, analyze, SUPPORTED_EXTENSIONS
 from core.agent import DataAgent
 from core import executor as ex
 from core.executor import (execute_pandas_code, is_plotly_figure,
@@ -181,44 +181,71 @@ for slot, col in zip(kpi_cols[2:], ["Sales", "Profit"]):
 with st.expander("👀 Anteprima dei dati (prime 10 righe)"):
     st.dataframe(df.head(10), use_container_width=True)
 
-# --- Report panoramico iniziale (rigenerato solo al cambio di dataset) ---
+# --- Report iniziale sui dati (rigenerato solo al cambio di dataset) ---
 dataset_sig = (source_label, df.shape, tuple(df.columns))
 if st.session_state.get("dataset_sig") != dataset_sig:
     st.session_state.dataset_sig = dataset_sig
     st.session_state.messages = []  # nuova sorgente dati -> nuova conversazione
 
-    prof = profile(df)
-    st.session_state.profile = prof
+    with st.spinner("Analisi del dataset in corso..."):
+        st.session_state.profile = profile(df)
+        insights = analyze(df)
+        st.session_state.insights = insights
 
-    # Panoramica testuale (LLM), se le spiegazioni sono attive
-    if spiega_ai:
-        summary_text = (f"Righe: {len(df)}, Colonne: {df.shape[1]}\n"
-                        + prof.to_string(index=False))
-        with st.spinner("L'AI sta preparando la panoramica del dataset..."):
-            st.session_state.overview_text = agent.overview(summary_text)
-    else:
-        st.session_state.overview_text = None
+        # Narrativa AI basata sui NUMERI calcolati (se le spiegazioni sono attive)
+        st.session_state.overview_text = agent.overview(insights["text"]) if spiega_ai else None
 
-    # Grafico panoramico: prima colonna categoriale vs prima numerica
-    fig = None
-    num_cols = df.select_dtypes("number").columns.tolist()
-    cat_cols = df.select_dtypes(exclude="number").columns.tolist()
-    if num_cols and cat_cols:
-        try:
-            data = df.groupby(cat_cols[0], as_index=False)[num_cols[0]].sum()
-            fig = to_chart(data, kind="bar")
-        except Exception:
-            fig = None
-    st.session_state.overview_fig = fig
+        # Grafici del report
+        top_fig = trend_fig = None
+        if "top" in insights:
+            _, _, top_df = insights["top"]
+            try:
+                top_fig = to_chart(top_df, kind="bar")
+            except Exception:
+                top_fig = None
+        if "trend" in insights:
+            _, _, per_df = insights["trend"]
+            try:
+                trend_fig = to_chart(per_df, kind="line")
+            except Exception:
+                trend_fig = None
+        st.session_state.top_fig = top_fig
+        st.session_state.trend_fig = trend_fig
+
+insights = st.session_state.get("insights", {})
 
 st.divider()
-st.subheader("📋 Panoramica iniziale")
+st.subheader("📋 Report iniziale sui dati")
+
+# Narrativa AI con i numeri chiave
 if st.session_state.get("overview_text"):
-    answer_card("📊 Panoramica del dataset", st.session_state.overview_text)
-if st.session_state.get("overview_fig") is not None:
-    st.plotly_chart(apply_theme(st.session_state.overview_fig), use_container_width=True)
-with st.expander("🔎 Dettaglio delle colonne"):
-    st.dataframe(st.session_state.get("profile"), use_container_width=True)
+    answer_card("📊 Sintesi dei dati", st.session_state.overview_text)
+
+# Statistiche numeriche
+if "numeric_stats" in insights:
+    st.markdown("**Statistiche delle colonne numeriche**")
+    st.dataframe(insights["numeric_stats"], use_container_width=True, hide_index=True)
+
+# Grafici: classifica principale e andamento temporale
+top_fig = st.session_state.get("top_fig")
+trend_fig = st.session_state.get("trend_fig")
+if top_fig is not None or trend_fig is not None:
+    graf_cols = st.columns(2 if (top_fig is not None and trend_fig is not None) else 1)
+    idx = 0
+    if top_fig is not None:
+        cat, num, _ = insights["top"]
+        with graf_cols[idx]:
+            st.markdown(f"**Classifica: {num} per {cat}**")
+            st.plotly_chart(apply_theme(top_fig), use_container_width=True)
+        idx += 1
+    if trend_fig is not None:
+        dcol, num, _ = insights["trend"]
+        with graf_cols[idx]:
+            st.markdown(f"**Andamento di {num} nel tempo**")
+            st.plotly_chart(apply_theme(trend_fig), use_container_width=True)
+
+with st.expander("🔎 Struttura delle colonne (tipi, mancanti, valori)"):
+    st.dataframe(st.session_state.get("profile"), use_container_width=True, hide_index=True)
 
 st.divider()
 st.subheader("💬 Fai una domanda ai tuoi dati")
