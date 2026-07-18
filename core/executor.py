@@ -135,6 +135,33 @@ _FORBIDDEN_NAMES = {
     "getattr", "setattr", "delattr", "vars", "memoryview", "breakpoint", "help",
 }
 
+# Metodi/attributi pericolosi (I/O su file/rete, deserializzazione, esecuzione di
+# espressioni, format-string, traversata dei moduli interni di pandas). Bloccati
+# ovunque compaiano come attributo: chiude gli escape del tipo pd.read_pickle(...),
+# df.to_csv('...'), df.eval(...), "{0.__class__}".format(df), pd.io.common...
+_DENY_ATTRS = {
+    # esecuzione di espressioni da stringa (non ispezionabili dall'AST)
+    "eval", "query",
+    # deserializzazione
+    "read_pickle", "to_pickle",
+    # lettura da file/rete
+    "read_csv", "read_table", "read_fwf", "read_excel", "read_json", "read_html",
+    "read_xml", "read_sql", "read_sql_query", "read_sql_table", "read_parquet",
+    "read_feather", "read_orc", "read_hdf", "read_stata", "read_sas", "read_spss",
+    "read_gbq", "read_clipboard",
+    # scrittura su file/rete/clipboard
+    "to_csv", "to_excel", "to_json", "to_xml", "to_sql", "to_parquet", "to_feather",
+    "to_orc", "to_hdf", "to_stata", "to_gbq", "to_clipboard",
+    # oggetti I/O e format-string (leak via "{0.__class__}".format(obj))
+    "ExcelWriter", "ExcelFile", "HDFStore", "format", "format_map",
+    # traversata dei moduli interni di pandas
+    "io", "core", "compat",
+}
+
+# Nota: apply/map/agg/pipe/transform NON sono bloccati: sono comuni e legittimi,
+# e l'AST ispeziona comunque l'interno dei lambda passati, quindi non aprono escape.
+# eval/query invece prendono una stringa che l'AST non vede -> restano bloccati.
+
 
 class UnsafeCodeError(Exception):
     """Sollevata quando il codice generato contiene costruzioni non consentite."""
@@ -143,15 +170,17 @@ class UnsafeCodeError(Exception):
 def _validate_ast(tree: ast.AST) -> None:
     """
     Sandbox statica: consente solo espressioni/assegnazioni Pandas 'innocue'.
-    Blocca import, accesso ad attributi dunder/privati (la via classica per
-    risalire ai builtin reali) e nomi pericolosi. Solleva UnsafeCodeError.
+    Blocca import, attributi dunder/privati, nomi pericolosi, metodi di I/O o
+    di esecuzione, e chiavi dunder. Solleva UnsafeCodeError.
     """
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             raise UnsafeCodeError("gli import non sono consentiti")
-        if isinstance(node, ast.Attribute) and node.attr.startswith("_"):
-            # es. df.__class__, obj.__globals__, ...__subclasses__
-            raise UnsafeCodeError(f"accesso all'attributo '{node.attr}' non consentito")
+        if isinstance(node, ast.Attribute):
+            if node.attr.startswith("_"):
+                raise UnsafeCodeError(f"accesso all'attributo '{node.attr}' non consentito")
+            if node.attr in _DENY_ATTRS:
+                raise UnsafeCodeError(f"il metodo '{node.attr}' non è consentito")
         if isinstance(node, ast.Name) and node.id in _FORBIDDEN_NAMES:
             raise UnsafeCodeError(f"uso di '{node.id}' non consentito")
         # blocca l'accesso a chiavi dunder tramite subscript: obj['__class__']
@@ -181,6 +210,12 @@ def execute_pandas_code(code_string: str, df: pd.DataFrame):
         tree = ast.parse(code, mode="exec")
     except SyntaxError as e:
         return f"Errore di sintassi nel codice generato: {e} \nCodice tentato: {code}"
+
+    # Nessuno statement eseguibile (es. il provider ha restituito solo un commento
+    # "# Errore di comunicazione..."): è un fallimento, non un successo.
+    if not tree.body:
+        msg = code.lstrip("# ").strip() or "il modello non ha prodotto codice eseguibile"
+        return f"Errore: {msg}"
 
     # Sandbox statica: rifiuta le costruzioni pericolose prima di eseguire
     try:

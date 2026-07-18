@@ -345,7 +345,10 @@ for msg in st.session_state.messages:
             render_result(msg["code"], msg["result"], msg.get("explanation"))
 
 # --- Nuova domanda ---
-PAROLE_GRAFICO = ["grafico", "mostrami", "visualizza", "plot", "barre", "linee", "andamento"]
+# "mostrami"/"visualizza" erano troppo generiche (attivavano il grafico anche su
+# richieste scalari). Teniamo solo parole realmente grafiche.
+PAROLE_GRAFICO = ["grafico", "plot", "barre", "linee", "andamento", "istogramma",
+                  "trend", "distribuzione", "diagramma"]
 PAROLE_LINEA = ["andamento", "linee", "trend", "tempo", "temporale"]
 
 prompt = st.chat_input("Es. 'Qual è il mese con più vendite?' oppure 'Mostrami le vendite per regione'")

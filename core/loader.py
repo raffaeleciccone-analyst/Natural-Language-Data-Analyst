@@ -9,13 +9,36 @@ from core.utils import column_kind
 SUPPORTED_EXTENSIONS = ["csv", "xlsx", "xls", "json"]
 
 
-def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Pulisce i nomi delle colonne (spazi) e prova a convertire colonne data comuni."""
-    df.columns = [str(c).strip() for c in df.columns]
-    for col in ["Order Date", "Ship Date", "Date", "date"]:
-        if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce", dayfirst=True)
+_DATE_HINT = re.compile(r'(date|data|time|giorno|mese|anno|timestamp|periodo|scadenza)', re.I)
+
+
+def _maybe_parse_dates(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Converte in datetime le colonne testuali che sembrano date, a prescindere dal
+    nome: se il nome contiene un indizio ('date/data/time/...') basta che ≥50% dei
+    valori sia parsabile; altrimenti serve ≥90% (evita falsi positivi su ID/codici).
+    """
+    for col in df.columns:
+        s = df[col]
+        if not (s.dtype == object or pd.api.types.is_string_dtype(s)):
+            continue
+        sample = s.dropna()
+        if sample.empty:
+            continue
+        try:
+            parsed = pd.to_datetime(sample, errors="coerce", dayfirst=True)
+        except Exception:
+            continue
+        frac = parsed.notna().mean()
+        if (bool(_DATE_HINT.search(str(col))) and frac >= 0.5) or frac >= 0.9:
+            df[col] = pd.to_datetime(s, errors="coerce", dayfirst=True)
     return df
+
+
+def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Pulisce i nomi delle colonne (spazi) e rileva automaticamente le colonne data."""
+    df.columns = [str(c).strip() for c in df.columns]
+    return _maybe_parse_dates(df)
 
 
 def _stringify_complex(df: pd.DataFrame) -> pd.DataFrame:
@@ -155,6 +178,7 @@ def analyze(df: pd.DataFrame) -> dict:
     date_cols = [c for c in df.columns if column_kind(df[c]) == "data"]
 
     measures = _measure_columns(df, num_cols) if num_cols else []
+    measures = [c for c in measures if df[c].notna().any()]  # scarta colonne tutte-NaN
     main_num = measures[0] if measures else None
     cat = _best_category(df, cat_cols)
 

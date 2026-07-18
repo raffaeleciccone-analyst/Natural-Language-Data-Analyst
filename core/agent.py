@@ -68,13 +68,13 @@ class DataAgent:
         # così il modello non viene spinto verso nomi di colonne inesistenti.
         if cat and num:
             esempio = (
-                f"data = df.groupby('{cat}', as_index=False)['{num}'].sum(); "
-                f"fig = px.bar(data, x='{cat}', y='{num}', title='{num} per {cat}')"
+                f"data = df.groupby({cat!r}, as_index=False)[{num!r}].sum(); "
+                f"fig = px.bar(data, x={cat!r}, y={num!r}, title={f'{num} per {cat}'!r})"
             )
         elif num:
             esempio = (
-                f"data = df['{num}'].describe().reset_index(); "
-                f"fig = px.bar(data, x='index', y='{num}')"
+                f"data = df[{num!r}].describe().reset_index(); "
+                f"fig = px.bar(data, x='index', y={num!r})"
             )
         else:
             esempio = "fig = px.bar(df.iloc[:, :2])"
