@@ -11,6 +11,7 @@ from .ollama_provider import OllamaProvider
 from .anthropic_provider import AnthropicProvider
 from .openai_provider import OpenAIProvider
 from .gemini_provider import GeminiProvider
+from .groq_provider import GroqProvider
 
 # Modello di default suggerito per ciascun provider
 DEFAULT_MODELS = {
@@ -18,6 +19,7 @@ DEFAULT_MODELS = {
     "anthropic": "claude-opus-4-8",
     "openai": "gpt-4o-mini",
     "gemini": "gemini-2.0-flash",
+    "groq": "llama-3.3-70b-versatile",
 }
 
 # Registro nome -> classe
@@ -26,10 +28,11 @@ _PROVIDERS = {
     "anthropic": AnthropicProvider,
     "openai": OpenAIProvider,
     "gemini": GeminiProvider,
+    "groq": GroqProvider,
 }
 
 # Quali provider richiedono una API key (gli altri girano in locale)
-REQUIRES_API_KEY = {"anthropic", "openai", "gemini"}
+REQUIRES_API_KEY = {"anthropic", "openai", "gemini", "groq"}
 
 
 def available_providers() -> list[str]:

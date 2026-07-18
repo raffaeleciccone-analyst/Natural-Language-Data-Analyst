@@ -18,7 +18,7 @@ classifiche e andamento temporale dei dati.
 ## Cosa fa
 
 - 📊 Domande in italiano → codice Pandas → grafici **Plotly** interattivi
-- 🧠 Multi-provider LLM: **Ollama** (locale), **Anthropic**, **OpenAI**, **Gemini**
+- 🧠 Multi-provider LLM: **Ollama** (locale), **Groq**, **Anthropic**, **OpenAI**, **Gemini**
 - 📁 Carica **CSV, Excel (.xlsx) o JSON** — si adatta a qualsiasi schema
 - 📋 Report iniziale automatico + risposta testuale a ogni domanda
 - 🌙 Tema chiaro/scuro
@@ -48,9 +48,9 @@ pip install -r requirements.txt
 3. È già il provider predefinito.
 
 **Opzione B — Provider cloud (API key)**
-- Scegli **Anthropic**, **OpenAI** o **Gemini** dalla barra laterale e incolla la
-  tua API key (oppure copia `.env.example` in `.env` e inseriscila lì).
-- 💡 **Gemini** ha una chiave gratuita (senza carta) su <https://aistudio.google.com/apikey>.
+- Scegli **Groq**, **Anthropic**, **OpenAI** o **Gemini** dalla barra laterale e
+  incolla la tua API key (oppure copia `.env.example` in `.env` e inseriscila lì).
+- 💡 **Groq** ha una chiave gratuita (senza carta) su <https://console.groq.com/keys>.
 
 ### 4. Avvia
 ```bash

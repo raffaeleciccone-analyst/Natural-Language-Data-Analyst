@@ -13,9 +13,9 @@ progetto, non per gli utenti finali.
    ```toml
    DEMO_MODE = "true"
    DEMO_MAX_QUESTIONS = "15"
-   PROVIDER = "gemini"
-   MODEL = "gemini-2.0-flash"
-   GOOGLE_API_KEY = "AIza..."
+   PROVIDER = "groq"
+   MODEL = "llama-3.3-70b-versatile"
+   GROQ_API_KEY = "gsk_..."
    ```
 4. **Deploy**. In modalità demo l'app usa la chiave dei secrets, nasconde i campi
    sensibili e limita le domande per sessione.
@@ -24,10 +24,11 @@ progetto, non per gli utenti finali.
 
 ## Costi e chiave
 
-- 💡 **Gratis**: la chiave **Google Gemini** ha un tier gratuito (senza carta) da
-  <https://aistudio.google.com/apikey> — adatta a una demo a costo zero (rate limit).
-- Alternative a pagamento: `gpt-4o-mini` (OpenAI) o `claude-haiku-4-5` (Anthropic);
-  in tal caso imposta un **tetto di spesa** sul pannello del provider.
+- 💡 **Gratis (consigliato)**: **Groq** ha un tier gratuito affidabile (senza carta)
+  da <https://console.groq.com/keys> — inferenza veloce su modelli Llama.
+- Alternative: **Gemini** (`gemini-2.0-flash`, free tier se disponibile sul tuo
+  account) da <https://aistudio.google.com/apikey>; a pagamento `gpt-4o-mini`
+  (OpenAI) o `claude-haiku-4-5` (Anthropic) con un **tetto di spesa** sul provider.
 - La chiave va **solo** nei Secrets di Streamlit Cloud, mai nel repo.
 - Ollama non è disponibile sul cloud (gira solo in locale).
 

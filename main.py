@@ -21,7 +21,7 @@ st.set_page_config(
 )
 
 _KEY_ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY",
-            "gemini": "GOOGLE_API_KEY"}
+            "gemini": "GOOGLE_API_KEY", "groq": "GROQ_API_KEY"}
 
 
 def _secret(key: str, default: str = "") -> str:
@@ -51,7 +51,7 @@ with st.sidebar:
     st.divider()
     st.subheader("Modello LLM")
     if DEMO_MODE:
-        provider = _secret("PROVIDER", "gemini").strip().lower()
+        provider = _secret("PROVIDER", "groq").strip().lower()
         model_name = _secret("MODEL", DEFAULT_MODELS.get(provider, ""))
         api_key = _secret(_KEY_ENV.get(provider, ""), "")
         st.success(f"🚀 Demo pubblica · **{provider}** · `{model_name}`")
