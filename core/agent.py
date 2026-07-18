@@ -1,35 +1,28 @@
-import re
-
 import pandas as pd
 
 from core.providers import LLMProvider, get_provider
+from core.utils import clean_code, column_kind
 
 
-def _clean_code(text: str) -> str:
-    """Rimuove i fence markdown (```python ... ```) che i modelli spesso aggiungono."""
-    cleaned = re.sub(r'```(?:python)?\s*|\s*```', '', text)
-    return cleaned.strip()
-
-
-def _column_kind(series: pd.Series) -> str:
-    """Classifica il tipo di una colonna in una categoria comprensibile per l'LLM."""
-    if pd.api.types.is_bool_dtype(series):
-        return "booleana"
-    if pd.api.types.is_datetime64_any_dtype(series):
-        return "data"
-    if pd.api.types.is_numeric_dtype(series):
-        return "numerica"
-    return "testo"
+def _sanitize_sample(value) -> str:
+    """
+    Sanitizza un valore di cella prima di inserirlo nel prompt: le celle sono
+    dati NON fidati (un file caricato potrebbe contenere istruzioni di prompt
+    injection). Rimuove i caratteri di controllo/newline e tronca la lunghezza.
+    """
+    s = str(value).replace("\n", " ").replace("\r", " ").replace("`", "'")
+    s = s[:40]
+    return s + "…" if len(str(value)) > 40 else s
 
 
 def _describe_schema(df: pd.DataFrame) -> str:
-    """Costruisce la descrizione dello schema: nome, tipo ed esempi per ogni colonna."""
+    """Costruisce la descrizione dello schema: nome, tipo ed esempi (sanitizzati) per colonna."""
     lines = []
     for col in df.columns:
-        kind = _column_kind(df[col])
+        kind = column_kind(df[col])
         try:
             samples = df[col].dropna().unique()[:3]
-            sample_str = ", ".join(str(s) for s in samples)
+            sample_str = ", ".join(_sanitize_sample(s) for s in samples)
         except Exception:
             sample_str = ""
         lines.append(f"- '{col}' (tipo: {kind}) — esempi: {sample_str}")
@@ -40,7 +33,7 @@ def _example_columns(df: pd.DataFrame):
     """Sceglie una colonna categoriale e una numerica reali per un esempio calzante."""
     cat = num = None
     for col in df.columns:
-        kind = _column_kind(df[col])
+        kind = column_kind(df[col])
         if kind == "testo" and cat is None:
             cat = col
         if kind == "numerica" and num is None:
@@ -111,7 +104,7 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
         except Exception as e:
             return f"# Errore di comunicazione con il provider LLM ({self.provider.name}): {e}"
 
-        return _clean_code(raw or "")
+        return clean_code(raw or "")
 
     def fix_code(self, user_question: str, df: pd.DataFrame,
                  broken_code: str, error_message: str) -> str:
@@ -128,7 +121,7 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
             raw = self.provider.generate(system_prompt, user_prompt)
         except Exception as e:
             return f"# Errore di comunicazione con il provider LLM ({self.provider.name}): {e}"
-        return _clean_code(raw or "")
+        return clean_code(raw or "")
 
     def overview(self, dataset_summary: str) -> str:
         """Genera una panoramica introduttiva del dataset in linguaggio naturale."""

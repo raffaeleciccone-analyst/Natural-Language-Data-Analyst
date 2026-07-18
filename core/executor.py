@@ -1,7 +1,8 @@
-import pandas as pd
-import streamlit as st
 import ast
-import re
+
+import pandas as pd
+
+from core.utils import clean_code
 
 # Import lazy di Plotly: se non è installato, i grafici falliscono con un
 # messaggio chiaro ma il resto dell'app continua a funzionare.
@@ -50,7 +51,7 @@ SAFE_BUILTINS = {
 
 
 def is_plotly_figure(obj) -> bool:
-    return type(obj).__module__.startswith("plotly.")
+    return (type(obj).__module__ or "").startswith("plotly.")
 
 
 def apply_theme(fig):
@@ -125,43 +126,74 @@ def summarize_result(result, max_rows: int = 30) -> str:
     return str(result)
 
 
-def clean_generated_code(code_string: str) -> str:
-    # Rimuove eventuali tag markdown che i modelli a volte inseriscono
-    cleaned = re.sub(r'```(?:python)?\s*|\s*```', '', code_string)
-    return cleaned.strip()
+# Nomi vietati anche come identificatori semplici (difesa in profondità)
+_FORBIDDEN_NAMES = {
+    "eval", "exec", "open", "compile", "input", "__import__", "globals", "locals",
+    "getattr", "setattr", "delattr", "vars", "memoryview", "breakpoint", "help",
+}
 
 
-def _last_assigned_name(tree: ast.Module):
-    """Ritorna il nome dell'ultima variabile assegnata (per recuperarne il valore dopo exec)."""
-    name = None
-    for node in tree.body:
+class UnsafeCodeError(Exception):
+    """Sollevata quando il codice generato contiene costruzioni non consentite."""
+
+
+def _validate_ast(tree: ast.AST) -> None:
+    """
+    Sandbox statica: consente solo espressioni/assegnazioni Pandas 'innocue'.
+    Blocca import, accesso ad attributi dunder/privati (la via classica per
+    risalire ai builtin reali) e nomi pericolosi. Solleva UnsafeCodeError.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            raise UnsafeCodeError("gli import non sono consentiti")
+        if isinstance(node, ast.Attribute) and node.attr.startswith("_"):
+            # es. df.__class__, obj.__globals__, ...__subclasses__
+            raise UnsafeCodeError(f"accesso all'attributo '{node.attr}' non consentito")
+        if isinstance(node, ast.Name) and node.id in _FORBIDDEN_NAMES:
+            raise UnsafeCodeError(f"uso di '{node.id}' non consentito")
+        # blocca l'accesso a chiavi dunder tramite subscript: obj['__class__']
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) \
+                and node.value.startswith("__") and node.value.endswith("__"):
+            raise UnsafeCodeError("accesso a chiavi dunder non consentito")
+
+
+def _last_assigned_name(tree: ast.AST):
+    """Nome dell'ultima variabile assegnata (anche dentro if/for), per recuperarne il valore."""
+    name, best_line = None, -1
+    for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Name):
-                    name = target.id
+                if isinstance(target, ast.Name) and node.lineno >= best_line:
+                    name, best_line = target.id, node.lineno
         elif isinstance(node, (ast.AugAssign, ast.AnnAssign)) and isinstance(node.target, ast.Name):
-            name = node.target.id
+            if node.lineno >= best_line:
+                name, best_line = node.target.id, node.lineno
     return name
 
 
 def execute_pandas_code(code_string: str, df: pd.DataFrame):
-    code = clean_generated_code(code_string)
-
-    # Contesto isolato per l'esecuzione (builtin ridotti al minimo indispensabile)
-    safe_globals = {"__builtins__": SAFE_BUILTINS}
-    local_context = {
-        "df": df,
-        "pd": pd,
-        "st": st,
-        "px": px,
-        "go": go,
-        "to_chart": to_chart,
-    }
+    code = clean_code(code_string)
 
     try:
         tree = ast.parse(code, mode="exec")
     except SyntaxError as e:
         return f"Errore di sintassi nel codice generato: {e} \nCodice tentato: {code}"
+
+    # Sandbox statica: rifiuta le costruzioni pericolose prima di eseguire
+    try:
+        _validate_ast(tree)
+    except UnsafeCodeError as e:
+        return f"Errore di sicurezza: {e}. \nCodice tentato: {code}"
+
+    # Contesto isolato per l'esecuzione (builtin ridotti al minimo; niente 'st')
+    safe_globals = {"__builtins__": SAFE_BUILTINS}
+    local_context = {
+        "df": df,
+        "pd": pd,
+        "px": px,
+        "go": go,
+        "to_chart": to_chart,
+    }
 
     try:
         # Caso 1: singola espressione pura (es. df['Sales'].sum() o px.bar(...))
@@ -174,10 +206,6 @@ def execute_pandas_code(code_string: str, df: pd.DataFrame):
         # Preferiamo restituire una figura, se ne è stata creata una (variabile 'fig')
         if "fig" in local_context and is_plotly_figure(local_context["fig"]):
             return apply_theme(local_context["fig"])
-
-        # Se il codice usa direttamente Streamlit, è un effetto collaterale già renderizzato
-        if "st." in code:
-            return "Grafico generato con successo!"
 
         # Altrimenti restituiamo l'ultima variabile assegnata (filtri, aggregazioni, ...)
         last_name = _last_assigned_name(tree)

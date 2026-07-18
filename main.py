@@ -3,7 +3,8 @@ import html
 import pandas as pd
 import streamlit as st
 
-from core.loader import load_dataset, read_any, profile, analyze, SUPPORTED_EXTENSIONS
+from core.loader import (load_dataset, read_any, profile, analyze,
+                         measure_columns, SUPPORTED_EXTENSIONS)
 from core.agent import DataAgent
 from core import executor as ex
 from core.executor import (execute_pandas_code, is_plotly_figure,
@@ -139,7 +140,8 @@ agent = init_agent(provider, model_name, api_key)
 st.title("📊 AI Data Analyst Assistant")
 st.markdown(
     f"<p class='app-subtitle'>Interroga i tuoi dati in linguaggio naturale — "
-    f"provider attivo: <b>{provider}</b> · <code>{model_name}</code></p>",
+    f"provider attivo: <b>{html.escape(provider)}</b> · "
+    f"<code>{html.escape(model_name)}</code></p>",
     unsafe_allow_html=True,
 )
 
@@ -166,23 +168,28 @@ if df is None:
 st.caption(f"📁 {source_label} — {len(df):,} righe · {df.shape[1]} colonne")
 
 # --- Riga di KPI ---
-numeric_cols = df.select_dtypes("number").columns.tolist()
 kpi_cols = st.columns(4)
 kpi_cols[0].metric("Righe", f"{len(df):,}")
 kpi_cols[1].metric("Colonne", f"{df.shape[1]}")
-for slot, col in zip(kpi_cols[2:], ["Sales", "Profit"]):
-    if col in df.columns and col in numeric_cols:
-        slot.metric(f"Totale {col}", f"{df[col].sum():,.0f}")
-    elif numeric_cols:
-        c = numeric_cols[0]
-        slot.metric(f"Totale {c}", f"{df[c].sum():,.0f}")
+# Colonne-misura reali (identificatori come Row ID / CAP esclusi), senza duplicati.
+# Diamo priorità ai nomi noti se presenti.
+measures = measure_columns(df)
+priorita = [c for c in ["Sales", "Profit", "Revenue", "Amount", "Total"] if c in measures]
+ordinate = priorita + [c for c in measures if c not in priorita]
+for slot, col in zip(kpi_cols[2:], ordinate[:2]):
+    slot.metric(f"Totale {col}", f"{df[col].sum():,.0f}")
 
 # --- Anteprima dati ---
 with st.expander("👀 Anteprima dei dati (prime 10 righe)"):
     st.dataframe(df.head(10), use_container_width=True)
 
-# --- Report iniziale sui dati (rigenerato solo al cambio di dataset) ---
-dataset_sig = (source_label, df.shape, tuple(df.columns))
+# --- Report iniziale sui dati (rigenerato al cambio di dataset per CONTENUTO) ---
+try:
+    content_hash = int(pd.util.hash_pandas_object(df, index=False).sum())
+except Exception:
+    content_hash = None
+dataset_sig = (source_label, df.shape, tuple(df.columns), content_hash)
+
 if st.session_state.get("dataset_sig") != dataset_sig:
     st.session_state.dataset_sig = dataset_sig
     st.session_state.messages = []  # nuova sorgente dati -> nuova conversazione
@@ -191,9 +198,6 @@ if st.session_state.get("dataset_sig") != dataset_sig:
         st.session_state.profile = profile(df)
         insights = analyze(df)
         st.session_state.insights = insights
-
-        # Narrativa AI basata sui NUMERI calcolati (se le spiegazioni sono attive)
-        st.session_state.overview_text = agent.overview(insights["text"]) if spiega_ai else None
 
         # Grafici del report
         top_fig = trend_fig = None
@@ -213,6 +217,16 @@ if st.session_state.get("dataset_sig") != dataset_sig:
         st.session_state.trend_fig = trend_fig
 
 insights = st.session_state.get("insights", {})
+
+# Narrativa AI: rigenerata anche al cambio di provider/modello o del toggle spiegazioni
+overview_sig = (dataset_sig, spiega_ai, provider, model_name)
+if st.session_state.get("overview_sig") != overview_sig:
+    st.session_state.overview_sig = overview_sig
+    if spiega_ai and insights.get("text"):
+        with st.spinner("L'AI sta preparando la sintesi dei dati..."):
+            st.session_state.overview_text = agent.overview(insights["text"])
+    else:
+        st.session_state.overview_text = None
 
 st.divider()
 st.subheader("📋 Report iniziale sui dati")
@@ -302,18 +316,20 @@ if prompt and prompt.strip():
 
     with st.chat_message("assistant"):
         richiede_grafico = any(p in prompt.lower() for p in PAROLE_GRAFICO)
+        kind = "line" if any(p in prompt.lower() for p in PAROLE_LINEA) else "bar"
+
+        def wrap_chart(codice: str) -> str:
+            """Se serviva un grafico ma il modello non l'ha prodotto, lo costruiamo con to_chart."""
+            if (richiede_grafico and "fig" not in codice
+                    and "px." not in codice and "st." not in codice):
+                base = codice.strip().rstrip(";")
+                return f"fig = to_chart({base}, kind='{kind}')"
+            return codice
+
+        domanda = prompt + (" (Raggruppa i dati usando as_index=False)" if richiede_grafico else "")
 
         with st.spinner("L'AI sta generando il codice..."):
-            domanda = prompt
-            if richiede_grafico:
-                domanda += " (Raggruppa i dati usando as_index=False)"
-
-            codice = agent.ask_code(domanda, df)
-
-            if richiede_grafico and "fig" not in codice and "px." not in codice and "st." not in codice:
-                base = codice.strip().rstrip(";")
-                kind = "line" if any(p in prompt.lower() for p in PAROLE_LINEA) else "bar"
-                codice = f"fig = to_chart({base}, kind='{kind}')"
+            codice = wrap_chart(agent.ask_code(domanda, df))
 
         with st.spinner("Esecuzione sui dati..."):
             risultato = execute_pandas_code(codice, df)
@@ -325,7 +341,7 @@ if prompt and prompt.strip():
                and tentativo < MAX_RETRY):
             tentativo += 1
             with st.spinner(f"Correzione automatica del codice (tentativo {tentativo})..."):
-                codice = agent.fix_code(prompt, df, codice, risultato)
+                codice = wrap_chart(agent.fix_code(domanda, df, codice, risultato))
                 risultato = execute_pandas_code(codice, df)
         if tentativo and not (isinstance(risultato, str) and risultato.startswith("Errore")):
             st.caption(f"✅ Codice corretto automaticamente dopo {tentativo} tentativo/i.")

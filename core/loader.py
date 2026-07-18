@@ -3,6 +3,8 @@ import os
 import json
 import re
 
+from core.utils import column_kind
+
 # Estensioni file supportate per l'upload
 SUPPORTED_EXTENSIONS = ["csv", "xlsx", "xls", "json"]
 
@@ -16,6 +18,26 @@ def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _stringify_complex(df: pd.DataFrame) -> pd.DataFrame:
+    """Converte in stringa le celle contenenti liste/dizionari (JSON annidati),
+    così tabelle, grafici e aggregazioni non falliscono."""
+    for col in df.columns:
+        if df[col].map(lambda v: isinstance(v, (list, dict))).any():
+            df[col] = df[col].map(
+                lambda v: json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v
+            )
+    return df
+
+
+def _read_csv_robusto(f) -> pd.DataFrame:
+    """Legge un CSV rilevando il separatore e gestendo encoding non-UTF8."""
+    try:
+        return pd.read_csv(f, sep=None, engine="python")
+    except (UnicodeDecodeError, UnicodeError):
+        f.seek(0)
+        return pd.read_csv(f, sep=None, engine="python", encoding="latin-1")
+
+
 def read_any(uploaded_file) -> pd.DataFrame:
     """
     Legge un file caricato dall'utente in un DataFrame, riconoscendo il formato
@@ -24,29 +46,19 @@ def read_any(uploaded_file) -> pd.DataFrame:
     name = uploaded_file.name.lower()
 
     if name.endswith((".xlsx", ".xls")):
-        df = pd.read_excel(uploaded_file)  # richiede openpyxl per .xlsx
+        # sheet_name=0: viene letto il primo foglio (comportamento documentato)
+        df = pd.read_excel(uploaded_file, sheet_name=0)  # richiede openpyxl per .xlsx
     elif name.endswith(".json"):
         data = json.loads(uploaded_file.read())
-        if isinstance(data, list):
-            df = pd.json_normalize(data)          # lista di record -> righe
-        elif isinstance(data, dict):
-            df = pd.json_normalize(data)          # dict -> singola riga (o annidato appiattito)
+        if isinstance(data, (list, dict)):
+            df = pd.json_normalize(data)  # lista di record -> righe; dict -> riga singola/appiattito
         else:
             raise ValueError("Formato JSON non riconosciuto: attesa una lista di oggetti o un oggetto.")
+        df = _stringify_complex(df)  # array/oggetti annidati -> stringa
     else:
-        df = pd.read_csv(uploaded_file)
+        df = _read_csv_robusto(uploaded_file)
 
     return _clean_columns(df)
-
-
-def _kind(s: pd.Series) -> str:
-    if pd.api.types.is_bool_dtype(s):
-        return "booleana"
-    if pd.api.types.is_datetime64_any_dtype(s):
-        return "data"
-    if pd.api.types.is_numeric_dtype(s):
-        return "numerica"
-    return "testo"
 
 
 def profile(df: pd.DataFrame) -> pd.DataFrame:
@@ -56,7 +68,7 @@ def profile(df: pd.DataFrame) -> pd.DataFrame:
     for col in df.columns:
         s = df[col]
         miss = int(s.isna().sum())
-        kind = _kind(s)
+        kind = column_kind(s)
         if kind == "numerica" and s.notna().any():
             dettaglio = f"min {s.min():.2f} · media {s.mean():.2f} · max {s.max():.2f}"
         else:
@@ -102,8 +114,9 @@ def _is_identifier(name, series: pd.Series, n: int) -> bool:
     """Riconosce colonne numeriche che sono in realtà identificatori (ID, CAP, codici)."""
     if _ID_PATTERN.search(str(name)):
         return True
-    # valori quasi tutti distinti -> è una chiave, non una misura
-    if n and series.nunique(dropna=True) / n > 0.9:
+    # valori quasi tutti distinti -> è una chiave (solo su dataset abbastanza grandi:
+    # con poche righe l'unicità è priva di significato)
+    if n >= 20 and series.nunique(dropna=True) / n > 0.9:
         return True
     return False
 
@@ -113,6 +126,12 @@ def _measure_columns(df: pd.DataFrame, num_cols: list) -> list:
     n = len(df)
     measures = [c for c in num_cols if not _is_identifier(c, df[c], n)]
     return measures or num_cols
+
+
+def measure_columns(df: pd.DataFrame) -> list:
+    """API pubblica: colonne numeriche 'misura' del dataset (identificatori esclusi)."""
+    num_cols = df.select_dtypes("number").columns.tolist()
+    return _measure_columns(df, num_cols) if num_cols else []
 
 
 def _best_category(df: pd.DataFrame, cat_cols: list):
@@ -132,8 +151,8 @@ def analyze(df: pd.DataFrame) -> dict:
     """
     res = {}
     num_cols = df.select_dtypes("number").columns.tolist()
-    cat_cols = [c for c in df.columns if _kind(df[c]) == "testo"]
-    date_cols = [c for c in df.columns if _kind(df[c]) == "data"]
+    cat_cols = [c for c in df.columns if column_kind(df[c]) == "testo"]
+    date_cols = [c for c in df.columns if column_kind(df[c]) == "data"]
 
     measures = _measure_columns(df, num_cols) if num_cols else []
     main_num = measures[0] if measures else None
@@ -176,7 +195,6 @@ def load_dataset(file_name: str = "sales.csv") -> pd.DataFrame:
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Errore: Il file {file_name} non è stato trovato in {os.path.dirname(file_path)}")
         
-    print(f"Caricamento dati da: {file_path}...")
     df = pd.read_csv(file_path)
     
     # 1. Pulisce eventuali spazi bianchi nei nomi delle colonne
