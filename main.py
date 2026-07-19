@@ -167,6 +167,11 @@ def inject_css(dark: bool):
               border-radius: 14px; padding: 6px 14px;
           }}
           .stExpander {{ border-radius: 12px; border: 1px solid {c['border']}; }}
+          /* Box domanda: fissato in alto (sempre raggiungibile senza scrollare) */
+          [data-testid="stForm"] {{
+              position: sticky; top: 0; z-index: 60;
+              background: {c['page']}; padding: 8px 0 6px;
+          }}
           /* Box domanda inline: input pulito + pulsante in accento */
           [data-testid="stTextInput"] input {{
               border-radius: 10px; border: 1px solid {c['strong']};
@@ -438,8 +443,8 @@ st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
 st.subheader("Fai una domanda ai tuoi dati")
 
 
-# --- Rendering di un risultato ---
-def render_value(value):
+# --- Rendering di un risultato (kp = chiave univoca del turno, evita ID duplicati) ---
+def render_value(value, kp: str = "r"):
     """Mostra il dato del risultato (tabella / numero / testo), con numeri leggibili."""
     if value is None:
         return
@@ -447,16 +452,16 @@ def render_value(value):
         num_cols = list(value.select_dtypes("number").columns)
         styled = (value.style.format(precision=2, thousands=".", decimal=",", subset=num_cols)
                   if num_cols else value)
-        st.dataframe(styled, use_container_width=True, hide_index=True)
+        st.dataframe(styled, use_container_width=True, hide_index=True, key=f"{kp}_df")
     elif isinstance(value, pd.Series):
-        st.dataframe(value.rename("valore").to_frame(), use_container_width=True)
+        st.dataframe(value.rename("valore").to_frame(), use_container_width=True, key=f"{kp}_ser")
     elif isinstance(value, (int, float)):
         st.metric("Risultato", fmt_num(value))
     elif isinstance(value, str) and value != "Codice eseguito correttamente.":
         st.markdown(f"**Risultato:** {value}")
 
 
-def render_result(code: str, result, explanation: str | None = None):
+def render_result(code: str, result, explanation: str | None = None, kp: str = "r"):
     # 1. Risposta testuale (in un riquadro dedicato)
     if explanation:
         answer_card("Risposta", explanation)
@@ -466,10 +471,10 @@ def render_result(code: str, result, explanation: str | None = None):
         st.error(result)
     elif isinstance(result, dict):
         if result.get("fig") is not None:
-            st.plotly_chart(apply_theme(result["fig"]), use_container_width=True)
-        render_value(result.get("value"))
+            st.plotly_chart(apply_theme(result["fig"]), use_container_width=True, key=f"{kp}_fig")
+        render_value(result.get("value"), kp)
     else:
-        render_value(result)
+        render_value(result, kp)
 
     # 3. Codice generato (in fondo, collassato)
     with st.expander("Codice Pandas generato"):
@@ -547,9 +552,9 @@ while _i < len(_msgs):
     _turns.append((u, a))
     _i += 2 if a else 1
 
-for u, a in reversed(_turns):
+for _oi, (u, a) in reversed(list(enumerate(_turns))):
     with st.chat_message("user"):
         st.write(u["content"])
     if a is not None:
         with st.chat_message("assistant"):
-            render_result(a["code"], a["result"], a.get("explanation"))
+            render_result(a["code"], a["result"], a.get("explanation"), kp=f"h{_oi}")
