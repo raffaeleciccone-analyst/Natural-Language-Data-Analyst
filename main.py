@@ -351,23 +351,52 @@ if "numeric_stats" in insights:
             stats_disp[_c] = stats_disp[_c].map(fmt_num)
     st.dataframe(stats_disp, use_container_width=True, hide_index=True)
 
-# Grafici: classifica principale e andamento temporale
+# Grafici COLLEGATI: clicca una barra della classifica -> l'andamento si filtra
 top_fig = st.session_state.get("top_fig")
 trend_fig = st.session_state.get("trend_fig")
 if top_fig is not None or trend_fig is not None:
     graf_cols = st.columns(2 if (top_fig is not None and trend_fig is not None) else 1)
     idx = 0
+    selected_cat = None
+
     if top_fig is not None:
         cat, num, _ = insights["top"]
         with graf_cols[idx]:
             st.markdown(f"**Classifica: {num} per {cat}**")
-            st.plotly_chart(apply_theme(top_fig), use_container_width=True)
+            st.caption("Clicca una barra per filtrare l'andamento qui a fianco.")
+            event = st.plotly_chart(apply_theme(top_fig), use_container_width=True,
+                                    on_select="rerun", key="report_top")
+            try:
+                pts = event.selection.points
+                if pts:
+                    px_ = pts[0].get("x")
+                    selected_cat = px_ if isinstance(px_, str) else pts[0].get("y")
+            except Exception:
+                selected_cat = None
         idx += 1
-    if trend_fig is not None:
+
+    if trend_fig is not None and "trend" in insights:
         dcol, num, _ = insights["trend"]
+        cat = insights["top"][0] if "top" in insights else None
         with graf_cols[idx]:
-            st.markdown(f"**Andamento di {num} nel tempo**")
-            st.plotly_chart(apply_theme(trend_fig), use_container_width=True)
+            sub = None
+            if selected_cat is not None and cat is not None:
+                key_val = str(selected_cat).rstrip("…")
+                mask = df[cat].astype(str) == str(selected_cat)
+                if not mask.any():
+                    mask = df[cat].astype(str).str.startswith(key_val)
+                s = df[mask].dropna(subset=[dcol]).copy()
+                if not s.empty:
+                    s["_p"] = s[dcol].dt.to_period("M").dt.to_timestamp()
+                    sub = s.groupby("_p", as_index=False)[num].sum().rename(columns={"_p": dcol})
+
+            if sub is not None:
+                st.markdown(f"**Andamento di {num} — {cat}: {selected_cat}**")
+                st.plotly_chart(apply_theme(to_chart(sub, kind="line")),
+                                use_container_width=True, key="report_trend_filtered")
+            else:
+                st.markdown(f"**Andamento di {num} nel tempo**")
+                st.plotly_chart(apply_theme(trend_fig), use_container_width=True, key="report_trend")
 
 with st.expander("Struttura delle colonne (tipi, mancanti, valori)"):
     st.dataframe(st.session_state.get("profile"), use_container_width=True, hide_index=True)

@@ -90,6 +90,23 @@ def _make_bars_readable(fig):
         yt = fig.layout.yaxis.title.text
         fig.layout.xaxis.title.text, fig.layout.yaxis.title.text = yt, xt
 
+    # Barre orizzontali: tronca le etichette lunghe (nome intero nell'hover) e dai
+    # un'altezza proporzionata, così le barre restano l'elemento principale.
+    hbars = [tr for tr in fig.data
+             if getattr(tr, "type", None) == "bar" and getattr(tr, "orientation", None) == "h"]
+    for tr in hbars:
+        if tr.y is None or tr.customdata is not None:
+            continue
+        full = [str(v) for v in tr.y]
+        if any(len(s) > 28 for s in full):
+            tr.y = [(s[:28] + "…") if len(s) > 29 else s for s in full]
+            tr.customdata = full
+            tr.hovertemplate = "%{customdata}<br>%{x}<extra></extra>"
+    if hbars:
+        n = max((len(tr.y) for tr in hbars if tr.y is not None), default=0)
+        if n:
+            fig.update_layout(height=max(260, 44 * n + 110))
+
 
 def apply_theme(fig):
     """Applica il tema visuale coerente (colori, griglia, tipografia) a una figura Plotly."""
