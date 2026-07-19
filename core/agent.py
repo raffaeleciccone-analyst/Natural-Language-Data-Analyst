@@ -95,6 +95,11 @@ REGOLE TASSATIVE:
    top = df.groupby('<cat>', as_index=False)['<num>'].sum().sort_values('<num>', ascending=False).head(5)
    perc = top['<num>'].sum() / df['<num>'].sum() * 100
    risultato = f"I primi 5 valgono il {{perc:.1f}}% del totale"
+7. Per domande di RIPARTIZIONE o CLASSIFICA (es. "per prodotto", "top N", "quanto incide ognuno"), quando è utile fornisci una risposta COMPLETA: metti in 'risultato' un DataFrame di dettaglio (includendo una colonna con la percentuale sul totale, arrotondata a 1 decimale) E crea anche un grafico 'fig' con px.bar. Esempio:
+   dett = df.groupby('<cat>', as_index=False)['<num>'].sum().sort_values('<num>', ascending=False)
+   dett['percentuale'] = (dett['<num>'] / dett['<num>'].sum() * 100).round(1)
+   risultato = dett
+   fig = px.bar(dett.head(10), x='<cat>', y='<num>')
 
 ESEMPIO DI GRAFICO (adattato a questo dataset):
 {esempio}

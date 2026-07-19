@@ -157,6 +157,12 @@ def measure_columns(df: pd.DataFrame) -> list:
     return _measure_columns(df, num_cols) if num_cols else []
 
 
+def best_category(df: pd.DataFrame):
+    """API pubblica: colonna categoriale con cardinalità utile per un raggruppamento."""
+    cat_cols = [c for c in df.columns if column_kind(df[c]) == "testo"]
+    return _best_category(df, cat_cols)
+
+
 def _best_category(df: pd.DataFrame, cat_cols: list):
     """Sceglie una colonna categoriale con cardinalità utile per un raggruppamento."""
     coppie = [(c, df[c].nunique(dropna=True)) for c in cat_cols]

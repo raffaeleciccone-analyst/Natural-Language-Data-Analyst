@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from core.loader import (load_dataset, read_any, profile, analyze,
-                         measure_columns, SUPPORTED_EXTENSIONS)
+                         measure_columns, best_category, SUPPORTED_EXTENSIONS)
 from core.utils import fmt_num
 from core.agent import DataAgent
 from core import executor as ex
@@ -133,6 +133,8 @@ def inject_css(dark: bool):
           .readout .r-v {{ font-family: var(--mono); font-weight: 600; font-size: 1.85rem;
               letter-spacing: -0.02em; margin-top: 7px; line-height: 1;
               font-variant-numeric: tabular-nums; color: {c['ink']}; }}
+          .readout .r-v.sm {{ font-size: 1.1rem; line-height: 1.2; margin-top: 12px;
+              word-break: break-word; }}
           .readout .r-tick {{ height: 6px; margin-top: 12px; border-radius: 2px;
               background: linear-gradient(90deg, var(--bar,{c['accent']}) 60%, {c['border']} 60%); }}
           .readout .r-sub {{ font-family: var(--mono); font-size: 0.7rem; color: {c['muted']}; margin-top: 8px; }}
@@ -195,13 +197,14 @@ def answer_card(label: str, text: str):
     )
 
 
-def readout(col, label: str, value: str, sub: str = "", tick: str = "#0e7c86"):
+def readout(col, label: str, value: str, sub: str = "", tick: str = "#0e7c86", small: bool = False):
     """Card KPI in stile 'console': valore monospazio + tacca colorata."""
     sub_html = f"<div class='r-sub'>{html.escape(sub)}</div>" if sub else ""
+    cls = "r-v sm" if small else "r-v"
     col.markdown(
         f"<div class='readout'>"
         f"<div class='r-k'>{html.escape(label)}</div>"
-        f"<div class='r-v'>{html.escape(value)}</div>"
+        f"<div class='{cls}'>{html.escape(value)}</div>"
         f"<div class='r-tick' style='--bar:{tick}'></div>{sub_html}</div>",
         unsafe_allow_html=True,
     )
@@ -254,19 +257,31 @@ if df is None:
 
 st.caption(f"{source_label} — {fmt_num(len(df))} righe · {df.shape[1]} colonne")
 
-# --- Riga di KPI (readout in stile console) ---
-# Misura principale reale (identificatori come Row ID / CAP esclusi).
+# --- Riga di KPI (numeri utili in un report, non metadati) ---
 measures = measure_columns(df)
 priorita = [c for c in ["Sales", "Profit", "Revenue", "Amount", "Total"] if c in measures]
 ordinate = priorita + [c for c in measures if c not in priorita]
 main_measure = ordinate[0] if ordinate else None
+cat = best_category(df)
 
-kpi_cols = st.columns(4 if main_measure else 2)
-readout(kpi_cols[0], "Righe", fmt_num(len(df)), tick="#2a78d6")
-readout(kpi_cols[1], "Colonne", str(df.shape[1]), tick="#008300")
+kpis = []  # (label, value, sub, tick, small)
 if main_measure:
-    readout(kpi_cols[2], f"Totale {main_measure}", fmt_num(df[main_measure].sum()), tick="#0e7c86")
-    readout(kpi_cols[3], f"Media {main_measure}", fmt_num(df[main_measure].mean()), tick="#eda100")
+    s = df[main_measure]
+    kpis.append((f"Totale {main_measure}", fmt_num(s.sum()), "", "#0e7c86", False))
+    kpis.append((f"Media {main_measure}", fmt_num(s.mean()), "", "#eda100", False))
+    kpis.append((f"Massimo {main_measure}", fmt_num(s.max()), "", "#2a78d6", False))
+    if cat:
+        leader = df.groupby(cat)[main_measure].sum().sort_values(ascending=False)
+        kpis.append((f"Top {cat}", str(leader.index[0]), fmt_num(leader.iloc[0]), "#008300", True))
+    else:
+        kpis.append(("Record", fmt_num(len(df)), "", "#008300", False))
+else:
+    kpis.append(("Record", fmt_num(len(df)), "", "#2a78d6", False))
+    kpis.append(("Colonne", str(df.shape[1]), "", "#008300", False))
+
+kpi_cols = st.columns(len(kpis))
+for _col, (_lab, _val, _sub, _tick, _small) in zip(kpi_cols, kpis):
+    readout(_col, _lab, _val, sub=_sub, tick=_tick, small=_small)
 
 # --- Anteprima dati ---
 with st.expander("Anteprima dei dati (prime 10 righe)"):
@@ -359,26 +374,37 @@ st.subheader("Fai una domanda ai tuoi dati")
 
 
 # --- Rendering di un risultato ---
+def render_value(value):
+    """Mostra il dato del risultato (tabella / numero / testo), con numeri leggibili."""
+    if value is None:
+        return
+    if isinstance(value, pd.DataFrame):
+        num_cols = list(value.select_dtypes("number").columns)
+        styled = (value.style.format(precision=2, thousands=".", decimal=",", subset=num_cols)
+                  if num_cols else value)
+        st.dataframe(styled, use_container_width=True, hide_index=True)
+    elif isinstance(value, pd.Series):
+        st.dataframe(value.rename("valore").to_frame(), use_container_width=True)
+    elif isinstance(value, (int, float)):
+        st.metric("Risultato", fmt_num(value))
+    elif isinstance(value, str) and value != "Codice eseguito correttamente.":
+        st.markdown(f"**Risultato:** {value}")
+
+
 def render_result(code: str, result, explanation: str | None = None):
     # 1. Risposta testuale (in un riquadro dedicato)
     if explanation:
         answer_card("Risposta", explanation)
 
-    # 2. Risultato visuale
-    if is_plotly_figure(result):
-        st.plotly_chart(apply_theme(result), use_container_width=True)
-    elif isinstance(result, pd.DataFrame):
-        st.dataframe(result, use_container_width=True)
-    elif isinstance(result, pd.Series):
-        st.dataframe(result.rename("valore").to_frame(), use_container_width=True)
-    elif isinstance(result, str) and result.startswith("Errore"):
+    # 2. Risultato visuale: grafico E/O dati
+    if isinstance(result, str):  # stringa d'errore
         st.error(result)
-    elif isinstance(result, (int, float)):
-        st.metric("Risultato", fmt_num(result))
-    elif isinstance(result, str) and "Grafico generato" in result:
-        st.success(result)
+    elif isinstance(result, dict):
+        if result.get("fig") is not None:
+            st.plotly_chart(apply_theme(result["fig"]), use_container_width=True)
+        render_value(result.get("value"))
     else:
-        st.info(f"**Risultato:** {result}")
+        render_value(result)
 
     # 3. Codice generato (in fondo, collassato)
     with st.expander("Codice Pandas generato"):
@@ -419,8 +445,8 @@ def process_question(prompt: str):
             risultato = execute_pandas_code(codice, df)
 
         spiegazione = None
-        if spiega_ai and not (isinstance(risultato, str) and risultato.startswith("Errore")):
-            spiegazione = agent.explain(prompt, summarize_result(risultato))
+        if spiega_ai and isinstance(risultato, dict):
+            spiegazione = agent.explain(prompt, risultato.get("summary") or summarize_result(risultato))
 
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.session_state.messages.append(

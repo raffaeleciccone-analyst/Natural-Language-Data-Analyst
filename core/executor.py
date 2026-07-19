@@ -114,32 +114,43 @@ def to_chart(res, kind: str = "bar"):
     return apply_theme(fig)
 
 
-def _finalize(value):
-    """Se il valore è una figura Plotly le applica il tema; altrimenti lo restituisce così com'è."""
-    if is_plotly_figure(value):
-        return apply_theme(value)
-    return value
+def _fig_summary(fig, max_rows: int = 30) -> str:
+    righe = []
+    for trace in fig.data:
+        nome = getattr(trace, "name", None) or "serie"
+        x_attr = getattr(trace, "x", None)
+        y_attr = getattr(trace, "y", None)
+        xs = list(x_attr) if x_attr is not None else []
+        ys = list(y_attr) if y_attr is not None else []
+        coppie = ", ".join(f"{x}={y}" for x, y in list(zip(xs, ys))[:max_rows])
+        righe.append(f"{nome}: {coppie}")
+    return "Dati del grafico -> " + " | ".join(righe)
+
+
+def _obj_summary(obj, max_rows: int = 30) -> str:
+    if isinstance(obj, (pd.DataFrame, pd.Series)):
+        return obj.head(max_rows).to_string()
+    return str(obj)
+
+
+def _make_summary(fig, value, max_rows: int = 30) -> str:
+    """Riepilogo testuale del risultato per l'LLM: preferisce i dati alla figura."""
+    if value is not None and not (isinstance(value, str) and value == "Codice eseguito correttamente."):
+        return _obj_summary(value, max_rows)
+    if fig is not None:
+        return _fig_summary(fig, max_rows)
+    return "Nessun risultato."
 
 
 def summarize_result(result, max_rows: int = 30) -> str:
-    """Trasforma un risultato (figura/DataFrame/Series/scalare) in testo per l'LLM."""
+    """Trasforma un risultato (grafico+dati, figura, DataFrame, scalare) in testo per l'LLM."""
+    if isinstance(result, dict):  # nuovo formato: {"fig":..., "value":..., "summary":...}
+        if result.get("summary"):
+            return result["summary"]
+        return _make_summary(result.get("fig"), result.get("value"), max_rows)
     if is_plotly_figure(result):
-        righe = []
-        for trace in result.data:
-            nome = getattr(trace, "name", None) or "serie"
-            x_attr = getattr(trace, "x", None)
-            y_attr = getattr(trace, "y", None)
-            xs = list(x_attr) if x_attr is not None else []
-            ys = list(y_attr) if y_attr is not None else []
-            coppie = ", ".join(f"{x}={y}" for x, y in list(zip(xs, ys))[:max_rows])
-            righe.append(f"{nome}: {coppie}")
-        return "Dati del grafico -> " + " | ".join(righe)
-
-    if isinstance(result, pd.DataFrame):
-        return result.head(max_rows).to_string()
-    if isinstance(result, pd.Series):
-        return result.head(max_rows).to_string()
-    return str(result)
+        return _fig_summary(result, max_rows)
+    return _obj_summary(result, max_rows)
 
 
 # Nomi vietati anche come identificatori semplici (difesa in profondità)
@@ -247,47 +258,68 @@ def _run_code(code: str, df: pd.DataFrame):
     local_context = {"df": df, "pd": pd, "px": px, "go": go, "to_chart": to_chart}
 
     try:
+        fig = None
+        value = None
+
         # Caso 1: singola espressione pura (es. df['Sales'].sum() o px.bar(...))
         if len(tree.body) == 1 and isinstance(tree.body[0], ast.Expr):
-            return _finalize(eval(code, safe_globals, local_context))
+            v = eval(code, safe_globals, local_context)
+            if is_plotly_figure(v):
+                fig = apply_theme(v)
+            else:
+                value = v
+        else:
+            # Caso 2: statement -> exec. Può produrre CONTEMPORANEAMENTE un grafico
+            # ('fig') e dei dati ('risultato').
+            exec(code, safe_globals, local_context)
+            f = local_context.get("fig")
+            if is_plotly_figure(f):
+                fig = apply_theme(f)
+            for name in ("risultato", "result"):
+                if local_context.get(name) is not None:
+                    value = local_context[name]
+                    break
+            if value is None:
+                last_name = _last_assigned_name(tree)
+                if last_name and last_name in local_context \
+                        and not is_plotly_figure(local_context[last_name]):
+                    value = local_context[last_name]
 
-        # Caso 2: statement (assegnazioni, grafici, ecc.) -> exec
-        exec(code, safe_globals, local_context)
+        if fig is None and value is None:
+            value = "Codice eseguito correttamente."
 
-        if "fig" in local_context and is_plotly_figure(local_context["fig"]):
-            return apply_theme(local_context["fig"])
-
-        # Variabile convenzionale per il risultato dei calcoli multi-step
-        for name in ("risultato", "result"):
-            if name in local_context:
-                return _finalize(local_context[name])
-
-        last_name = _last_assigned_name(tree)
-        if last_name is not None and last_name in local_context:
-            return _finalize(local_context[last_name])
-
-        return "Codice eseguito correttamente."
+        # Il riepilogo testuale è calcolato QUI (figura reale) e viaggia col risultato.
+        return {"fig": fig, "value": value, "summary": _make_summary(fig, value)}
 
     except Exception as e:
         return f"Errore di esecuzione sul codice generato: {e} \nCodice tentato: {code}"
 
 
 def serialize_result(result):
-    """Prepara il risultato per il trasferimento dal sottoprocesso (le figure via JSON)."""
-    if is_plotly_figure(result):
-        return ("fig", result.to_json())
-    try:
-        pickle.dumps(result)
-        return ("val", result)
-    except Exception:
-        return ("val", str(result))
+    """Prepara il risultato per il trasferimento dal sottoprocesso (figura via JSON)."""
+    if isinstance(result, str):  # stringa d'errore
+        return {"kind": "err", "msg": result}
+    fig = result.get("fig")
+    val = result.get("value")
+    if val is not None:
+        try:
+            pickle.dumps(val)
+        except Exception:
+            val = str(val)
+    return {"kind": "ok", "fig": fig.to_json() if fig is not None else None,
+            "value": val, "summary": result.get("summary")}
 
 
-def _deserialize_result(kind, payload):
-    if kind == "fig":
+def _deserialize_result(payload):
+    if not isinstance(payload, dict):
+        return "Errore: risultato non valido dal sottoprocesso."
+    if payload.get("kind") == "err":
+        return payload.get("msg", "Errore sconosciuto.")
+    fig = None
+    if payload.get("fig"):
         import plotly.io as pio
-        return apply_theme(pio.from_json(payload))
-    return payload
+        fig = apply_theme(pio.from_json(payload["fig"]))
+    return {"fig": fig, "value": payload.get("value"), "summary": payload.get("summary")}
 
 
 def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int):
@@ -301,9 +333,9 @@ def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int):
     )
     if proc.returncode != 0 or not proc.stdout:
         err = (proc.stderr or b"").decode(errors="replace").strip()[-200:]
-        return ("val", "Errore: esecuzione terminata in modo anomalo "
-                       f"(possibile esaurimento memoria). {err}".strip())
-    return pickle.loads(proc.stdout)
+        return ("Errore: esecuzione terminata in modo anomalo "
+                f"(possibile esaurimento memoria). {err}".strip())
+    return _deserialize_result(pickle.loads(proc.stdout))
 
 
 def execute_pandas_code(code_string: str, df: pd.DataFrame):
@@ -325,8 +357,7 @@ def execute_pandas_code(code_string: str, df: pd.DataFrame):
     # Esecuzione isolata in sottoprocesso (con timeout); fallback in-process.
     if SANDBOX_SUBPROCESS:
         try:
-            kind, payload = _run_in_subprocess(code, df, EXEC_TIMEOUT)
-            return _deserialize_result(kind, payload)
+            return _run_in_subprocess(code, df, EXEC_TIMEOUT)
         except subprocess.TimeoutExpired:
             return (f"Errore: esecuzione interrotta dopo {EXEC_TIMEOUT}s "
                     "(codice troppo lento o troppo pesante).")
