@@ -164,21 +164,17 @@ def inject_css(dark: bool):
               border-radius: 14px; padding: 6px 14px;
           }}
           .stExpander {{ border-radius: 12px; border: 1px solid {c['border']}; }}
-          /* Barra domande: integrata, allineata alla colonna, non un blocco estraneo */
-          [data-testid="stChatInput"] {{
-              background: {c['page']}; border-top: 1px solid {c['border']};
+          /* Box domanda inline: input pulito + pulsante in accento */
+          [data-testid="stTextInput"] input {{
+              border-radius: 10px; border: 1px solid {c['strong']};
+              background: {c['surface']}; color: {c['ink']};
           }}
-          [data-testid="stChatInput"] > div {{ max-width: 1150px; margin-inline: auto; }}
-          [data-testid="stChatInput"] textarea {{ font-family: var(--sans); color: {c['ink']}; }}
-          [data-testid="stChatInput"] [data-baseweb="textarea"],
-          [data-testid="stChatInput"] [data-baseweb="base-input"] {{
-              background: {c['surface']} !important;
-              border: 1px solid {c['strong']} !important;
-              border-radius: 12px !important;
+          [data-testid="stTextInput"] input:focus {{ border-color: {c['accent']}; }}
+          [data-testid="stFormSubmitButton"] button {{
+              background: {c['accent']}; color: #ffffff; border: 0;
+              border-radius: 10px; font-weight: 600; font-family: var(--display);
           }}
-          [data-testid="stChatInput"] [data-baseweb="textarea"]:focus-within {{
-              border-color: {c['accent']} !important;
-          }}
+          [data-testid="stFormSubmitButton"] button:hover {{ background: {c['deep']}; }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -259,16 +255,18 @@ if df is None:
 st.caption(f"{source_label} — {fmt_num(len(df))} righe · {df.shape[1]} colonne")
 
 # --- Riga di KPI (readout in stile console) ---
-kpi_cols = st.columns(4)
-readout(kpi_cols[0], "Righe", fmt_num(len(df)), tick="#2a78d6")
-readout(kpi_cols[1], "Colonne", str(df.shape[1]), tick="#008300")
-# Colonne-misura reali (identificatori come Row ID / CAP esclusi), senza duplicati.
+# Misura principale reale (identificatori come Row ID / CAP esclusi).
 measures = measure_columns(df)
 priorita = [c for c in ["Sales", "Profit", "Revenue", "Amount", "Total"] if c in measures]
 ordinate = priorita + [c for c in measures if c not in priorita]
-_kpi_ticks = ["#0e7c86", "#eda100"]
-for i, (slot, col) in enumerate(zip(kpi_cols[2:], ordinate[:2])):
-    readout(slot, f"Totale {col}", fmt_num(df[col].sum()), tick=_kpi_ticks[i])
+main_measure = ordinate[0] if ordinate else None
+
+kpi_cols = st.columns(4 if main_measure else 2)
+readout(kpi_cols[0], "Righe", fmt_num(len(df)), tick="#2a78d6")
+readout(kpi_cols[1], "Colonne", str(df.shape[1]), tick="#008300")
+if main_measure:
+    readout(kpi_cols[2], f"Totale {main_measure}", fmt_num(df[main_measure].sum()), tick="#0e7c86")
+    readout(kpi_cols[3], f"Media {main_measure}", fmt_num(df[main_measure].mean()), tick="#eda100")
 
 # --- Anteprima dati ---
 with st.expander("Anteprima dei dati (prime 10 righe)"):
@@ -387,80 +385,80 @@ def render_result(code: str, result, explanation: str | None = None):
         st.code(code, language="python")
 
 
-# --- Storico conversazione ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        if msg["role"] == "user":
-            st.write(msg["content"])
-        else:
-            render_result(msg["code"], msg["result"], msg.get("explanation"))
-
-# --- Nuova domanda ---
 # "mostrami"/"visualizza" erano troppo generiche (attivavano il grafico anche su
 # richieste scalari). Teniamo solo parole realmente grafiche.
 PAROLE_GRAFICO = ["grafico", "plot", "barre", "linee", "andamento", "istogramma",
                   "trend", "distribuzione", "diagramma"]
 PAROLE_LINEA = ["andamento", "linee", "trend", "tempo", "temporale"]
 
-prompt = st.chat_input("Es. 'Qual è il mese con più vendite?' oppure 'Mostrami le vendite per regione'")
 
-if prompt and prompt.strip() and DEMO_MODE and \
-        st.session_state.get("_demo_q", 0) >= DEMO_MAX_QUESTIONS:
-    st.warning(f"Hai raggiunto il limite della demo ({DEMO_MAX_QUESTIONS} domande). "
-               "Clona il repo da GitHub per uso illimitato. Grazie per aver provato.")
-    prompt = None
+def process_question(prompt: str):
+    """Genera il codice, lo esegue (con retry), produce la spiegazione e salva il turno."""
+    richiede_grafico = any(p in prompt.lower() for p in PAROLE_GRAFICO)
+    kind = "line" if any(p in prompt.lower() for p in PAROLE_LINEA) else "bar"
 
-if prompt and prompt.strip():
-    if DEMO_MODE:
-        st.session_state["_demo_q"] = st.session_state.get("_demo_q", 0) + 1
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.write(prompt)
+    def wrap_chart(codice: str) -> str:
+        if (richiede_grafico and "fig" not in codice
+                and "px." not in codice and "st." not in codice):
+            return f"fig = to_chart({codice.strip().rstrip(';')}, kind='{kind}')"
+        return codice
 
-    with st.chat_message("assistant"):
-        richiede_grafico = any(p in prompt.lower() for p in PAROLE_GRAFICO)
-        kind = "line" if any(p in prompt.lower() for p in PAROLE_LINEA) else "bar"
+    domanda = prompt + (" (Raggruppa i dati usando as_index=False)" if richiede_grafico else "")
 
-        def wrap_chart(codice: str) -> str:
-            """Se serviva un grafico ma il modello non l'ha prodotto, lo costruiamo con to_chart."""
-            if (richiede_grafico and "fig" not in codice
-                    and "px." not in codice and "st." not in codice):
-                base = codice.strip().rstrip(";")
-                return f"fig = to_chart({base}, kind='{kind}')"
-            return codice
+    with st.spinner("Analisi in corso..."):
+        codice = wrap_chart(agent.ask_code(domanda, df))
+        risultato = execute_pandas_code(codice, df)
 
-        domanda = prompt + (" (Raggruppa i dati usando as_index=False)" if richiede_grafico else "")
-
-        with st.spinner("L'AI sta generando il codice..."):
-            codice = wrap_chart(agent.ask_code(domanda, df))
-
-        with st.spinner("Esecuzione sui dati..."):
+        tentativo = 0
+        while (isinstance(risultato, str) and risultato.startswith("Errore") and tentativo < 2):
+            tentativo += 1
+            codice = wrap_chart(agent.fix_code(domanda, df, codice, risultato))
             risultato = execute_pandas_code(codice, df)
 
-        # Retry automatico: se l'esecuzione fallisce, rimandiamo l'errore all'LLM
-        MAX_RETRY = 2
-        tentativo = 0
-        while (isinstance(risultato, str) and risultato.startswith("Errore")
-               and tentativo < MAX_RETRY):
-            tentativo += 1
-            with st.spinner(f"Correzione automatica del codice (tentativo {tentativo})..."):
-                codice = wrap_chart(agent.fix_code(domanda, df, codice, risultato))
-                risultato = execute_pandas_code(codice, df)
-        if tentativo and not (isinstance(risultato, str) and risultato.startswith("Errore")):
-            st.caption(f"Codice corretto automaticamente dopo {tentativo} tentativo/i.")
-
-        # Spiegazione testuale (seconda chiamata LLM), se abilitata e il calcolo è andato a buon fine
         spiegazione = None
-        calcolo_ok = not (isinstance(risultato, str) and risultato.startswith("Errore"))
-        if spiega_ai and calcolo_ok:
-            with st.spinner("L'AI sta interpretando il risultato..."):
-                spiegazione = agent.explain(prompt, summarize_result(risultato))
+        if spiega_ai and not (isinstance(risultato, str) and risultato.startswith("Errore")):
+            spiegazione = agent.explain(prompt, summarize_result(risultato))
 
-        render_result(codice, risultato, spiegazione)
-
+    st.session_state.messages.append({"role": "user", "content": prompt})
     st.session_state.messages.append(
         {"role": "assistant", "code": codice, "result": risultato, "explanation": spiegazione}
     )
+
+
+# --- Box domanda (inline, integrato nel flusso) ---
+with st.form("ask_form", clear_on_submit=True):
+    c_in, c_btn = st.columns([8, 1])
+    user_q = c_in.text_input(
+        "domanda", label_visibility="collapsed",
+        placeholder="Es. 'Qual è il mese con più vendite?' oppure 'Mostrami le vendite per regione'",
+    )
+    submitted = c_btn.form_submit_button("Invia", use_container_width=True)
+
+if submitted and user_q and user_q.strip():
+    if DEMO_MODE and st.session_state.get("_demo_q", 0) >= DEMO_MAX_QUESTIONS:
+        st.warning(f"Hai raggiunto il limite della demo ({DEMO_MAX_QUESTIONS} domande). "
+                   "Clona il repo da GitHub per uso illimitato. Grazie per aver provato.")
+    else:
+        if DEMO_MODE:
+            st.session_state["_demo_q"] = st.session_state.get("_demo_q", 0) + 1
+        process_question(user_q.strip())
+
+# --- Storico conversazione (turno più recente in alto) ---
+_msgs = st.session_state.messages
+_turns = []
+_i = 0
+while _i < len(_msgs):
+    u = _msgs[_i]
+    a = _msgs[_i + 1] if _i + 1 < len(_msgs) and _msgs[_i + 1]["role"] == "assistant" else None
+    _turns.append((u, a))
+    _i += 2 if a else 1
+
+for u, a in reversed(_turns):
+    with st.chat_message("user"):
+        st.write(u["content"])
+    if a is not None:
+        with st.chat_message("assistant"):
+            render_result(a["code"], a["result"], a.get("explanation"))

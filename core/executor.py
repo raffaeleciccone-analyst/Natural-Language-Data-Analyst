@@ -62,7 +62,7 @@ SAFE_BUILTINS = {
     "len": len, "sum": sum, "min": min, "max": max, "abs": abs, "round": round,
     "sorted": sorted, "range": range, "list": list, "dict": dict, "set": set,
     "tuple": tuple, "str": str, "int": int, "float": float, "bool": bool,
-    "enumerate": enumerate, "zip": zip,
+    "enumerate": enumerate, "zip": zip, "print": print,
 }
 
 
@@ -256,6 +256,11 @@ def _run_code(code: str, df: pd.DataFrame):
 
         if "fig" in local_context and is_plotly_figure(local_context["fig"]):
             return apply_theme(local_context["fig"])
+
+        # Variabile convenzionale per il risultato dei calcoli multi-step
+        for name in ("risultato", "result"):
+            if name in local_context:
+                return _finalize(local_context[name])
 
         last_name = _last_assigned_name(tree)
         if last_name is not None and last_name in local_context:
