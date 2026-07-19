@@ -1,4 +1,5 @@
 import html
+import logging
 import os
 
 import pandas as pd
@@ -41,6 +42,24 @@ def _secret(key: str, default: str = "") -> str:
 # configurati, nasconde i campi sensibili e limita le domande per contenere i costi.
 DEMO_MODE = _secret("DEMO_MODE", "").strip().lower() in ("1", "true", "yes", "on")
 DEMO_MAX_QUESTIONS = int(_secret("DEMO_MAX_QUESTIONS", "15") or "15")
+
+
+def demo_allows(kind: str) -> bool:
+    """In demo: True se resta budget (e incrementa il contatore); altrimenti mostra il limite."""
+    if not DEMO_MODE:
+        return True
+    if st.session_state.get("_demo_q", 0) >= DEMO_MAX_QUESTIONS:
+        st.warning(f"Hai raggiunto il limite della demo ({DEMO_MAX_QUESTIONS} {kind}). "
+                   "Clona il repo da GitHub per uso illimitato.")
+        return False
+    st.session_state["_demo_q"] = st.session_state.get("_demo_q", 0) + 1
+    return True
+
+
+def _with_unit(text: str) -> str:
+    """Antepone al testo l'unità di misura, se l'utente ne ha indicata una (per l'LLM)."""
+    return f"L'unità di misura dei valori è '{unit}'.\n{text}" if unit else text
+
 
 # --- Sidebar: configurazione (letta prima di applicare il tema) ---
 with st.sidebar:
@@ -240,10 +259,12 @@ with st.expander("Anteprima dei dati (prime 10 righe)"):
 
 # --- Report iniziale sui dati ---
 def _try_fig(fn, *args, **kwargs):
-    """Costruisce una figura, o None se qualcosa va storto (report robusto)."""
+    """Costruisce una figura, o None se qualcosa va storto (report robusto).
+    L'errore viene loggato (non mostrato all'utente) per restare diagnosticabile."""
     try:
         return fn(*args, **kwargs)
-    except Exception:
+    except Exception as e:
+        logging.warning("Figura del report non generata da %s: %s", getattr(fn, "__name__", fn), e)
         return None
 
 
@@ -283,11 +304,8 @@ overview_sig = (report_sig, spiega_ai, provider, model_name, unit)
 if st.session_state.get("overview_sig") != overview_sig:
     st.session_state.overview_sig = overview_sig
     if spiega_ai and insights.get("text"):
-        _txt = insights["text"]
-        if unit:
-            _txt = f"L'unità di misura dei valori è '{unit}'.\n" + _txt
         with st.spinner("L'AI sta preparando la sintesi dei dati..."):
-            st.session_state.overview_text = agent.overview(_txt)
+            st.session_state.overview_text = agent.overview(_with_unit(insights["text"]))
     else:
         st.session_state.overview_text = None
 
@@ -298,10 +316,11 @@ st.subheader("Report iniziale sui dati")
 if st.session_state.get("overview_text"):
     answer_card("Sintesi dei dati", st.session_state.overview_text)
 
-# Insight automatici (numeri calcolati in Pandas, non dedotti dall'AI)
+# Insight automatici (numeri calcolati in Pandas, non dedotti dall'AI).
+# Via answer_card: il testo è HTML-escaped, così un valore di cella ostile non
+# può iniettare Markdown/HTML nella pagina.
 if insights.get("findings"):
-    st.markdown("**Insight automatici**")
-    st.markdown("\n".join(f"- {f}" for f in insights["findings"]))
+    answer_card("Insight automatici", "\n".join(f"• {f}" for f in insights["findings"]))
 
 # Statistiche numeriche (numeri formattati in modo leggibile)
 if "numeric_stats" in insights:
@@ -406,17 +425,9 @@ if st.session_state.get("exec_report") and st.session_state.get("exec_report_sig
     st.session_state.exec_report = None
 
 if st.button("Genera report esecutivo", disabled=not insights.get("text")):
-    if DEMO_MODE and st.session_state.get("_demo_q", 0) >= DEMO_MAX_QUESTIONS:
-        st.warning(f"Hai raggiunto il limite della demo ({DEMO_MAX_QUESTIONS} generazioni). "
-                   "Clona il repo da GitHub per uso illimitato.")
-    else:
-        if DEMO_MODE:
-            st.session_state["_demo_q"] = st.session_state.get("_demo_q", 0) + 1
-        _txt = insights["text"]
-        if unit:
-            _txt = f"L'unità di misura dei valori è '{unit}'.\n" + _txt
+    if demo_allows("generazioni"):
         with st.spinner("L'AI sta redigendo il report esecutivo..."):
-            st.session_state.exec_report = agent.executive_report(_txt)
+            st.session_state.exec_report = agent.executive_report(_with_unit(insights["text"]))
             st.session_state.exec_report_sig = exec_sig
 
 if st.session_state.get("exec_report"):
@@ -507,12 +518,7 @@ with st.form("ask_form", clear_on_submit=True):
     submitted = c_btn.form_submit_button("Invia", use_container_width=True)
 
 if submitted and user_q and user_q.strip():
-    if DEMO_MODE and st.session_state.get("_demo_q", 0) >= DEMO_MAX_QUESTIONS:
-        st.warning(f"Hai raggiunto il limite della demo ({DEMO_MAX_QUESTIONS} domande). "
-                   "Clona il repo da GitHub per uso illimitato. Grazie per aver provato.")
-    else:
-        if DEMO_MODE:
-            st.session_state["_demo_q"] = st.session_state.get("_demo_q", 0) + 1
+    if demo_allows("domande"):
         process_question(user_q.strip())
 
 # --- Storico conversazione (turno più recente in alto) ---

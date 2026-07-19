@@ -113,13 +113,18 @@ def apply_theme(fig):
     return fig
 
 
+def _require_plotly():
+    """Solleva un errore chiaro se Plotly non è disponibile."""
+    if not _PLOTLY_OK:
+        raise RuntimeError("Plotly non è installato (pip install plotly).")
+
+
 def to_chart(res, kind: str = "bar"):
     """
     Costruisce una figura Plotly a partire da una Series/DataFrame aggregata.
     Usata come fallback quando il modello non produce direttamente una figura.
     """
-    if not _PLOTLY_OK:
-        raise RuntimeError("Plotly non è installato (pip install plotly).")
+    _require_plotly()
 
     if isinstance(res, pd.Series):
         data = res.reset_index()
@@ -155,8 +160,7 @@ def to_chart(res, kind: str = "bar"):
 def corr_heatmap(corr):
     """Heatmap di una matrice di correlazione: scala divergente (blu↔rosso) con
     midpoint neutro a 0, valori annotati. Range fisso [-1, 1]."""
-    if not _PLOTLY_OK:
-        raise RuntimeError("Plotly non è installato (pip install plotly).")
+    _require_plotly()
     fig = px.imshow(corr, zmin=-1, zmax=1, text_auto=".2f", aspect="auto",
                     color_continuous_scale=["#2a78d6", "#eef1ee", "#e34948"])
     fig.update_coloraxes(colorbar_title="r", cmid=0)
@@ -172,8 +176,7 @@ def corr_heatmap(corr):
 
 def histogram(df, col, nbins: int = 30):
     """Distribuzione (istogramma) di una colonna numerica."""
-    if not _PLOTLY_OK:
-        raise RuntimeError("Plotly non è installato (pip install plotly).")
+    _require_plotly()
     fig = px.histogram(df, x=col, nbins=nbins)
     fig.update_layout(bargap=0.05, yaxis_title="record")
     return apply_theme(fig)

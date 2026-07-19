@@ -130,6 +130,13 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
             return f"# Errore di comunicazione con il provider LLM ({self.provider.name}): {e}"
         return clean_code(raw or "")
 
+    def _narrate(self, system_prompt: str, user_prompt: str, cosa: str) -> str:
+        """Genera testo narrativo (non codice); in caso di errore ritorna un avviso in corsivo."""
+        try:
+            return self.provider.generate(system_prompt, user_prompt).strip()
+        except Exception as e:
+            return f"_(Impossibile generare {cosa}: {e})_"
+
     def _chart_intent(self, question: str):
         """Deduce se la domanda richiede un grafico e di che tipo (linea vs barre)."""
         q = question.lower()
@@ -181,10 +188,7 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
             f"Profilo del dataset:\n{dataset_summary}\n\n"
             "Scrivi la panoramica introduttiva."
         )
-        try:
-            return self.provider.generate(system_prompt, user_prompt).strip()
-        except Exception as e:
-            return f"_(Impossibile generare la panoramica: {e})_"
+        return self._narrate(system_prompt, user_prompt, "la panoramica")
 
     def explain(self, user_question: str, result_summary: str) -> str:
         """
@@ -206,10 +210,7 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
             f"Risultato calcolato dai dati:\n{result_summary}\n\n"
             "Scrivi la risposta discorsiva."
         )
-        try:
-            return self.provider.generate(system_prompt, user_prompt).strip()
-        except Exception as e:
-            return f"_(Impossibile generare la spiegazione: {e})_"
+        return self._narrate(system_prompt, user_prompt, "la spiegazione")
 
     def executive_report(self, insights_summary: str) -> str:
         """
@@ -235,7 +236,4 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
             f"Insight calcolati sul dataset:\n{insights_summary}\n\n"
             "Scrivi il report esecutivo in Markdown con le cinque sezioni richieste."
         )
-        try:
-            return self.provider.generate(system_prompt, user_prompt).strip()
-        except Exception as e:
-            return f"_(Impossibile generare il report: {e})_"
+        return self._narrate(system_prompt, user_prompt, "il report")

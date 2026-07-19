@@ -107,6 +107,18 @@ def profile(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _clean_label(value) -> str:
+    """
+    Sanitizza un valore di cella (categoria/etichetta) prima di inserirlo nel testo
+    passato all'LLM o mostrato in Markdown: i valori sono dati NON fidati (un file
+    caricato può contenere prompt injection o sintassi Markdown). Rimuove newline,
+    backtick e metacaratteri Markdown di link, e tronca la lunghezza.
+    """
+    s = str(value).replace("\n", " ").replace("\r", " ").replace("`", "'")
+    s = s.translate({ord(c): None for c in "[]()"})  # neutralizza i link Markdown
+    return s[:40] + "…" if len(s) > 40 else s
+
+
 def _insights_text(df: pd.DataFrame, res: dict) -> str:
     """Costruisce un riepilogo testuale dei NUMERI calcolati, per l'LLM."""
     lines = [f"Righe totali: {fmt_num(len(df))}."]
@@ -117,7 +129,8 @@ def _insights_text(df: pd.DataFrame, res: dict) -> str:
                          f"min {fmt_num(r['Minimo'])}, max {fmt_num(r['Massimo'])}")
     if "top" in res:
         cat, num, top = res["top"]
-        parti = ", ".join(f"{row[cat]}={fmt_num(row[num])}" for _, row in top.head(5).iterrows())
+        parti = ", ".join(f"{_clean_label(row[cat])}={fmt_num(row[num])}"
+                          for _, row in top.head(5).iterrows())
         lines.append(f"Classifica di {num} per {cat} (primi 5): {parti}.")
     if "trend" in res:
         dcol, num, per = res["trend"]
@@ -241,7 +254,13 @@ def _correlations(df: pd.DataFrame, measures: list, soglia: float = 0.6):
     """
     if len(measures) < 2 or len(df) < 10:
         return None, []
-    corr = df[measures].corr(numeric_only=True)
+    # min_periods: servono almeno 10 righe SOVRAPPOSTE non-NaN per una coppia,
+    # altrimenti r diventa NaN (evita "correlazioni forti" spurie su pochi dati).
+    corr = df[measures].corr(numeric_only=True, min_periods=10)
+    # Scarta righe/colonne interamente NaN (es. misure costanti): niente celle vuote.
+    corr = corr.dropna(axis=0, how="all").dropna(axis=1, how="all")
+    if corr.shape[1] < 2:
+        return None, []
     coppie = []
     cols = list(corr.columns)
     for i in range(len(cols)):
@@ -264,12 +283,14 @@ def _findings(df: pd.DataFrame, res: dict, main_num) -> list:
         return out
 
     tot = df[main_num].sum()
-    if "top" in res and tot:
+    if "top" in res and len(res["top"][2]):
         cat, num, top = res["top"]
-        if len(top):
-            lead = top.iloc[0]
-            out.append(f"{lead[cat]} da solo pesa il {fmt_num(lead[num] / tot * 100)}% "
-                       f"del totale di {num}.")
+        lead = top.iloc[0]
+        # Solo con totale positivo e quota sensata (0-100%): con misure che possono
+        # essere negative — es. Profit con perdite — la percentuale non avrebbe senso.
+        if tot > 0 and 0 <= lead[num] <= tot:
+            out.append(f"{_clean_label(lead[cat])} da solo pesa il "
+                       f"{fmt_num(lead[num] / tot * 100)}% del totale di {num}.")
 
     if "trend" in res:
         _, num, per = res["trend"]
@@ -290,11 +311,12 @@ def _findings(df: pd.DataFrame, res: dict, main_num) -> list:
         q1, q3 = s.quantile(0.25), s.quantile(0.75)
         iqr = q3 - q1
         if iqr > 0:
-            soglia = q3 + 1.5 * iqr
-            n_out = int((s > soglia).sum())
+            lo, hi = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+            n_out = int(((s < lo) | (s > hi)).sum())
             if n_out:
-                out.append(f"{fmt_num(n_out)} record hanno {main_num} molto sopra la norma "
-                           f"(oltre {fmt_num(soglia)}): possibili picchi da verificare.")
+                out.append(f"{fmt_num(n_out)} record hanno {main_num} anomalo "
+                           f"(fuori dall'intervallo {fmt_num(lo)}–{fmt_num(hi)}): "
+                           "possibili valori da verificare.")
     return out
 
 
