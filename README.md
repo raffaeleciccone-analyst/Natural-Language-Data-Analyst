@@ -1,4 +1,6 @@
-# AI Data Analyst Assistant
+# Natural Language Data Analyst
+
+*Analista dati AI-powered che interroghi in linguaggio naturale.*
 
 > ▶️ **Prova la demo: https://ai-data-analyst-assistant-z.streamlit.app/**
 
@@ -9,8 +11,10 @@ Ottieni il **risultato**, un **grafico Plotly interattivo** e una **risposta
 testuale** che interpreta i numeri.
 
 Al caricamento di un dataset ricevi inoltre un **report iniziale automatico**:
-statistiche delle colonne numeriche, classifica per categoria e andamento
-temporale, con una sintesi in linguaggio naturale.
+KPI, statistiche, classifiche, andamento temporale, **correlazioni** tra le
+misure e **insight automatici** — con una sintesi in linguaggio naturale e un
+**report esecutivo** scaricabile. Tutti i numeri sono calcolati in Pandas; l'AI
+si limita a raccontarli.
 
 ## Anteprima
 
@@ -28,6 +32,12 @@ temporale, con una sintesi in linguaggio naturale.
   e passa lo schema reale al modello a ogni domanda.
 - **Report iniziale automatico** con KPI, statistiche, classifiche e andamento
   temporale, più una panoramica testuale generata dall'AI.
+- **Correlazioni e distribuzioni**: heatmap delle correlazioni tra le misure
+  (con le coppie più forti) e istogramma della misura selezionata.
+- **Insight automatici**: quota del leader, crescita di periodo, variazione
+  recente e outlier — **numeri calcolati in Pandas**, non dedotti dall'AI.
+- **Report esecutivo** generabile con un click (Executive Summary, Key Insights,
+  Recommendations, Risks, Next Steps) e **scaricabile in Markdown**.
 - **Grafici collegati (click-to-filter)**: nel report, cliccando una barra della
   classifica l'andamento temporale si filtra sulla categoria selezionata.
 - **Risposta testuale** a ogni domanda: l'AI interpreta il risultato calcolato e

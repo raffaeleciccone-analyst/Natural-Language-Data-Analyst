@@ -16,7 +16,7 @@ from core.ui_theme import console_css
 
 # --- Configurazione pagina ---
 st.set_page_config(
-    page_title="AI Data Analyst Assistant",
+    page_title="Natural Language Data Analyst",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -131,7 +131,7 @@ def get_agent(provider: str, model_name: str, api_key: str) -> DataAgent:
 agent = get_agent(provider, model_name, api_key)
 
 # --- Header ---
-st.title("AI Data Analyst Assistant")
+st.title("Natural Language Data Analyst")
 st.markdown(
     f"<p class='app-subtitle'>Interroga i tuoi dati in linguaggio naturale — "
     f"provider attivo: <b>{html.escape(provider)}</b> · "
