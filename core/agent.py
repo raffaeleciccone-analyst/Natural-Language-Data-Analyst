@@ -100,6 +100,11 @@ REGOLE TASSATIVE:
    dett['percentuale'] = (dett['<num>'] / dett['<num>'].sum() * 100).round(1)
    risultato = dett
    fig = to_chart(dett[['<cat>', '<num>']], kind='bar')
+8. Per il "top N per gruppo" (es. "top 5 prodotti per regione") usa questo idioma:
+   agg = df.groupby(['<gruppo>', '<elemento>'], as_index=False)['<num>'].sum()
+   risultato = agg.sort_values('<num>', ascending=False).groupby('<gruppo>', as_index=False).head(5)
+   NON usare df.groupby(...).apply(...) seguito da reset_index(drop=True): perde le
+   colonne di raggruppamento e causa errori.
 
 ESEMPIO DI GRAFICO (adattato a questo dataset):
 {esempio}
@@ -140,7 +145,8 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
             "di cosa parlano i dati, quali sono le colonne principali e il loro significato, "
             "e 2-3 spunti di analisi interessanti che l'utente potrebbe esplorare. "
             "NON mostrare codice. Scrivi i numeri in modo leggibile, con separatore "
-            "delle migliaia (es. 2.261.537, non 2261536.78) e al massimo due decimali."
+            "delle migliaia (es. 2.261.537, non 2261536.78) e al massimo due decimali. "
+            "Se è indicata un'unità di misura, riportala accanto ai numeri principali."
         )
         user_prompt = (
             f"Profilo del dataset:\n{dataset_summary}\n\n"
@@ -162,7 +168,8 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
             "per rispondere direttamente alla domanda dell'utente, citando i numeri "
             "chiave. NON mostrare codice e NON descrivere il procedimento tecnico: "
             "spiega solo cosa dicono i dati. Scrivi i numeri in modo leggibile, con "
-            "separatore delle migliaia (es. 2.261.537) e al massimo due decimali."
+            "separatore delle migliaia (es. 2.261.537) e al massimo due decimali. "
+            "Se è indicata un'unità di misura, riportala accanto ai numeri principali."
         )
         user_prompt = (
             f"Domanda dell'utente:\n{user_question}\n\n"

@@ -286,17 +286,25 @@ with st.sidebar:
                                     help="La dimensione per classifiche e filtri.")
     else:
         sel_category = None
+    unit = st.text_input("Unità di misura (opzionale)", value="",
+                         placeholder="es. €, kg, %, unità",
+                         help="Mostrata accanto ai valori nei KPI e nelle risposte.").strip()
+
+
+def _wu(v) -> str:
+    """Formatta un numero e vi accosta l'unità di misura, se indicata."""
+    return f"{fmt_num(v)} {unit}".strip() if unit else fmt_num(v)
 
 # --- Riga di KPI (adattivi: misure oppure conteggi) ---
 kpis = []  # (label, value, sub, tick, small)
 if sel_measure:
     s = df[sel_measure]
-    kpis.append((f"Totale {sel_measure}", fmt_num(s.sum()), "", "#0e7c86", False))
-    kpis.append((f"Media {sel_measure}", fmt_num(s.mean()), "", "#eda100", False))
-    kpis.append((f"Massimo {sel_measure}", fmt_num(s.max()), "", "#2a78d6", False))
+    kpis.append((f"Totale {sel_measure}", _wu(s.sum()), "", "#0e7c86", False))
+    kpis.append((f"Media {sel_measure}", _wu(s.mean()), "", "#eda100", False))
+    kpis.append((f"Massimo {sel_measure}", _wu(s.max()), "", "#2a78d6", False))
     if sel_category:
         leader = df.groupby(sel_category)[sel_measure].sum().sort_values(ascending=False)
-        kpis.append((f"Top {sel_category}", str(leader.index[0]), fmt_num(leader.iloc[0]), "#008300", True))
+        kpis.append((f"Top {sel_category}", str(leader.index[0]), _wu(leader.iloc[0]), "#008300", True))
     else:
         kpis.append(("Record", fmt_num(len(df)), "", "#008300", False))
 elif sel_category:  # nessuna misura: KPI a conteggi
@@ -357,13 +365,16 @@ if st.session_state.get("report_sig") != report_sig:
 
 insights = st.session_state.get("insights", {})
 
-# Narrativa AI: rigenerata anche al cambio di provider/modello o del toggle spiegazioni
-overview_sig = (report_sig, spiega_ai, provider, model_name)
+# Narrativa AI: rigenerata anche al cambio di provider/modello/toggle/unità
+overview_sig = (report_sig, spiega_ai, provider, model_name, unit)
 if st.session_state.get("overview_sig") != overview_sig:
     st.session_state.overview_sig = overview_sig
     if spiega_ai and insights.get("text"):
+        _txt = insights["text"]
+        if unit:
+            _txt = f"L'unità di misura dei valori è '{unit}'.\n" + _txt
         with st.spinner("L'AI sta preparando la sintesi dei dati..."):
-            st.session_state.overview_text = agent.overview(insights["text"])
+            st.session_state.overview_text = agent.overview(_txt)
     else:
         st.session_state.overview_text = None
 
@@ -509,14 +520,17 @@ def process_question(prompt: str):
         risultato = execute_pandas_code(codice, df)
 
         tentativo = 0
-        while (isinstance(risultato, str) and risultato.startswith("Errore") and tentativo < 2):
+        while (isinstance(risultato, str) and risultato.startswith("Errore") and tentativo < 3):
             tentativo += 1
             codice = wrap_chart(agent.fix_code(domanda, df, codice, risultato))
             risultato = execute_pandas_code(codice, df)
 
         spiegazione = None
         if spiega_ai and isinstance(risultato, dict):
-            spiegazione = agent.explain(prompt, risultato.get("summary") or summarize_result(risultato))
+            _summ = risultato.get("summary") or summarize_result(risultato)
+            if unit:
+                _summ = f"Unità di misura: '{unit}'.\n" + _summ
+            spiegazione = agent.explain(prompt, _summ)
 
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.session_state.messages.append(

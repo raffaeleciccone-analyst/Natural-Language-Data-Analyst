@@ -103,7 +103,8 @@ def _make_bars_readable(fig):
         fig.layout.yaxis.title.text = ""
         n = max((len(tr.y) for tr in hbars if tr.y is not None), default=0)
         if n:
-            fig.update_layout(height=max(260, 44 * n + 110))
+            # altezza compatta e barre più piene (poco spazio sprecato)
+            fig.update_layout(height=max(220, 38 * n + 70), bargap=0.18)
 
 
 def apply_theme(fig):
