@@ -46,7 +46,15 @@ class DataAgent:
     Agente che traduce una domanda in linguaggio naturale in codice Pandas.
     È indipendente dal provider LLM e si adatta allo schema del dataset caricato
     (nomi, tipi ed esempi delle colonne vengono passati al modello a ogni domanda).
+    Qui vive anche l'euristica "serve un grafico?": è l'unica fonte di verità, così
+    il layer UI non deve duplicare parole chiave o wrapping.
     """
+
+    # "mostrami"/"visualizza" erano troppo generiche (attivavano il grafico anche
+    # su richieste scalari). Teniamo solo parole realmente grafiche.
+    _CHART_WORDS = ("grafico", "plot", "barre", "linee", "andamento", "istogramma",
+                    "trend", "distribuzione", "diagramma")
+    _LINE_WORDS = ("andamento", "linee", "trend", "tempo", "temporale")
 
     def __init__(self, provider: "str | LLMProvider" = "ollama",
                  model_name: str | None = None,
@@ -110,20 +118,43 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
 {esempio}
 """
 
-    def ask_code(self, user_question: str, df: pd.DataFrame) -> str:
-        """Invia la domanda al provider LLM e riceve la stringa di codice Pandas pulita."""
-        system_prompt = self._get_system_prompt(df)
+    def _generate(self, system_prompt: str, user_prompt: str) -> str:
+        """
+        Chiama il provider e restituisce il codice pulito. In caso di errore di
+        comunicazione restituisce un commento-sentinella: l'executor lo riconosce
+        (AST senza statement eseguibili) e lo trasforma in un errore leggibile.
+        """
         try:
-            raw = self.provider.generate(system_prompt, user_question)
+            raw = self.provider.generate(system_prompt, user_prompt)
         except Exception as e:
             return f"# Errore di comunicazione con il provider LLM ({self.provider.name}): {e}"
-
         return clean_code(raw or "")
+
+    def _chart_intent(self, question: str):
+        """Deduce se la domanda richiede un grafico e di che tipo (linea vs barre)."""
+        q = question.lower()
+        wants = any(w in q for w in self._CHART_WORDS)
+        kind = "line" if any(w in q for w in self._LINE_WORDS) else "bar"
+        return wants, kind
+
+    def _wrap_chart(self, code: str, wants: bool, kind: str) -> str:
+        """Se serve un grafico ma il modello ha prodotto solo dati, li avvolge in to_chart()."""
+        if wants and "fig" not in code and "px." not in code and "st." not in code:
+            return f"fig = to_chart({code.strip().rstrip(';')}, kind='{kind}')"
+        return code
+
+    def ask_code(self, user_question: str, df: pd.DataFrame) -> str:
+        """Traduce la domanda in codice Pandas (con eventuale grafico) pronto per la sandbox."""
+        wants, kind = self._chart_intent(user_question)
+        # Suggerisce l'aggregazione quando serve una figura (evita indici non plottabili)
+        domanda = user_question + (" (Raggruppa i dati usando as_index=False)" if wants else "")
+        code = self._generate(self._get_system_prompt(df), domanda)
+        return self._wrap_chart(code, wants, kind)
 
     def fix_code(self, user_question: str, df: pd.DataFrame,
                  broken_code: str, error_message: str) -> str:
         """Chiede al modello di correggere il codice che ha generato un errore."""
-        system_prompt = self._get_system_prompt(df)
+        wants, kind = self._chart_intent(user_question)
         user_prompt = (
             f"La richiesta dell'utente era:\n{user_question}\n\n"
             f"Questo codice ha prodotto un errore:\n{broken_code}\n\n"
@@ -131,11 +162,8 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
             "Correggi il codice tenendo conto dello schema del dataset qui sopra. "
             "Restituisci SOLO il codice Python corretto, senza spiegazioni."
         )
-        try:
-            raw = self.provider.generate(system_prompt, user_prompt)
-        except Exception as e:
-            return f"# Errore di comunicazione con il provider LLM ({self.provider.name}): {e}"
-        return clean_code(raw or "")
+        code = self._generate(self._get_system_prompt(df), user_prompt)
+        return self._wrap_chart(code, wants, kind)
 
     def overview(self, dataset_summary: str) -> str:
         """Genera una panoramica introduttiva del dataset in linguaggio naturale."""

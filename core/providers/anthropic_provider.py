@@ -1,20 +1,15 @@
-import os
-
 from .base import LLMProvider
 
 
 class AnthropicProvider(LLMProvider):
     """
-    Modelli Claude via API Anthropic.
-    Nota: su Claude Opus 4.8 / Sonnet 5 i parametri di sampling
+    Modelli LLM via API Anthropic.
+    Nota: su alcuni modelli recenti i parametri di sampling
     (temperature/top_p/top_k) sono stati rimossi e restituiscono errore 400,
     quindi qui NON vengono passati. La determinazione si guida via prompt.
     """
 
-    def __init__(self, model_name: str = "claude-opus-4-8",
-                 temperature: float = 0.0, api_key: str | None = None):
-        super().__init__(model_name, temperature)
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
+    ENV_VAR = "ANTHROPIC_API_KEY"
 
     def generate(self, system_prompt: str, user_prompt: str) -> str:
         import anthropic  # import lazy

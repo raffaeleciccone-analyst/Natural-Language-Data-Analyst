@@ -15,7 +15,7 @@ temporale, con una sintesi in linguaggio naturale.
 ## Anteprima
 
 ![Report iniziale sui dati](docs/preview-report.svg)
-![Risposta a una domanda](docs/preview-dark.svg)
+![Risposta a una domanda](docs/preview-answer.svg)
 
 ## Funzionalità
 

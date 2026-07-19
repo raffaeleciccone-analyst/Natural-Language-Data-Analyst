@@ -1,87 +1,116 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="640" viewBox="0 0 1040 640" font-family="'Segoe UI',system-ui,sans-serif">
-  <rect width="1040" height="640" fill="#EFF1EE"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="660" viewBox="0 0 1040 660" font-family="'Segoe UI',system-ui,sans-serif">
+  <rect width="1040" height="660" fill="#EFF1EE"/>
 
   <!-- Sidebar -->
-  <rect x="0" y="0" width="230" height="640" fill="#FFFFFF"/>
-  <rect x="228" y="0" width="2" height="640" fill="#E2E6E1"/>
+  <rect x="0" y="0" width="230" height="660" fill="#FFFFFF"/>
+  <rect x="228" y="0" width="2" height="660" fill="#E2E6E1"/>
   <rect x="24" y="26" width="32" height="32" rx="8" fill="#0E7C86"/>
   <path d="M32 48 V34 M32 48 h16 M38 44 v-6 M44 44 v-9" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round"/>
   <text x="66" y="40" font-size="15" font-weight="700" fill="#16191C">Data Analyst</text>
-  <text x="66" y="55" font-size="10" font-family="monospace" fill="#8A929A">CONSOLE · v2</text>
+  <text x="66" y="55" font-size="10" font-family="monospace" fill="#8A929A">CONSOLE</text>
   <text x="24" y="104" font-size="10" font-family="monospace" letter-spacing="1" fill="#59626B">PROVIDER</text>
   <rect x="24" y="112" width="182" height="34" rx="9" fill="#F7F8F6" stroke="#D3D8D1"/>
-  <text x="38" y="134" font-size="12.5" fill="#16191C">Gemini</text>
+  <text x="38" y="134" font-size="12.5" fill="#16191C">Groq</text>
   <text x="24" y="172" font-size="10" font-family="monospace" letter-spacing="1" fill="#59626B">MODELLO</text>
   <rect x="24" y="180" width="182" height="34" rx="9" fill="#F7F8F6" stroke="#D3D8D1"/>
-  <text x="38" y="202" font-size="12" font-family="monospace" fill="#16191C">gemini-2.5-flash</text>
-  <rect x="24" y="250" width="182" height="70" rx="11" fill="#F7F8F6" stroke="#D3D8D1" stroke-dasharray="4 4"/>
-  <text x="115" y="280" font-size="12" fill="#59626B" text-anchor="middle">Trascina un file</text>
-  <text x="115" y="298" font-size="12" font-weight="600" fill="#0E7C86" text-anchor="middle">CSV · Excel · JSON</text>
+  <text x="38" y="201" font-size="11" font-family="monospace" fill="#16191C">llama-3.3-70b</text>
+  <text x="24" y="248" font-size="10" font-family="monospace" letter-spacing="1" fill="#59626B">REPORT</text>
+  <rect x="24" y="256" width="182" height="30" rx="9" fill="#F7F8F6" stroke="#D3D8D1"/>
+  <text x="38" y="275" font-size="11.5" fill="#16191C">Misura · Sales</text>
+  <rect x="24" y="292" width="182" height="30" rx="9" fill="#F7F8F6" stroke="#D3D8D1"/>
+  <text x="38" y="311" font-size="11.5" fill="#16191C">Categoria · Region</text>
+  <rect x="24" y="352" width="182" height="66" rx="11" fill="#F7F8F6" stroke="#D3D8D1" stroke-dasharray="4 4"/>
+  <text x="115" y="380" font-size="12" fill="#59626B" text-anchor="middle">Trascina un file</text>
+  <text x="115" y="398" font-size="12" font-weight="600" fill="#0E7C86" text-anchor="middle">CSV · Excel · JSON</text>
 
   <!-- Topbar -->
-  <circle cx="266" cy="40" r="4" fill="#008300"/>
-  <text x="278" y="44" font-size="12.5" font-family="monospace" fill="#59626B">superstore_sales.csv · 9.800 righe · 18 colonne</text>
-  <rect x="878" y="28" width="138" height="26" rx="8" fill="#FFFFFF" stroke="#D3D8D1"/>
-  <text x="892" y="45" font-size="11.5" font-family="monospace" fill="#59626B">provider <tspan fill="#16191C">gemini</tspan></text>
-
-  <!-- Section head -->
-  <rect x="266" y="76" width="14" height="2" fill="#0E7C86"/>
-  <text x="266" y="100" font-size="20" font-weight="700" fill="#16191C">Report iniziale</text>
-  <text x="1016" y="100" font-size="11" font-family="monospace" fill="#8A929A" text-anchor="end">// letto automaticamente</text>
+  <text x="266" y="42" font-size="26" font-weight="700" fill="#16191C">AI Data Analyst Assistant</text>
+  <text x="266" y="64" font-size="12" font-family="monospace" fill="#59626B">provider attivo: <tspan fill="#16191C" font-weight="600">groq</tspan> · <tspan fill="#0A5960">llama-3.3-70b-versatile</tspan></text>
+  <circle cx="270" cy="86" r="3.5" fill="#008300"/>
+  <text x="282" y="90" font-size="11.5" font-family="monospace" fill="#8A929A">Superstore Sales — 9.800 righe · 18 colonne</text>
 
   <!-- KPI readouts -->
   <g>
-    <rect x="266" y="120" width="178" height="96" rx="14" fill="#FFFFFF" stroke="#E2E6E1"/>
-    <text x="284" y="146" font-size="10.5" font-family="monospace" fill="#59626B">RIGHE</text>
-    <text x="284" y="182" font-size="30" font-family="monospace" font-weight="600" fill="#16191C">9.800</text>
-    <rect x="284" y="196" width="142" height="6" rx="2" fill="#2a78d6"/>
+    <rect x="266" y="106" width="178" height="96" rx="14" fill="#FFFFFF" stroke="#E2E6E1"/>
+    <text x="284" y="132" font-size="10" font-family="monospace" fill="#59626B">TOTALE SALES</text>
+    <text x="284" y="166" font-size="21" font-family="monospace" font-weight="600" fill="#16191C">2.261.537 $</text>
+    <rect x="284" y="182" width="142" height="6" rx="2" fill="#0E7C86"/>
   </g>
   <g>
-    <rect x="458" y="120" width="178" height="96" rx="14" fill="#FFFFFF" stroke="#E2E6E1"/>
-    <text x="476" y="146" font-size="10.5" font-family="monospace" fill="#59626B">COLONNE</text>
-    <text x="476" y="182" font-size="30" font-family="monospace" font-weight="600" fill="#16191C">18</text>
-    <rect x="476" y="196" width="142" height="6" rx="2" fill="#008300"/>
+    <rect x="458" y="106" width="178" height="96" rx="14" fill="#FFFFFF" stroke="#E2E6E1"/>
+    <text x="476" y="132" font-size="10" font-family="monospace" fill="#59626B">MEDIA SALES</text>
+    <text x="476" y="166" font-size="21" font-family="monospace" font-weight="600" fill="#16191C">230,77 $</text>
+    <rect x="476" y="182" width="142" height="6" rx="2" fill="#eda100"/>
   </g>
   <g>
-    <rect x="650" y="120" width="178" height="96" rx="14" fill="#FFFFFF" stroke="#E2E6E1"/>
-    <text x="668" y="146" font-size="10.5" font-family="monospace" fill="#59626B">TOTALE SALES</text>
-    <text x="668" y="182" font-size="30" font-family="monospace" font-weight="600" fill="#16191C">2,26M</text>
-    <rect x="668" y="196" width="142" height="6" rx="2" fill="#0E7C86"/>
+    <rect x="650" y="106" width="178" height="96" rx="14" fill="#FFFFFF" stroke="#E2E6E1"/>
+    <text x="668" y="132" font-size="10" font-family="monospace" fill="#59626B">MASSIMO SALES</text>
+    <text x="668" y="166" font-size="21" font-family="monospace" font-weight="600" fill="#16191C">22.638 $</text>
+    <rect x="668" y="182" width="142" height="6" rx="2" fill="#2a78d6"/>
   </g>
   <g>
-    <rect x="842" y="120" width="174" height="96" rx="14" fill="#FFFFFF" stroke="#E2E6E1"/>
-    <text x="860" y="146" font-size="10.5" font-family="monospace" fill="#59626B">MEDIA ORDINE</text>
-    <text x="860" y="182" font-size="30" font-family="monospace" font-weight="600" fill="#16191C">230,77</text>
-    <rect x="860" y="196" width="138" height="6" rx="2" fill="#eda100"/>
+    <rect x="842" y="106" width="174" height="96" rx="14" fill="#FFFFFF" stroke="#E2E6E1"/>
+    <text x="860" y="132" font-size="10" font-family="monospace" fill="#59626B">TOP REGION</text>
+    <text x="860" y="162" font-size="18" font-family="monospace" font-weight="600" fill="#16191C">West</text>
+    <text x="860" y="180" font-size="10.5" font-family="monospace" fill="#8A929A">710.220 $</text>
+    <rect x="860" y="188" width="138" height="6" rx="2" fill="#008300"/>
   </g>
+
+  <!-- Section head -->
+  <rect x="266" y="220" width="750" height="10" fill="url(#scale)"/>
+  <defs>
+    <pattern id="scale" width="9" height="10" patternUnits="userSpaceOnUse">
+      <rect width="1" height="10" fill="#D3D8D1"/>
+    </pattern>
+  </defs>
+  <text x="266" y="256" font-size="18" font-weight="700" fill="#16191C">Report iniziale sui dati</text>
 
   <!-- Answer card -->
-  <rect x="266" y="232" width="750" height="112" rx="13" fill="#E2F0F0" stroke="#E2E6E1"/>
-  <rect x="266" y="232" width="3" height="112" fill="#0E7C86"/>
-  <rect x="286" y="252" width="14" height="2" fill="#0E7C86"/>
-  <text x="308" y="257" font-size="11" font-family="monospace" letter-spacing="1" font-weight="600" fill="#0E7C86">SINTESI DEI DATI</text>
-  <text x="286" y="284" font-size="14" fill="#16191C">Il dataset raccoglie 9.800 ordini. Le Sales totali valgono € 2,26M, media € 230,77 per</text>
-  <text x="286" y="306" font-size="14" fill="#16191C">ordine. La spedizione Standard Class domina il fatturato (€ 1,34M, il 59%); il picco</text>
-  <text x="286" y="328" font-size="14" fill="#16191C">mensile è novembre 2018 con € 117.938.</text>
+  <rect x="266" y="270" width="750" height="98" rx="13" fill="#E2F0F0" stroke="#E2E6E1"/>
+  <rect x="266" y="270" width="3" height="98" fill="#0E7C86"/>
+  <rect x="286" y="290" width="14" height="2" fill="#0E7C86"/>
+  <text x="308" y="295" font-size="11" font-family="monospace" letter-spacing="1" font-weight="600" fill="#0E7C86">SINTESI DEI DATI</text>
+  <text x="286" y="320" font-size="13.5" fill="#16191C">Il dataset raccoglie 9.800 ordini. Le Sales totali valgono 2.261.537 $, con una media di</text>
+  <text x="286" y="340" font-size="13.5" fill="#16191C">230,77 $ per ordine. La regione West guida con 710.220 $, seguita da East (669.519 $). Il</text>
+  <text x="286" y="360" font-size="13.5" fill="#16191C">picco mensile è novembre 2018 con 117.938 $.</text>
 
-  <!-- Bar chart card -->
-  <rect x="266" y="360" width="750" height="252" rx="14" fill="#FFFFFF" stroke="#E2E6E1"/>
-  <text x="286" y="388" font-size="14.5" font-weight="700" fill="#16191C">Classifica — Sales per Ship Mode</text>
-  <text x="286" y="406" font-size="11" font-family="monospace" fill="#8A929A">somma del fatturato per modalità di spedizione</text>
-  <line x1="330" y1="430" x2="990" y2="430" stroke="#E2E6E1"/>
-  <line x1="330" y1="482" x2="990" y2="482" stroke="#E2E6E1"/>
-  <line x1="330" y1="534" x2="990" y2="534" stroke="#E2E6E1"/>
-  <line x1="330" y1="586" x2="990" y2="586" stroke="#C3C2B7"/>
-  <rect x="380" y="430" width="90" height="156" rx="4" fill="#2a78d6"/>
-  <rect x="540" y="530" width="90" height="56"  rx="4" fill="#2a78d6"/>
-  <rect x="700" y="542" width="90" height="44"  rx="4" fill="#2a78d6"/>
-  <rect x="860" y="566" width="90" height="20"  rx="4" fill="#2a78d6"/>
-  <g font-family="monospace" font-size="11" fill="#16191C" text-anchor="middle">
-    <text x="425" y="422">1,34M</text><text x="585" y="522">450k</text>
-    <text x="745" y="534">346k</text><text x="905" y="558">125k</text>
+  <!-- Left chart: Classifica per Region -->
+  <rect x="266" y="384" width="366" height="252" rx="14" fill="#FFFFFF" stroke="#E2E6E1"/>
+  <text x="286" y="412" font-size="13.5" font-weight="700" fill="#16191C">Classifica: Sales per Region</text>
+  <line x1="300" y1="440" x2="612" y2="440" stroke="#E2E6E1"/>
+  <line x1="300" y1="486" x2="612" y2="486" stroke="#E2E6E1"/>
+  <line x1="300" y1="532" x2="612" y2="532" stroke="#E2E6E1"/>
+  <line x1="300" y1="578" x2="612" y2="578" stroke="#C3C2B7"/>
+  <rect x="326" y="452" width="52" height="126" rx="4" fill="#2a78d6"/>
+  <rect x="398" y="460" width="52" height="118" rx="4" fill="#2a78d6"/>
+  <rect x="470" y="500" width="52" height="78"  rx="4" fill="#2a78d6"/>
+  <rect x="542" y="512" width="52" height="66"  rx="4" fill="#2a78d6"/>
+  <g font-family="monospace" font-size="10.5" fill="#16191C" text-anchor="middle">
+    <text x="352" y="446">710k</text><text x="424" y="454">669k</text>
+    <text x="496" y="494">493k</text><text x="568" y="506">389k</text>
   </g>
-  <g font-family="monospace" font-size="11" fill="#59626B" text-anchor="middle">
-    <text x="425" y="604">Standard</text><text x="585" y="604">Second</text>
-    <text x="745" y="604">First</text><text x="905" y="604">Same Day</text>
+  <g font-family="monospace" font-size="10.5" fill="#59626B" text-anchor="middle">
+    <text x="352" y="596">West</text><text x="424" y="596">East</text>
+    <text x="496" y="596">Central</text><text x="568" y="596">South</text>
+  </g>
+
+  <!-- Right chart: Andamento nel tempo -->
+  <rect x="650" y="384" width="366" height="252" rx="14" fill="#FFFFFF" stroke="#E2E6E1"/>
+  <text x="670" y="412" font-size="13.5" font-weight="700" fill="#16191C">Andamento di Sales nel tempo</text>
+  <line x1="686" y1="440" x2="996" y2="440" stroke="#E2E6E1"/>
+  <line x1="686" y1="490" x2="996" y2="490" stroke="#E2E6E1"/>
+  <line x1="686" y1="540" x2="996" y2="540" stroke="#E2E6E1"/>
+  <line x1="686" y1="578" x2="996" y2="578" stroke="#C3C2B7"/>
+  <polyline points="690,560 730,540 770,548 810,512 850,524 890,470 930,494 970,436"
+            fill="none" stroke="#0E7C86" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+  <g fill="#0E7C86">
+    <circle cx="690" cy="560" r="3"/><circle cx="730" cy="540" r="3"/>
+    <circle cx="770" cy="548" r="3"/><circle cx="810" cy="512" r="3"/>
+    <circle cx="850" cy="524" r="3"/><circle cx="890" cy="470" r="3"/>
+    <circle cx="930" cy="494" r="3"/><circle cx="970" cy="436" r="4" stroke="#fff" stroke-width="1.5"/>
+  </g>
+  <text x="970" y="428" font-size="10.5" font-family="monospace" fill="#16191C" text-anchor="middle">118k</text>
+  <g font-family="monospace" font-size="10" fill="#59626B" text-anchor="middle">
+    <text x="700" y="596">2015</text><text x="800" y="596">2017</text><text x="960" y="596">2018</text>
   </g>
 </svg>

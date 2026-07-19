@@ -1,20 +1,22 @@
-import os
-
 from .base import LLMProvider
 
 
 class OpenAIProvider(LLMProvider):
     """Modelli OpenAI (gpt-4o, gpt-4o-mini, ...)."""
 
-    def __init__(self, model_name: str = "gpt-4o-mini",
-                 temperature: float = 0.0, api_key: str | None = None):
-        super().__init__(model_name, temperature)
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+    ENV_VAR = "OPENAI_API_KEY"
+    # base_url alternativa (per API compatibili OpenAI); None = endpoint OpenAI.
+    base_url: str | None = None
 
     def generate(self, system_prompt: str, user_prompt: str) -> str:
         from openai import OpenAI  # import lazy
 
-        client = OpenAI(api_key=self.api_key) if self.api_key else OpenAI()
+        kwargs = {}
+        if self.api_key:
+            kwargs["api_key"] = self.api_key
+        if self.base_url:
+            kwargs["base_url"] = self.base_url
+        client = OpenAI(**kwargs)
 
         response = client.chat.completions.create(
             model=self.model_name,

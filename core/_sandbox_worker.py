@@ -1,5 +1,5 @@
 """
-Worker eseguito in un interprete separato: legge (code, df, dark) picklati da stdin,
+Worker eseguito in un interprete separato: legge (code, df) picklati da stdin,
 esegue il codice nella sandbox e scrive il risultato picklato su stdout.
 
 Isolare l'esecuzione in un processo dedicato consente di imporre un timeout
@@ -23,7 +23,7 @@ def _limit_memory(mb: int = 1500) -> None:
 
 def main() -> None:
     raw = sys.stdin.buffer.read()
-    code, df, dark = pickle.loads(raw)
+    code, df = pickle.loads(raw)
 
     _limit_memory()
 
@@ -32,9 +32,8 @@ def main() -> None:
     real_stdout_fd = os.dup(1)
     os.dup2(2, 1)
 
-    from core.executor import _run_code, set_theme, serialize_result
+    from core.executor import _run_code, serialize_result
 
-    set_theme(dark)
     result = _run_code(code, df)
     out = serialize_result(result)
 

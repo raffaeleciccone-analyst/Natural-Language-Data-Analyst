@@ -208,6 +208,23 @@ def _best_category(df: pd.DataFrame, cat_cols: list):
     return buone[0]
 
 
+def monthly_trend(df: pd.DataFrame, date_col: str, measure=None):
+    """
+    Serie temporale mensile a partire da una colonna data: somma della `measure`
+    oppure, se `measure` è None, conteggio dei record (colonna 'conteggio').
+    Ritorna un DataFrame [date_col, valore] oppure None se non c'è nulla da mostrare.
+    """
+    s = df.dropna(subset=[date_col]).copy()
+    if s.empty:
+        return None
+    s["_periodo"] = s[date_col].dt.to_period("M").dt.to_timestamp()
+    if measure:
+        per = s.groupby("_periodo", as_index=False)[measure].sum()
+    else:
+        per = s.groupby("_periodo").size().reset_index(name="conteggio")
+    return per.rename(columns={"_periodo": date_col})
+
+
 def analyze(df: pd.DataFrame, measure=None, category=None) -> dict:
     """
     Calcola insight quantitativi sul CONTENUTO del dataset, adattandosi alla sua
@@ -240,11 +257,8 @@ def analyze(df: pd.DataFrame, measure=None, category=None) -> dict:
             res["top"] = (cat, main_num, top)
 
         if dcol:
-            s = df.dropna(subset=[dcol]).copy()
-            if not s.empty:
-                s["_periodo"] = s[dcol].dt.to_period("M").dt.to_timestamp()
-                per = (s.groupby("_periodo", as_index=False)[main_num].sum()
-                         .rename(columns={"_periodo": dcol}))
+            per = monthly_trend(df, dcol, main_num)
+            if per is not None:
                 res["trend"] = (dcol, main_num, per)
 
     elif cat:
@@ -253,11 +267,8 @@ def analyze(df: pd.DataFrame, measure=None, category=None) -> dict:
         res["top"] = (cat, "conteggio", pd.DataFrame({cat: vc.index, "conteggio": vc.values}))
 
         if dcol:
-            s = df.dropna(subset=[dcol]).copy()
-            if not s.empty:
-                s["_periodo"] = s[dcol].dt.to_period("M").dt.to_timestamp()
-                per = s.groupby("_periodo").size().reset_index(name="conteggio") \
-                       .rename(columns={"_periodo": dcol})
+            per = monthly_trend(df, dcol)
+            if per is not None:
                 res["trend"] = (dcol, "conteggio", per)
 
     res["measure"] = main_num
@@ -268,25 +279,16 @@ def analyze(df: pd.DataFrame, measure=None, category=None) -> dict:
 
 def load_dataset(file_name: str = "sales.csv") -> pd.DataFrame:
     """
-    Carica il dataset dalla cartella 'data', pulisce le colonne e ottimizza i tipi di dati.
+    Carica il dataset di esempio dalla cartella 'data' e lo passa per la stessa
+    pipeline dei file caricati dall'utente (`_clean_columns`): pulizia dei nomi
+    di colonna e rilevamento automatico delle colonne data.
     """
-    # Costruisce il percorso dinamico verso la cartella 'data'
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     file_path = os.path.join(base_dir, "data", file_name)
-    
+
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Errore: Il file {file_name} non è stato trovato in {os.path.dirname(file_path)}")
-        
-    df = pd.read_csv(file_path)
-    
-    # 1. Pulisce eventuali spazi bianchi nei nomi delle colonne
-    df.columns = df.columns.str.strip()
-    
-    # 2. Converte le colonne temporali in datetime (fondamentale per le analisi mensili/annuali)
-    date_columns = ['Order Date', 'Ship Date']
-    for col in date_columns:
-        if col in df.columns:
-            # dayfirst=True: le date del dataset sono in formato DD/MM/YYYY (es. 08/11/2017 = 8 novembre)
-            df[col] = pd.to_datetime(df[col], errors='coerce', dayfirst=True)
-            
-    return df
+        raise FileNotFoundError(
+            f"Errore: Il file {file_name} non è stato trovato in {os.path.dirname(file_path)}"
+        )
+
+    return _clean_columns(pd.read_csv(file_path))

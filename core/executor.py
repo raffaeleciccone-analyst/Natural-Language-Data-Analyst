@@ -26,36 +26,19 @@ except ImportError:  # pragma: no cover
     px = go = None
     _PLOTLY_OK = False
 
-# Palette categoriche validate (colorblind-safe) — dataviz reference palette
+# Palette categorica validata (colorblind-safe) — dataviz reference palette
 CATEGORICAL_LIGHT = [
     "#2a78d6", "#008300", "#e87ba4", "#eda100",
     "#1baf7a", "#eb6834", "#4a3aa7", "#e34948",
 ]
-CATEGORICAL_DARK = [
-    "#3987e5", "#008300", "#d55181", "#c98500",
-    "#199e70", "#d95926", "#9085e9", "#e66767",
-]
 
-# Colori di superficie/inchiostro per i due temi (coerenti con l'UI "Console")
-_THEMES = {
-    "light": dict(surface="#ffffff", ink="#16191c", secondary="#59626b",
-                  grid="#e2e6e1", axis="#d3d8d1", colorway=CATEGORICAL_LIGHT),
-    "dark": dict(surface="#1a1a19", ink="#ffffff", secondary="#c3c2b7",
-                 grid="#2c2c2a", axis="#3a3a38", colorway=CATEGORICAL_DARK),
-}
+# Colori di superficie/inchiostro dei grafici (coerenti con l'UI "Console")
+_THEME = dict(surface="#ffffff", ink="#16191c", secondary="#59626b",
+              grid="#e2e6e1", axis="#d3d8d1", colorway=CATEGORICAL_LIGHT)
 
 # Tipografia dei grafici (allineata all'UI: Plex Sans + Plex Mono per i numeri)
 _FONT_SANS = "'IBM Plex Sans', system-ui, -apple-system, sans-serif"
 _FONT_MONO = "'IBM Plex Mono', ui-monospace, monospace"
-
-# Tema corrente dei grafici (impostato dall'app prima dell'esecuzione)
-_DARK = False
-
-
-def set_theme(dark: bool) -> None:
-    """Imposta il tema (chiaro/scuro) usato dai grafici Plotly generati."""
-    global _DARK
-    _DARK = bool(dark)
 
 # Whitelist di builtin sicuri: mai esporre __import__, open, eval, exec, ecc.
 SAFE_BUILTINS = {
@@ -109,7 +92,7 @@ def _make_bars_readable(fig):
 
 def apply_theme(fig):
     """Applica il tema visuale coerente (colori, griglia, tipografia) a una figura Plotly."""
-    t = _THEMES["dark" if _DARK else "light"]
+    t = _THEME
     _make_bars_readable(fig)
     fig.update_layout(
         colorway=t["colorway"],
@@ -198,13 +181,13 @@ def _make_summary(fig, value, max_rows: int = 30) -> str:
 
 
 def summarize_result(result, max_rows: int = 30) -> str:
-    """Trasforma un risultato (grafico+dati, figura, DataFrame, scalare) in testo per l'LLM."""
-    if isinstance(result, dict):  # nuovo formato: {"fig":..., "value":..., "summary":...}
-        if result.get("summary"):
-            return result["summary"]
-        return _make_summary(result.get("fig"), result.get("value"), max_rows)
-    if is_plotly_figure(result):
-        return _fig_summary(result, max_rows)
+    """
+    Testo di riepilogo di un risultato per l'LLM. Il flusso reale passa sempre un
+    dict {"fig", "value", "summary"} (il riepilogo è già calcolato nel worker);
+    resta un ripiego per oggetti grezzi (Series/DataFrame/scalari).
+    """
+    if isinstance(result, dict):
+        return result.get("summary") or _make_summary(result.get("fig"), result.get("value"), max_rows)
     return _obj_summary(result, max_rows)
 
 
@@ -286,10 +269,11 @@ def _last_assigned_name(tree: ast.AST):
     return name
 
 
-def _run_code(code: str, df: pd.DataFrame):
+def _parse_and_validate(code: str):
     """
-    Parsifica, valida ed esegue il codice. Ritorna il risultato (valore/figura) o
-    una stringa d'errore. È il cuore eseguito sia in-process sia nel sottoprocesso.
+    Parsifica il codice e applica la sandbox statica. Ritorna l'AST se il codice è
+    valido ed eseguibile, altrimenti una stringa d'errore già formattata.
+    Unico punto di verità condiviso tra esecuzione in-process e pre-controllo.
     """
     try:
         tree = ast.parse(code, mode="exec")
@@ -307,6 +291,19 @@ def _run_code(code: str, df: pd.DataFrame):
         _validate_ast(tree)
     except UnsafeCodeError as e:
         return f"Errore di sicurezza: {e}. \nCodice tentato: {code}"
+
+    return tree
+
+
+def _run_code(code: str, df: pd.DataFrame):
+    """
+    Valida ed esegue il codice. Ritorna il risultato (valore/figura) o una stringa
+    d'errore. È il cuore eseguito sia in-process sia nel sottoprocesso.
+    """
+    parsed = _parse_and_validate(code)
+    if isinstance(parsed, str):
+        return parsed
+    tree = parsed
 
     # Contesto isolato per l'esecuzione (builtin ridotti al minimo; niente 'st')
     safe_globals = {"__builtins__": SAFE_BUILTINS}
@@ -381,7 +378,7 @@ def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int):
     """Esegue il codice in un interprete separato con timeout. Solleva se non avviabile."""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     env = dict(os.environ, PYTHONPATH=root + os.pathsep + os.environ.get("PYTHONPATH", ""))
-    payload = pickle.dumps((code, df, _DARK))
+    payload = pickle.dumps((code, df))
     proc = subprocess.run(
         [sys.executable, "-m", "core._sandbox_worker"],
         input=payload, capture_output=True, cwd=root, env=env, timeout=timeout,
@@ -397,17 +394,9 @@ def execute_pandas_code(code_string: str, df: pd.DataFrame):
     code = clean_code(code_string)
 
     # Pre-controllo rapido (fail-fast, senza avviare un processo)
-    try:
-        tree = ast.parse(code, mode="exec")
-    except SyntaxError as e:
-        return f"Errore di sintassi nel codice generato: {e} \nCodice tentato: {code}"
-    if not tree.body:
-        msg = code.lstrip("# ").strip() or "il modello non ha prodotto codice eseguibile"
-        return f"Errore: {msg}"
-    try:
-        _validate_ast(tree)
-    except UnsafeCodeError as e:
-        return f"Errore di sicurezza: {e}. \nCodice tentato: {code}"
+    parsed = _parse_and_validate(code)
+    if isinstance(parsed, str):
+        return parsed
 
     # Esecuzione isolata in sottoprocesso (con timeout); fallback in-process.
     if SANDBOX_SUBPROCESS:

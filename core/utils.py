@@ -4,6 +4,11 @@ import re
 import pandas as pd
 
 
+# Convenzione numerica italiana (separatore migliaia '.', decimale ','), usata sia
+# da fmt_num sia dalla formattazione delle tabelle (Styler.format) — unica fonte.
+IT_NUM_FORMAT = dict(precision=2, thousands=".", decimal=",")
+
+
 def clean_code(text: str) -> str:
     """Rimuove i fence markdown (```python ... ```) che i modelli spesso aggiungono."""
     cleaned = re.sub(r'```(?:python)?\s*|\s*```', '', text or '')

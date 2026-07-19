@@ -5,13 +5,13 @@ import pandas as pd
 import streamlit as st
 
 from core.loader import (load_dataset, read_any, profile, analyze, measure_columns,
-                         best_category, category_columns, SUPPORTED_EXTENSIONS)
-from core.utils import fmt_num
+                         best_category, category_columns, monthly_trend,
+                         SUPPORTED_EXTENSIONS)
+from core.utils import fmt_num, IT_NUM_FORMAT
 from core.agent import DataAgent
-from core import executor as ex
-from core.executor import (execute_pandas_code, is_plotly_figure,
-                           summarize_result, apply_theme, to_chart)
+from core.executor import (execute_pandas_code, summarize_result, apply_theme, to_chart)
 from core.providers import available_providers, DEFAULT_MODELS, REQUIRES_API_KEY
+from core.ui_theme import console_css
 
 # --- Configurazione pagina ---
 st.set_page_config(
@@ -45,7 +45,6 @@ DEMO_MAX_QUESTIONS = int(_secret("DEMO_MAX_QUESTIONS", "15") or "15")
 with st.sidebar:
     st.header("Configurazione")
 
-    dark_mode = False  # tema scuro disattivato: Streamlit non theme-a i widget nativi via CSS
     spiega_ai = st.toggle("Spiegazione AI", value=True,
                           help="Genera una risposta testuale che interpreta il risultato.")
 
@@ -84,112 +83,8 @@ with st.sidebar:
         help="Formati supportati: CSV, Excel (.xlsx/.xls), JSON.",
     )
 
-# Propaga il tema ai grafici Plotly
-ex.set_theme(dark_mode)
-
-
-# --- Stile personalizzato "Console" (chiaro / scuro) ---
-def inject_css(dark: bool):
-    if dark:
-        c = dict(page="#0d0d0d", surface="#1a1a19", surface2="#202020",
-                 border="#2c2c2a", strong="#3a3a38", ink="#ffffff", ink2="#c3c2b7",
-                 muted="#898781", accent="#22b0bc", deep="#4cc7d1", tint="#123032")
-    else:
-        c = dict(page="#eff1ee", surface="#ffffff", surface2="#f7f8f6",
-                 border="#e2e6e1", strong="#d3d8d1", ink="#16191c", ink2="#59626b",
-                 muted="#8a929a", accent="#0e7c86", deep="#0a5960", tint="#e2f0f0")
-
-    st.markdown(
-        f"""
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
-          :root {{
-            --sans:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
-            --display:"Space Grotesk",system-ui,sans-serif;
-            --mono:"IBM Plex Mono",ui-monospace,"SF Mono",monospace;
-          }}
-          .stApp, [data-testid="stAppViewContainer"] {{ background: {c['page']}; }}
-          .stApp, .stApp p, .stApp label, .stApp li, .stMarkdown {{
-              font-family: var(--sans); color: {c['ink']};
-          }}
-          .block-container {{ padding-top: 2rem; max-width: 1150px; }}
-          section[data-testid="stSidebar"] {{
-              background: {c['surface']}; border-right: 1px solid {c['border']};
-          }}
-          h1, h2, h3, h4 {{ font-family: var(--display); color: {c['ink']}; letter-spacing: -0.015em; }}
-          .app-subtitle {{ font-family: var(--mono); color: {c['ink2']} !important;
-              font-size: 0.82rem; margin-top: -0.6rem; letter-spacing: 0.02em; }}
-          code, .app-subtitle code {{ font-family: var(--mono); color: {c['deep']}; }}
-          [data-testid="stCaptionContainer"] {{ font-family: var(--mono); color: {c['muted']}; }}
-
-          /* Readout KPI (firma "console") */
-          .readout {{
-              background: {c['surface']}; border: 1px solid {c['border']};
-              border-radius: 14px; padding: 15px 18px 14px;
-              box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 10px 26px -20px rgba(0,0,0,0.35);
-              height: 120px; overflow: hidden;
-          }}
-          .readout .r-k {{ font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em;
-              text-transform: uppercase; color: {c['ink2']}; }}
-          .readout .r-v {{ font-family: var(--mono); font-weight: 600; font-size: 1.85rem;
-              letter-spacing: -0.02em; margin-top: 7px; line-height: 1;
-              font-variant-numeric: tabular-nums; color: {c['ink']}; }}
-          .readout .r-v.sm {{ font-size: 1.1rem; line-height: 1.2; margin-top: 12px;
-              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-          .readout .r-tick {{ height: 6px; margin-top: 12px; border-radius: 2px;
-              background: linear-gradient(90deg, var(--bar,{c['accent']}) 60%, {c['border']} 60%); }}
-          .readout .r-sub {{ font-family: var(--mono); font-size: 0.7rem; color: {c['muted']}; margin-top: 8px; }}
-
-          /* Motivo a scala di misurazione */
-          .scale {{ height: 10px; margin: 8px 0 2px;
-              background-image: repeating-linear-gradient(90deg, {c['strong']} 0 1px, transparent 1px 9px); }}
-
-          /* Riquadro risposta / sintesi */
-          .answer-card {{
-              background: {c['tint']}; border: 1px solid {c['border']};
-              border-left: 3px solid {c['accent']}; border-radius: 13px;
-              padding: 15px 18px; margin: 4px 0 14px 0;
-          }}
-          .answer-label {{
-              font-family: var(--mono); color: {c['accent']}; font-weight: 600;
-              font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em;
-              margin-bottom: 7px; display: flex; align-items: center; gap: 8px;
-          }}
-          .answer-label::before {{ content:""; width:14px; height:2px; background:{c['accent']}; }}
-          .answer-body {{ color: {c['ink']}; font-size: 1.0rem; line-height: 1.6; }}
-          .answer-body b {{ font-family: var(--mono); color: {c['deep']}; font-weight: 600; }}
-
-          /* Metriche native (fallback), tabelle, chat */
-          div[data-testid="stMetricValue"] {{ font-family: var(--mono); color: {c['accent']}; font-weight: 600; }}
-          div[data-testid="stMetricLabel"] {{ font-family: var(--mono); color: {c['ink2']}; }}
-          div[data-testid="stChatMessage"] {{
-              background: {c['surface']}; border: 1px solid {c['border']};
-              border-radius: 14px; padding: 6px 14px;
-          }}
-          .stExpander {{ border-radius: 12px; border: 1px solid {c['border']}; }}
-          /* Box domanda: fissato in alto (sempre raggiungibile senza scrollare) */
-          [data-testid="stForm"] {{
-              position: sticky; top: 0; z-index: 60;
-              background: {c['page']}; padding: 8px 0 6px;
-          }}
-          /* Box domanda inline: input pulito + pulsante in accento */
-          [data-testid="stTextInput"] input {{
-              border-radius: 10px; border: 1px solid {c['strong']};
-              background: {c['surface']}; color: {c['ink']};
-          }}
-          [data-testid="stTextInput"] input:focus {{ border-color: {c['accent']}; }}
-          [data-testid="stFormSubmitButton"] button {{
-              background: {c['accent']}; color: #ffffff; border: 0;
-              border-radius: 10px; font-weight: 600; font-family: var(--display);
-          }}
-          [data-testid="stFormSubmitButton"] button:hover {{ background: {c['deep']}; }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-inject_css(dark_mode)
+# --- Stile personalizzato "Console" (definito in core/ui_theme.py) ---
+st.markdown(console_css(), unsafe_allow_html=True)
 
 
 def answer_card(label: str, text: str):
@@ -299,31 +194,39 @@ if not unit and sel_measure and any(h in sel_measure.lower() for h in _ECON_HINT
     unit = "$"
 
 
-def _wu(v) -> str:
-    """Formatta un numero e vi accosta l'unità di misura, se indicata."""
-    return f"{fmt_num(v)} {unit}".strip() if unit else fmt_num(v)
+def build_kpis(df, sel_measure, sel_category, unit):
+    """
+    Costruisce le card KPI adattandosi ai dati: con una MISURA -> totale/media/
+    massimo/leader; SENZA misura -> conteggi. Ritorna una lista di tuple
+    (label, value, sub, tick, small). Nessun effetto Streamlit (facile da testare).
+    """
+    def wu(v):  # accosta l'unità di misura, se indicata
+        return f"{fmt_num(v)} {unit}".strip() if unit else fmt_num(v)
+
+    kpis = []
+    if sel_measure:
+        s = df[sel_measure]
+        kpis.append((f"Totale {sel_measure}", wu(s.sum()), "", "#0e7c86", False))
+        kpis.append((f"Media {sel_measure}", wu(s.mean()), "", "#eda100", False))
+        kpis.append((f"Massimo {sel_measure}", wu(s.max()), "", "#2a78d6", False))
+        if sel_category:
+            leader = df.groupby(sel_category)[sel_measure].sum().sort_values(ascending=False)
+            kpis.append((f"Top {sel_category}", str(leader.index[0]), wu(leader.iloc[0]), "#008300", True))
+        else:
+            kpis.append(("Record", fmt_num(len(df)), "", "#008300", False))
+    elif sel_category:  # nessuna misura: KPI a conteggi
+        vc = df[sel_category].value_counts()
+        kpis.append(("Record", fmt_num(len(df)), "", "#2a78d6", False))
+        kpis.append((f"{sel_category} distinte", fmt_num(df[sel_category].nunique()), "", "#eda100", False))
+        kpis.append((f"Top {sel_category}", str(vc.index[0]), f"{fmt_num(vc.iloc[0])} record", "#008300", True))
+    else:
+        kpis.append(("Record", fmt_num(len(df)), "", "#2a78d6", False))
+        kpis.append(("Colonne", str(df.shape[1]), "", "#008300", False))
+    return kpis
+
 
 # --- Riga di KPI (adattivi: misure oppure conteggi) ---
-kpis = []  # (label, value, sub, tick, small)
-if sel_measure:
-    s = df[sel_measure]
-    kpis.append((f"Totale {sel_measure}", _wu(s.sum()), "", "#0e7c86", False))
-    kpis.append((f"Media {sel_measure}", _wu(s.mean()), "", "#eda100", False))
-    kpis.append((f"Massimo {sel_measure}", _wu(s.max()), "", "#2a78d6", False))
-    if sel_category:
-        leader = df.groupby(sel_category)[sel_measure].sum().sort_values(ascending=False)
-        kpis.append((f"Top {sel_category}", str(leader.index[0]), _wu(leader.iloc[0]), "#008300", True))
-    else:
-        kpis.append(("Record", fmt_num(len(df)), "", "#008300", False))
-elif sel_category:  # nessuna misura: KPI a conteggi
-    vc = df[sel_category].value_counts()
-    kpis.append(("Record", fmt_num(len(df)), "", "#2a78d6", False))
-    kpis.append((f"{sel_category} distinte", fmt_num(df[sel_category].nunique()), "", "#eda100", False))
-    kpis.append((f"Top {sel_category}", str(vc.index[0]), f"{fmt_num(vc.iloc[0])} record", "#008300", True))
-else:
-    kpis.append(("Record", fmt_num(len(df)), "", "#2a78d6", False))
-    kpis.append(("Colonne", str(df.shape[1]), "", "#008300", False))
-
+kpis = build_kpis(df, sel_measure, sel_category, unit)
 kpi_cols = st.columns(len(kpis))
 for _col, (_lab, _val, _sub, _tick, _small) in zip(kpi_cols, kpis):
     readout(_col, _lab, _val, sub=_sub, tick=_tick, small=_small)
@@ -402,14 +305,19 @@ if "numeric_stats" in insights:
             stats_disp[_c] = stats_disp[_c].map(fmt_num)
     st.dataframe(stats_disp, use_container_width=True, hide_index=True)
 
-# Grafici COLLEGATI: clicca una barra della classifica -> l'andamento si filtra
-top_fig = st.session_state.get("top_fig")
-trend_fig = st.session_state.get("trend_fig")
-if top_fig is not None or trend_fig is not None:
-    if top_fig is not None and trend_fig is not None:
+def render_linked_charts(df, insights, top_fig, trend_fig):
+    """
+    Classifica + andamento affiancati e COLLEGATI: cliccando una barra della
+    classifica l'andamento si filtra sulla categoria scelta (ri-cliccando si
+    toglie il filtro). Isola qui la logica di interazione del report.
+    """
+    if top_fig is None and trend_fig is None:
+        return
+    both = top_fig is not None and trend_fig is not None
+    if both:
         st.caption("Clicca una barra della classifica per filtrare l'andamento; "
                    "ri-clicca la stessa barra per togliere il filtro.")
-    graf_cols = st.columns(2 if (top_fig is not None and trend_fig is not None) else 1)
+    graf_cols = st.columns(2 if both else 1)
     idx = 0
     selected_cat = None
 
@@ -438,14 +346,7 @@ if top_fig is not None or trend_fig is not None:
                 mask = df[cat].astype(str) == str(selected_cat)
                 if not mask.any():
                     mask = df[cat].astype(str).str.startswith(key_val)
-                s = df[mask].dropna(subset=[dcol]).copy()
-                if not s.empty:
-                    s["_p"] = s[dcol].dt.to_period("M").dt.to_timestamp()
-                    if insights.get("measure"):  # somma della misura
-                        sub = s.groupby("_p", as_index=False)[num].sum().rename(columns={"_p": dcol})
-                    else:  # nessuna misura: conteggio record
-                        sub = (s.groupby("_p").size().reset_index(name=num)
-                                .rename(columns={"_p": dcol}))
+                sub = monthly_trend(df[mask], dcol, insights.get("measure"))
 
             if sub is not None:
                 st.markdown(f"**Andamento di {num} — {cat}: {selected_cat}**")
@@ -454,6 +355,10 @@ if top_fig is not None or trend_fig is not None:
             else:
                 st.markdown(f"**Andamento di {num} nel tempo**")
                 st.plotly_chart(apply_theme(trend_fig), use_container_width=True, key="report_trend")
+
+
+render_linked_charts(df, insights, st.session_state.get("top_fig"),
+                     st.session_state.get("trend_fig"))
 
 with st.expander("Struttura delle colonne (tipi, mancanti, valori)"):
     st.dataframe(st.session_state.get("profile"), use_container_width=True, hide_index=True)
@@ -469,7 +374,7 @@ def render_value(value, kp: str = "r"):
         return
     if isinstance(value, pd.DataFrame):
         num_cols = list(value.select_dtypes("number").columns)
-        styled = (value.style.format(precision=2, thousands=".", decimal=",", subset=num_cols)
+        styled = (value.style.format(subset=num_cols, **IT_NUM_FORMAT)
                   if num_cols else value)
         st.dataframe(styled, use_container_width=True, hide_index=True, key=f"{kp}_df")
     elif isinstance(value, pd.Series):
@@ -503,34 +408,18 @@ def render_result(code: str, result, explanation: str | None = None, kp: str = "
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# "mostrami"/"visualizza" erano troppo generiche (attivavano il grafico anche su
-# richieste scalari). Teniamo solo parole realmente grafiche.
-PAROLE_GRAFICO = ["grafico", "plot", "barre", "linee", "andamento", "istogramma",
-                  "trend", "distribuzione", "diagramma"]
-PAROLE_LINEA = ["andamento", "linee", "trend", "tempo", "temporale"]
-
 
 def process_question(prompt: str):
     """Genera il codice, lo esegue (con retry), produce la spiegazione e salva il turno."""
-    richiede_grafico = any(p in prompt.lower() for p in PAROLE_GRAFICO)
-    kind = "line" if any(p in prompt.lower() for p in PAROLE_LINEA) else "bar"
-
-    def wrap_chart(codice: str) -> str:
-        if (richiede_grafico and "fig" not in codice
-                and "px." not in codice and "st." not in codice):
-            return f"fig = to_chart({codice.strip().rstrip(';')}, kind='{kind}')"
-        return codice
-
-    domanda = prompt + (" (Raggruppa i dati usando as_index=False)" if richiede_grafico else "")
-
     with st.spinner("Analisi in corso..."):
-        codice = wrap_chart(agent.ask_code(domanda, df))
+        # L'agente decide da sé se serve un grafico e avvolge i dati (unica fonte).
+        codice = agent.ask_code(prompt, df)
         risultato = execute_pandas_code(codice, df)
 
         tentativo = 0
         while (isinstance(risultato, str) and risultato.startswith("Errore") and tentativo < 3):
             tentativo += 1
-            codice = wrap_chart(agent.fix_code(domanda, df, codice, risultato))
+            codice = agent.fix_code(prompt, df, codice, risultato)
             risultato = execute_pandas_code(codice, df)
 
         spiegazione = None
