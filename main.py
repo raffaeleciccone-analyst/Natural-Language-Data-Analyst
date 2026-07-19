@@ -9,7 +9,8 @@ from core.loader import (load_dataset, read_any, profile, analyze, measure_colum
                          SUPPORTED_EXTENSIONS)
 from core.utils import fmt_num, IT_NUM_FORMAT
 from core.agent import DataAgent
-from core.executor import (execute_pandas_code, summarize_result, apply_theme, to_chart)
+from core.executor import (execute_pandas_code, summarize_result, apply_theme,
+                           to_chart, corr_heatmap)
 from core.providers import available_providers, DEFAULT_MODELS, REQUIRES_API_KEY
 from core.ui_theme import console_css
 
@@ -271,8 +272,15 @@ if st.session_state.get("report_sig") != report_sig:
                 trend_fig = to_chart(per_df, kind="line")
             except Exception:
                 trend_fig = None
+        corr_fig = None
+        if "corr" in insights:
+            try:
+                corr_fig = corr_heatmap(insights["corr"])
+            except Exception:
+                corr_fig = None
         st.session_state.top_fig = top_fig
         st.session_state.trend_fig = trend_fig
+        st.session_state.corr_fig = corr_fig
 
 insights = st.session_state.get("insights", {})
 
@@ -359,6 +367,20 @@ def render_linked_charts(df, insights, top_fig, trend_fig):
 
 render_linked_charts(df, insights, st.session_state.get("top_fig"),
                      st.session_state.get("trend_fig"))
+
+# --- Correlazioni tra le misure (calcolate in Pandas) ---
+corr_fig = st.session_state.get("corr_fig")
+if corr_fig is not None:
+    st.markdown("**Correlazioni tra le misure**")
+    pairs = insights.get("corr_pairs") or []
+    if pairs:
+        a, b, r = pairs[0]
+        verso = "positiva" if r > 0 else "negativa"
+        st.caption(f"Coppia più correlata: {a} e {b} (r = {fmt_num(r)}, {verso}). "
+                   "La correlazione indica associazione, non causa.")
+    else:
+        st.caption("Nessuna coppia con correlazione forte (|r| ≥ 0,6).")
+    st.plotly_chart(apply_theme(corr_fig), use_container_width=True, key="report_corr")
 
 with st.expander("Struttura delle colonne (tipi, mancanti, valori)"):
     st.dataframe(st.session_state.get("profile"), use_container_width=True, hide_index=True)

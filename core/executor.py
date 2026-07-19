@@ -152,6 +152,24 @@ def to_chart(res, kind: str = "bar"):
     return apply_theme(fig)
 
 
+def corr_heatmap(corr):
+    """Heatmap di una matrice di correlazione: scala divergente (blu↔rosso) con
+    midpoint neutro a 0, valori annotati. Range fisso [-1, 1]."""
+    if not _PLOTLY_OK:
+        raise RuntimeError("Plotly non è installato (pip install plotly).")
+    fig = px.imshow(corr, zmin=-1, zmax=1, text_auto=".2f", aspect="auto",
+                    color_continuous_scale=["#2a78d6", "#eef1ee", "#e34948"])
+    fig.update_coloraxes(colorbar_title="r", cmid=0)
+    fig.update_traces(hovertemplate="%{x} – %{y}<br>r = %{z:.2f}<extra></extra>")
+    fig = apply_theme(fig)
+    try:
+        n = corr.shape[1]
+    except Exception:
+        n = 0
+    fig.update_layout(height=max(240, 46 * n + 90))
+    return fig
+
+
 def _fig_summary(fig, max_rows: int = 30) -> str:
     righe = []
     for trace in fig.data:

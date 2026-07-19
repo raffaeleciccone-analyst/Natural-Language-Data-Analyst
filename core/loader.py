@@ -127,6 +127,10 @@ def _insights_text(df: pd.DataFrame, res: dict) -> str:
             lines.append(f"Andamento di {num} nel tempo: periodo migliore "
                          f"{best[dcol].date()}={fmt_num(best[num])}, peggiore "
                          f"{worst[dcol].date()}={fmt_num(worst[num])}.")
+    if res.get("corr_pairs"):
+        parti = ", ".join(f"{a}–{b} (r={r:.2f})" for a, b, r in res["corr_pairs"][:3])
+        lines.append(f"Correlazioni più forti tra le misure: {parti}. "
+                     "(Correlazione, non causa.)")
     return "\n".join(lines)
 
 
@@ -225,6 +229,26 @@ def monthly_trend(df: pd.DataFrame, date_col: str, measure=None):
     return per.rename(columns={"_periodo": date_col})
 
 
+def _correlations(df: pd.DataFrame, measures: list, soglia: float = 0.6):
+    """
+    Matrice di correlazione (Pearson) tra le misure e coppie 'forti' (|r| >= soglia).
+    Solo su misure reali (niente ID/anni) e dataset non minuscoli, dove la
+    correlazione ha senso. Ritorna (corr_df, coppie) oppure (None, []).
+    """
+    if len(measures) < 2 or len(df) < 10:
+        return None, []
+    corr = df[measures].corr(numeric_only=True)
+    coppie = []
+    cols = list(corr.columns)
+    for i in range(len(cols)):
+        for j in range(i + 1, len(cols)):
+            r = corr.iloc[i, j]
+            if pd.notna(r) and abs(r) >= soglia:
+                coppie.append((cols[i], cols[j], round(float(r), 2)))
+    coppie.sort(key=lambda t: abs(t[2]), reverse=True)
+    return corr, coppie
+
+
 def analyze(df: pd.DataFrame, measure=None, category=None) -> dict:
     """
     Calcola insight quantitativi sul CONTENUTO del dataset, adattandosi alla sua
@@ -270,6 +294,13 @@ def analyze(df: pd.DataFrame, measure=None, category=None) -> dict:
             per = monthly_trend(df, dcol)
             if per is not None:
                 res["trend"] = (dcol, "conteggio", per)
+
+    # Correlazioni tra misure (indipendenti dalla modalità)
+    corr, coppie = _correlations(df, measures)
+    if corr is not None:
+        res["corr"] = corr
+    if coppie:
+        res["corr_pairs"] = coppie
 
     res["measure"] = main_num
     res["category"] = cat
