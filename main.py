@@ -239,6 +239,14 @@ with st.expander("Anteprima dei dati (prime 10 righe)"):
     st.dataframe(df.head(10), use_container_width=True)
 
 # --- Report iniziale sui dati ---
+def _try_fig(fn, *args, **kwargs):
+    """Costruisce una figura, o None se qualcosa va storto (report robusto)."""
+    try:
+        return fn(*args, **kwargs)
+    except Exception:
+        return None
+
+
 try:
     content_hash = int(pd.util.hash_pandas_object(df, index=False).sum())
 except Exception:
@@ -259,35 +267,14 @@ if st.session_state.get("report_sig") != report_sig:
         insights = analyze(df, measure=sel_measure, category=sel_category)
         st.session_state.insights = insights
 
-        top_fig = trend_fig = None
-        if "top" in insights:
-            _, _, top_df = insights["top"]
-            try:
-                top_fig = to_chart(top_df, kind="bar")
-            except Exception:
-                top_fig = None
-        if "trend" in insights:
-            _, _, per_df = insights["trend"]
-            try:
-                trend_fig = to_chart(per_df, kind="line")
-            except Exception:
-                trend_fig = None
-        corr_fig = None
-        if "corr" in insights:
-            try:
-                corr_fig = corr_heatmap(insights["corr"])
-            except Exception:
-                corr_fig = None
-        dist_fig = None
-        if sel_measure:
-            try:
-                dist_fig = histogram(df, sel_measure)
-            except Exception:
-                dist_fig = None
-        st.session_state.top_fig = top_fig
-        st.session_state.trend_fig = trend_fig
-        st.session_state.corr_fig = corr_fig
-        st.session_state.dist_fig = dist_fig
+        st.session_state.top_fig = (
+            _try_fig(to_chart, insights["top"][2], kind="bar") if "top" in insights else None)
+        st.session_state.trend_fig = (
+            _try_fig(to_chart, insights["trend"][2], kind="line") if "trend" in insights else None)
+        st.session_state.corr_fig = (
+            _try_fig(corr_heatmap, insights["corr"]) if "corr" in insights else None)
+        st.session_state.dist_fig = (
+            _try_fig(histogram, df, sel_measure) if sel_measure else None)
 
 insights = st.session_state.get("insights", {})
 
