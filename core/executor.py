@@ -85,11 +85,9 @@ def _make_bars_readable(fig):
             tr.x, tr.y = tr.y, tr.x
             tr.orientation = "h"
             flipped = True
-    if flipped:  # l'asse x ora porta i valori (prende il titolo dal vecchio asse y)
-        fig.layout.xaxis.title.text = fig.layout.yaxis.title.text
-
     # Barre orizzontali: tronca le etichette lunghe (nome intero nell'hover), togli
-    # il titolo dell'asse categorie (ridondante) e dai un'altezza proporzionata.
+    # i titoli degli assi (ridondanti: bastano etichette, scala e titolo del grafico)
+    # e dai un'altezza proporzionata.
     hbars = [tr for tr in fig.data
              if getattr(tr, "type", None) == "bar" and getattr(tr, "orientation", None) == "h"]
     for tr in hbars:
@@ -101,7 +99,8 @@ def _make_bars_readable(fig):
             tr.customdata = full
             tr.hovertemplate = "%{customdata}<br>%{x}<extra></extra>"
     if hbars:
-        fig.layout.yaxis.title.text = ""  # le etichette parlano da sole
+        fig.layout.xaxis.title.text = ""
+        fig.layout.yaxis.title.text = ""
         n = max((len(tr.y) for tr in hbars if tr.y is not None), default=0)
         if n:
             fig.update_layout(height=max(260, 44 * n + 110))
