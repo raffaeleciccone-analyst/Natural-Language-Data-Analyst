@@ -131,11 +131,28 @@ def _insights_text(df: pd.DataFrame, res: dict) -> str:
 
 
 _ID_PATTERN = re.compile(r'(^|[_\s])(id|code|zip|postal|index|codice|cap|isbn)($|[_\s])', re.I)
+_YEAR_PATTERN = re.compile(r'(^|[_\s])(year|anno|yr|esercizio)($|[_\s])', re.I)
+
+
+def _is_year_like(name, series: pd.Series) -> bool:
+    """Riconosce colonne 'anno' (dimensione temporale, non una misura da sommare)."""
+    if _YEAR_PATTERN.search(str(name)):
+        return True
+    s = series.dropna()
+    if s.empty or not pd.api.types.is_numeric_dtype(s):
+        return False
+    try:
+        vals = s.astype(float)
+    except Exception:
+        return False
+    # interi nell'intervallo degli anni, poca cardinalità -> è un anno, non una misura
+    return bool((vals == vals.round()).all() and vals.min() >= 1900
+                and vals.max() <= 2100 and s.nunique() <= 100)
 
 
 def _is_identifier(name, series: pd.Series, n: int) -> bool:
-    """Riconosce colonne numeriche che sono in realtà identificatori (ID, CAP, codici)."""
-    if _ID_PATTERN.search(str(name)):
+    """Riconosce colonne numeriche che NON sono misure: identificatori (ID, CAP, codici) o anni."""
+    if _ID_PATTERN.search(str(name)) or _is_year_like(name, series):
         return True
     # valori quasi tutti distinti -> è una chiave (solo su dataset abbastanza grandi:
     # con poche righe l'unicità è priva di significato)
@@ -159,8 +176,12 @@ def measure_columns(df: pd.DataFrame) -> list:
 
 def best_category(df: pd.DataFrame):
     """API pubblica: colonna categoriale con cardinalità utile per un raggruppamento."""
-    cat_cols = [c for c in df.columns if column_kind(df[c]) == "testo"]
-    return _best_category(df, cat_cols)
+    return _best_category(df, category_columns(df))
+
+
+def category_columns(df: pd.DataFrame) -> list:
+    """API pubblica: colonne categoriali (di testo) del dataset."""
+    return [c for c in df.columns if column_kind(df[c]) == "testo"]
 
 
 # Gruppi di dimensioni "interessanti" per un report, in ordine di priorità
@@ -187,44 +208,60 @@ def _best_category(df: pd.DataFrame, cat_cols: list):
     return buone[0]
 
 
-def analyze(df: pd.DataFrame) -> dict:
+def analyze(df: pd.DataFrame, measure=None, category=None) -> dict:
     """
-    Calcola insight quantitativi sul CONTENUTO del dataset:
-    statistiche numeriche, classifica principale e andamento temporale.
-    Ignora le colonne-identificatore (ID, CAP, codici) per non produrre numeri privi di senso.
+    Calcola insight quantitativi sul CONTENUTO del dataset, adattandosi alla sua
+    forma: con una MISURA numerica usa somme/medie/andamento; SENZA misura ripiega
+    su conteggi e distribuzioni. `measure`/`category` permettono di forzare la scelta
+    (altrimenti euristica). Ignora identificatori e anni tra le misure.
     """
     res = {}
     num_cols = df.select_dtypes("number").columns.tolist()
-    cat_cols = [c for c in df.columns if column_kind(df[c]) == "testo"]
+    cat_cols = category_columns(df)
     date_cols = [c for c in df.columns if column_kind(df[c]) == "data"]
 
     measures = _measure_columns(df, num_cols) if num_cols else []
     measures = [c for c in measures if df[c].notna().any()]  # scarta colonne tutte-NaN
-    main_num = measures[0] if measures else None
-    cat = _best_category(df, cat_cols)
 
-    # 1. Statistiche delle colonne-misura (somma, media, min, max)
-    if measures:
+    # Misura e categoria: usa quelle indicate se valide, altrimenti euristica
+    main_num = measure if (measure in measures) else (measures[0] if measures else None)
+    cat = category if (category and category in df.columns) else _best_category(df, cat_cols)
+    dcol = date_cols[0] if date_cols else None
+
+    if main_num:
+        # --- MODALITÀ MISURA: statistiche, classifica per somma, andamento ---
         stats = df[measures].agg(["sum", "mean", "min", "max"]).T
         stats.columns = ["Somma", "Media", "Minimo", "Massimo"]
         res["numeric_stats"] = stats.reset_index().rename(columns={"index": "Colonna"})
 
-    # 2. Classifica: categoria migliore vs misura principale (top 10 per somma)
-    if cat and main_num:
-        top = (df.groupby(cat, as_index=False)[main_num].sum()
-                 .sort_values(main_num, ascending=False).head(10))
-        res["top"] = (cat, main_num, top)
+        if cat:
+            top = (df.groupby(cat, as_index=False)[main_num].sum()
+                     .sort_values(main_num, ascending=False).head(10))
+            res["top"] = (cat, main_num, top)
 
-    # 3. Andamento temporale: prima colonna data vs misura principale (per mese)
-    if date_cols and main_num:
-        dcol = date_cols[0]
-        s = df.dropna(subset=[dcol]).copy()
-        if not s.empty:
-            s["_periodo"] = s[dcol].dt.to_period("M").dt.to_timestamp()
-            per = (s.groupby("_periodo", as_index=False)[main_num].sum()
-                     .rename(columns={"_periodo": dcol}))
-            res["trend"] = (dcol, main_num, per)
+        if dcol:
+            s = df.dropna(subset=[dcol]).copy()
+            if not s.empty:
+                s["_periodo"] = s[dcol].dt.to_period("M").dt.to_timestamp()
+                per = (s.groupby("_periodo", as_index=False)[main_num].sum()
+                         .rename(columns={"_periodo": dcol}))
+                res["trend"] = (dcol, main_num, per)
 
+    elif cat:
+        # --- MODALITÀ SENZA MISURA: conteggi e distribuzioni ---
+        vc = df[cat].value_counts().head(10)
+        res["top"] = (cat, "conteggio", pd.DataFrame({cat: vc.index, "conteggio": vc.values}))
+
+        if dcol:
+            s = df.dropna(subset=[dcol]).copy()
+            if not s.empty:
+                s["_periodo"] = s[dcol].dt.to_period("M").dt.to_timestamp()
+                per = s.groupby("_periodo").size().reset_index(name="conteggio") \
+                       .rename(columns={"_periodo": dcol})
+                res["trend"] = (dcol, "conteggio", per)
+
+    res["measure"] = main_num
+    res["category"] = cat
     res["text"] = _insights_text(df, res)
     return res
 

@@ -4,8 +4,8 @@ import os
 import pandas as pd
 import streamlit as st
 
-from core.loader import (load_dataset, read_any, profile, analyze,
-                         measure_columns, best_category, SUPPORTED_EXTENSIONS)
+from core.loader import (load_dataset, read_any, profile, analyze, measure_columns,
+                         best_category, category_columns, SUPPORTED_EXTENSIONS)
 from core.utils import fmt_num
 from core.agent import DataAgent
 from core import executor as ex
@@ -260,24 +260,45 @@ if df is None:
 
 st.caption(f"{source_label} — {fmt_num(len(df))} righe · {df.shape[1]} colonne")
 
-# --- Riga di KPI (numeri utili in un report, non metadati) ---
-measures = measure_columns(df)
-priorita = [c for c in ["Sales", "Profit", "Revenue", "Amount", "Total"] if c in measures]
-ordinate = priorita + [c for c in measures if c not in priorita]
-main_measure = ordinate[0] if ordinate else None
-cat = best_category(df)
+# --- Selettori del report (sidebar): misura e categoria, con default euristico ---
+_measures = measure_columns(df)
+_priorita = [c for c in ["Sales", "Profit", "Revenue", "Amount", "Total"] if c in _measures]
+_ordinate = _priorita + [c for c in _measures if c not in _priorita]
+_cats = category_columns(df)
+with st.sidebar:
+    st.divider()
+    st.subheader("Report")
+    if _ordinate:
+        sel_measure = st.selectbox("Misura", _ordinate, index=0,
+                                   help="La colonna numerica su cui basare KPI e classifiche.")
+    else:
+        sel_measure = None
+        st.caption("Nessuna colonna numerica: report a conteggi.")
+    if _cats:
+        _def_cat = best_category(df)
+        _cat_idx = _cats.index(_def_cat) if _def_cat in _cats else 0
+        sel_category = st.selectbox("Categoria", _cats, index=_cat_idx,
+                                    help="La dimensione per classifiche e filtri.")
+    else:
+        sel_category = None
 
+# --- Riga di KPI (adattivi: misure oppure conteggi) ---
 kpis = []  # (label, value, sub, tick, small)
-if main_measure:
-    s = df[main_measure]
-    kpis.append((f"Totale {main_measure}", fmt_num(s.sum()), "", "#0e7c86", False))
-    kpis.append((f"Media {main_measure}", fmt_num(s.mean()), "", "#eda100", False))
-    kpis.append((f"Massimo {main_measure}", fmt_num(s.max()), "", "#2a78d6", False))
-    if cat:
-        leader = df.groupby(cat)[main_measure].sum().sort_values(ascending=False)
-        kpis.append((f"Top {cat}", str(leader.index[0]), fmt_num(leader.iloc[0]), "#008300", True))
+if sel_measure:
+    s = df[sel_measure]
+    kpis.append((f"Totale {sel_measure}", fmt_num(s.sum()), "", "#0e7c86", False))
+    kpis.append((f"Media {sel_measure}", fmt_num(s.mean()), "", "#eda100", False))
+    kpis.append((f"Massimo {sel_measure}", fmt_num(s.max()), "", "#2a78d6", False))
+    if sel_category:
+        leader = df.groupby(sel_category)[sel_measure].sum().sort_values(ascending=False)
+        kpis.append((f"Top {sel_category}", str(leader.index[0]), fmt_num(leader.iloc[0]), "#008300", True))
     else:
         kpis.append(("Record", fmt_num(len(df)), "", "#008300", False))
+elif sel_category:  # nessuna misura: KPI a conteggi
+    vc = df[sel_category].value_counts()
+    kpis.append(("Record", fmt_num(len(df)), "", "#2a78d6", False))
+    kpis.append((f"{sel_category} distinte", fmt_num(df[sel_category].nunique()), "", "#eda100", False))
+    kpis.append((f"Top {sel_category}", str(vc.index[0]), f"{fmt_num(vc.iloc[0])} record", "#008300", True))
 else:
     kpis.append(("Record", fmt_num(len(df)), "", "#2a78d6", False))
     kpis.append(("Colonne", str(df.shape[1]), "", "#008300", False))
@@ -292,23 +313,27 @@ st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 with st.expander("Anteprima dei dati (prime 10 righe)"):
     st.dataframe(df.head(10), use_container_width=True)
 
-# --- Report iniziale sui dati (rigenerato al cambio di dataset per CONTENUTO) ---
+# --- Report iniziale sui dati ---
 try:
     content_hash = int(pd.util.hash_pandas_object(df, index=False).sum())
 except Exception:
     content_hash = None
 dataset_sig = (source_label, df.shape, tuple(df.columns), content_hash)
 
+# Cambio di sorgente dati -> nuova conversazione + profilo
 if st.session_state.get("dataset_sig") != dataset_sig:
     st.session_state.dataset_sig = dataset_sig
-    st.session_state.messages = []  # nuova sorgente dati -> nuova conversazione
+    st.session_state.messages = []
+    st.session_state.profile = profile(df)
 
+# Report vero e proprio: rigenerato anche al cambio di misura/categoria selezionate
+report_sig = (dataset_sig, sel_measure, sel_category)
+if st.session_state.get("report_sig") != report_sig:
+    st.session_state.report_sig = report_sig
     with st.spinner("Analisi del dataset in corso..."):
-        st.session_state.profile = profile(df)
-        insights = analyze(df)
+        insights = analyze(df, measure=sel_measure, category=sel_category)
         st.session_state.insights = insights
 
-        # Grafici del report
         top_fig = trend_fig = None
         if "top" in insights:
             _, _, top_df = insights["top"]
@@ -328,7 +353,7 @@ if st.session_state.get("dataset_sig") != dataset_sig:
 insights = st.session_state.get("insights", {})
 
 # Narrativa AI: rigenerata anche al cambio di provider/modello o del toggle spiegazioni
-overview_sig = (dataset_sig, spiega_ai, provider, model_name)
+overview_sig = (report_sig, spiega_ai, provider, model_name)
 if st.session_state.get("overview_sig") != overview_sig:
     st.session_state.overview_sig = overview_sig
     if spiega_ai and insights.get("text"):
@@ -392,7 +417,11 @@ if top_fig is not None or trend_fig is not None:
                 s = df[mask].dropna(subset=[dcol]).copy()
                 if not s.empty:
                     s["_p"] = s[dcol].dt.to_period("M").dt.to_timestamp()
-                    sub = s.groupby("_p", as_index=False)[num].sum().rename(columns={"_p": dcol})
+                    if insights.get("measure"):  # somma della misura
+                        sub = s.groupby("_p", as_index=False)[num].sum().rename(columns={"_p": dcol})
+                    else:  # nessuna misura: conteggio record
+                        sub = (s.groupby("_p").size().reset_index(name=num)
+                                .rename(columns={"_p": dcol}))
 
             if sub is not None:
                 st.markdown(f"**Andamento di {num} — {cat}: {selected_cat}**")
