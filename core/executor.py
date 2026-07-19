@@ -110,7 +110,23 @@ def to_chart(res, kind: str = "bar"):
         raise ValueError("Servono almeno due colonne (una per x e una per y) per creare un grafico.")
 
     x, y = data.columns[0], data.columns[1]
-    fig = px.line(data, x=x, y=y, markers=True) if kind == "line" else px.bar(data, x=x, y=y)
+
+    if kind == "line":
+        return apply_theme(px.line(data, x=x, y=y, markers=True))
+
+    # Barre: ordina e limita; se le etichette sono lunghe o numerose usa l'orizzontale
+    # (nomi leggibili sull'asse y) invece di etichette ruotate e illeggibili.
+    try:
+        data = data.sort_values(y, ascending=False)
+    except Exception:
+        pass
+    etichette = data[x].astype(str)
+    lunghe = bool(len(etichette)) and etichette.str.len().max() > 16
+    if lunghe or len(data) > 12:
+        data = data.head(15).sort_values(y, ascending=True)  # orizzontale: max in alto
+        fig = px.bar(data, x=y, y=x, orientation="h")
+    else:
+        fig = px.bar(data, x=x, y=y)
     return apply_theme(fig)
 
 

@@ -127,6 +127,7 @@ def inject_css(dark: bool):
               background: {c['surface']}; border: 1px solid {c['border']};
               border-radius: 14px; padding: 15px 18px 14px;
               box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 10px 26px -20px rgba(0,0,0,0.35);
+              min-height: 118px; height: 100%;
           }}
           .readout .r-k {{ font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em;
               text-transform: uppercase; color: {c['ink2']}; }}

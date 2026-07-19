@@ -163,13 +163,28 @@ def best_category(df: pd.DataFrame):
     return _best_category(df, cat_cols)
 
 
+# Gruppi di dimensioni "interessanti" per un report, in ordine di priorità
+_CAT_PRIORITY_GROUPS = [
+    r'(region|zona|area|country|paese|nazion|state|stato|provinc|city|citt|geo)',   # geografico
+    r'(category|categoria|segment|segmento|type|tipo|reparto|brand|marca|settore)',  # business
+]
+
+
 def _best_category(df: pd.DataFrame, cat_cols: list):
-    """Sceglie una colonna categoriale con cardinalità utile per un raggruppamento."""
+    """
+    Sceglie una colonna categoriale con cardinalità utile per un raggruppamento,
+    preferendo dimensioni interessanti (geografiche, poi di business) in base al nome.
+    """
     coppie = [(c, df[c].nunique(dropna=True)) for c in cat_cols]
     buone = [c for c, u in coppie if 2 <= u <= 30]
-    if buone:
-        return buone[0]
-    return min(coppie, key=lambda t: t[1])[0] if coppie else None
+    if not buone:
+        return min(coppie, key=lambda t: t[1])[0] if coppie else None
+    for pattern in _CAT_PRIORITY_GROUPS:
+        rx = re.compile(pattern, re.I)
+        for c in buone:
+            if rx.search(str(c)):
+                return c
+    return buone[0]
 
 
 def analyze(df: pd.DataFrame) -> dict:
