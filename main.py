@@ -286,6 +286,8 @@ kpi_cols = st.columns(len(kpis))
 for _col, (_lab, _val, _sub, _tick, _small) in zip(kpi_cols, kpis):
     readout(_col, _lab, _val, sub=_sub, tick=_tick, small=_small)
 
+st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+
 # --- Anteprima dati ---
 with st.expander("Anteprima dei dati (prime 10 righe)"):
     st.dataframe(df.head(10), use_container_width=True)
@@ -355,6 +357,9 @@ if "numeric_stats" in insights:
 top_fig = st.session_state.get("top_fig")
 trend_fig = st.session_state.get("trend_fig")
 if top_fig is not None or trend_fig is not None:
+    if top_fig is not None and trend_fig is not None:
+        st.caption("Clicca una barra della classifica per filtrare l'andamento; "
+                   "ri-clicca la stessa barra per togliere il filtro.")
     graf_cols = st.columns(2 if (top_fig is not None and trend_fig is not None) else 1)
     idx = 0
     selected_cat = None
@@ -363,7 +368,6 @@ if top_fig is not None or trend_fig is not None:
         cat, num, _ = insights["top"]
         with graf_cols[idx]:
             st.markdown(f"**Classifica: {num} per {cat}**")
-            st.caption("Clicca una barra per filtrare l'andamento qui a fianco.")
             event = st.plotly_chart(apply_theme(top_fig), use_container_width=True,
                                     on_select="rerun", key="report_top")
             try:
