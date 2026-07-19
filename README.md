@@ -17,11 +17,11 @@ classifiche e andamento temporale dei dati.
 
 ## Cosa fa
 
-- 📊 Domande in italiano → codice Pandas → grafici **Plotly** interattivi
-- 🧠 Multi-provider LLM: **Ollama** (locale), **Groq**, **Anthropic**, **OpenAI**, **Gemini**
-- 📁 Carica **CSV, Excel (.xlsx) o JSON** — si adatta a qualsiasi schema
-- 📋 Report iniziale automatico + risposta testuale a ogni domanda
-- 🌙 Tema chiaro/scuro
+- Domande in italiano → codice Pandas → grafici **Plotly** interattivi
+- Multi-provider LLM: **Ollama** (locale), **Groq**, **Anthropic**, **OpenAI**, **Gemini**
+- Carica **CSV, Excel (.xlsx) o JSON** — si adatta a qualsiasi schema
+- Report iniziale automatico con statistiche, classifiche e andamento temporale
+- Risposta testuale a ogni domanda che interpreta il risultato
 
 ## Esegui il progetto in locale
 
@@ -50,7 +50,7 @@ pip install -r requirements.txt
 **Opzione B — Provider cloud (API key)**
 - Scegli **Groq**, **Anthropic**, **OpenAI** o **Gemini** dalla barra laterale e
   incolla la tua API key (oppure copia `.env.example` in `.env` e inseriscila lì).
-- 💡 **Groq** ha una chiave gratuita (senza carta) su <https://console.groq.com/keys>.
+- **Groq** ha una chiave gratuita (senza carta) su <https://console.groq.com/keys>.
 
 ### 4. Avvia
 ```bash

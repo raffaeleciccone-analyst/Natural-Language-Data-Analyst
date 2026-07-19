@@ -3,7 +3,7 @@ import os
 import json
 import re
 
-from core.utils import column_kind
+from core.utils import column_kind, fmt_num
 
 # Estensioni file supportate per l'upload
 SUPPORTED_EXTENSIONS = ["csv", "xlsx", "xls", "json"]
@@ -109,15 +109,15 @@ def profile(df: pd.DataFrame) -> pd.DataFrame:
 
 def _insights_text(df: pd.DataFrame, res: dict) -> str:
     """Costruisce un riepilogo testuale dei NUMERI calcolati, per l'LLM."""
-    lines = [f"Righe totali: {len(df)}."]
+    lines = [f"Righe totali: {fmt_num(len(df))}."]
     if "numeric_stats" in res:
         lines.append("Statistiche delle colonne numeriche:")
         for _, r in res["numeric_stats"].iterrows():
-            lines.append(f"  - {r['Colonna']}: somma {r['Somma']:.2f}, media {r['Media']:.2f}, "
-                         f"min {r['Minimo']:.2f}, max {r['Massimo']:.2f}")
+            lines.append(f"  - {r['Colonna']}: somma {fmt_num(r['Somma'])}, media {fmt_num(r['Media'])}, "
+                         f"min {fmt_num(r['Minimo'])}, max {fmt_num(r['Massimo'])}")
     if "top" in res:
         cat, num, top = res["top"]
-        parti = ", ".join(f"{row[cat]}={row[num]:.2f}" for _, row in top.head(5).iterrows())
+        parti = ", ".join(f"{row[cat]}={fmt_num(row[num])}" for _, row in top.head(5).iterrows())
         lines.append(f"Classifica di {num} per {cat} (primi 5): {parti}.")
     if "trend" in res:
         dcol, num, per = res["trend"]
@@ -125,8 +125,8 @@ def _insights_text(df: pd.DataFrame, res: dict) -> str:
             best = per.loc[per[num].idxmax()]
             worst = per.loc[per[num].idxmin()]
             lines.append(f"Andamento di {num} nel tempo: periodo migliore "
-                         f"{best[dcol].date()}={best[num]:.2f}, peggiore "
-                         f"{worst[dcol].date()}={worst[num]:.2f}.")
+                         f"{best[dcol].date()}={fmt_num(best[num])}, peggiore "
+                         f"{worst[dcol].date()}={fmt_num(worst[num])}.")
     return "\n".join(lines)
 
 

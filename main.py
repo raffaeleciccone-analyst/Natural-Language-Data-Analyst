@@ -6,6 +6,7 @@ import streamlit as st
 
 from core.loader import (load_dataset, read_any, profile, analyze,
                          measure_columns, SUPPORTED_EXTENSIONS)
+from core.utils import fmt_num
 from core.agent import DataAgent
 from core import executor as ex
 from core.executor import (execute_pandas_code, is_plotly_figure,
@@ -42,10 +43,10 @@ DEMO_MAX_QUESTIONS = int(_secret("DEMO_MAX_QUESTIONS", "15") or "15")
 
 # --- Sidebar: configurazione (letta prima di applicare il tema) ---
 with st.sidebar:
-    st.header("⚙️ Configurazione")
+    st.header("Configurazione")
 
     dark_mode = False  # tema scuro disattivato: Streamlit non theme-a i widget nativi via CSS
-    spiega_ai = st.toggle("💡 Spiegazione AI", value=True,
+    spiega_ai = st.toggle("Spiegazione AI", value=True,
                           help="Genera una risposta testuale che interpreta il risultato.")
 
     st.divider()
@@ -54,7 +55,7 @@ with st.sidebar:
         provider = _secret("PROVIDER", "groq").strip().lower()
         model_name = _secret("MODEL", DEFAULT_MODELS.get(provider, ""))
         api_key = _secret(_KEY_ENV.get(provider, ""), "")
-        st.success(f"🚀 Demo pubblica · **{provider}** · `{model_name}`")
+        st.success(f"Demo pubblica · **{provider}** · `{model_name}`")
         st.caption(f"Limite: {DEMO_MAX_QUESTIONS} domande per sessione. "
                    "Clona il repo per uso illimitato e per usare Ollama in locale.")
     else:
@@ -163,7 +164,21 @@ def inject_css(dark: bool):
               border-radius: 14px; padding: 6px 14px;
           }}
           .stExpander {{ border-radius: 12px; border: 1px solid {c['border']}; }}
-          [data-testid="stChatInput"] textarea {{ font-family: var(--sans); }}
+          /* Barra domande: integrata, allineata alla colonna, non un blocco estraneo */
+          [data-testid="stChatInput"] {{
+              background: {c['page']}; border-top: 1px solid {c['border']};
+          }}
+          [data-testid="stChatInput"] > div {{ max-width: 1150px; margin-inline: auto; }}
+          [data-testid="stChatInput"] textarea {{ font-family: var(--sans); color: {c['ink']}; }}
+          [data-testid="stChatInput"] [data-baseweb="textarea"],
+          [data-testid="stChatInput"] [data-baseweb="base-input"] {{
+              background: {c['surface']} !important;
+              border: 1px solid {c['strong']} !important;
+              border-radius: 12px !important;
+          }}
+          [data-testid="stChatInput"] [data-baseweb="textarea"]:focus-within {{
+              border-color: {c['accent']} !important;
+          }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -213,7 +228,7 @@ def get_agent(provider: str, model_name: str, api_key: str) -> DataAgent:
 agent = get_agent(provider, model_name, api_key)
 
 # --- Header ---
-st.title("📊 AI Data Analyst Assistant")
+st.title("AI Data Analyst Assistant")
 st.markdown(
     f"<p class='app-subtitle'>Interroga i tuoi dati in linguaggio naturale — "
     f"provider attivo: <b>{html.escape(provider)}</b> · "
@@ -238,25 +253,25 @@ else:
         df = None
 
 if df is None:
-    st.info("👈 Carica un file CSV dalla barra laterale per iniziare.")
+    st.info("Carica un file CSV dalla barra laterale per iniziare.")
     st.stop()
 
-st.caption(f"📁 {source_label} — {len(df):,} righe · {df.shape[1]} colonne")
+st.caption(f"{source_label} — {fmt_num(len(df))} righe · {df.shape[1]} colonne")
 
 # --- Riga di KPI (readout in stile console) ---
 kpi_cols = st.columns(4)
-readout(kpi_cols[0], "Righe", f"{len(df):,}", tick="#2a78d6")
-readout(kpi_cols[1], "Colonne", f"{df.shape[1]}", tick="#008300")
+readout(kpi_cols[0], "Righe", fmt_num(len(df)), tick="#2a78d6")
+readout(kpi_cols[1], "Colonne", str(df.shape[1]), tick="#008300")
 # Colonne-misura reali (identificatori come Row ID / CAP esclusi), senza duplicati.
 measures = measure_columns(df)
 priorita = [c for c in ["Sales", "Profit", "Revenue", "Amount", "Total"] if c in measures]
 ordinate = priorita + [c for c in measures if c not in priorita]
 _kpi_ticks = ["#0e7c86", "#eda100"]
 for i, (slot, col) in enumerate(zip(kpi_cols[2:], ordinate[:2])):
-    readout(slot, f"Totale {col}", f"{df[col].sum():,.0f}", tick=_kpi_ticks[i])
+    readout(slot, f"Totale {col}", fmt_num(df[col].sum()), tick=_kpi_ticks[i])
 
 # --- Anteprima dati ---
-with st.expander("👀 Anteprima dei dati (prime 10 righe)"):
+with st.expander("Anteprima dei dati (prime 10 righe)"):
     st.dataframe(df.head(10), use_container_width=True)
 
 # --- Report iniziale sui dati (rigenerato al cambio di dataset per CONTENUTO) ---
@@ -305,16 +320,20 @@ if st.session_state.get("overview_sig") != overview_sig:
         st.session_state.overview_text = None
 
 st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
-st.subheader("📋 Report iniziale sui dati")
+st.subheader("Report iniziale sui dati")
 
 # Narrativa AI con i numeri chiave
 if st.session_state.get("overview_text"):
-    answer_card("📊 Sintesi dei dati", st.session_state.overview_text)
+    answer_card("Sintesi dei dati", st.session_state.overview_text)
 
-# Statistiche numeriche
+# Statistiche numeriche (numeri formattati in modo leggibile)
 if "numeric_stats" in insights:
     st.markdown("**Statistiche delle colonne numeriche**")
-    st.dataframe(insights["numeric_stats"], use_container_width=True, hide_index=True)
+    stats_disp = insights["numeric_stats"].copy()
+    for _c in ["Somma", "Media", "Minimo", "Massimo"]:
+        if _c in stats_disp.columns:
+            stats_disp[_c] = stats_disp[_c].map(fmt_num)
+    st.dataframe(stats_disp, use_container_width=True, hide_index=True)
 
 # Grafici: classifica principale e andamento temporale
 top_fig = st.session_state.get("top_fig")
@@ -334,18 +353,18 @@ if top_fig is not None or trend_fig is not None:
             st.markdown(f"**Andamento di {num} nel tempo**")
             st.plotly_chart(apply_theme(trend_fig), use_container_width=True)
 
-with st.expander("🔎 Struttura delle colonne (tipi, mancanti, valori)"):
+with st.expander("Struttura delle colonne (tipi, mancanti, valori)"):
     st.dataframe(st.session_state.get("profile"), use_container_width=True, hide_index=True)
 
 st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
-st.subheader("💬 Fai una domanda ai tuoi dati")
+st.subheader("Fai una domanda ai tuoi dati")
 
 
 # --- Rendering di un risultato ---
 def render_result(code: str, result, explanation: str | None = None):
     # 1. Risposta testuale (in un riquadro dedicato)
     if explanation:
-        answer_card("📝 Risposta", explanation)
+        answer_card("Risposta", explanation)
 
     # 2. Risultato visuale
     if is_plotly_figure(result):
@@ -357,14 +376,14 @@ def render_result(code: str, result, explanation: str | None = None):
     elif isinstance(result, str) and result.startswith("Errore"):
         st.error(result)
     elif isinstance(result, (int, float)):
-        st.metric("Risultato", f"{result:,.2f}" if isinstance(result, float) else f"{result:,}")
+        st.metric("Risultato", fmt_num(result))
     elif isinstance(result, str) and "Grafico generato" in result:
         st.success(result)
     else:
         st.info(f"**Risultato:** {result}")
 
     # 3. Codice generato (in fondo, collassato)
-    with st.expander("⚙️ Codice Pandas generato"):
+    with st.expander("Codice Pandas generato"):
         st.code(code, language="python")
 
 
@@ -391,7 +410,7 @@ prompt = st.chat_input("Es. 'Qual è il mese con più vendite?' oppure 'Mostrami
 if prompt and prompt.strip() and DEMO_MODE and \
         st.session_state.get("_demo_q", 0) >= DEMO_MAX_QUESTIONS:
     st.warning(f"Hai raggiunto il limite della demo ({DEMO_MAX_QUESTIONS} domande). "
-               "Clona il repo da GitHub per uso illimitato. Grazie per aver provato! 🙌")
+               "Clona il repo da GitHub per uso illimitato. Grazie per aver provato.")
     prompt = None
 
 if prompt and prompt.strip():
@@ -431,7 +450,7 @@ if prompt and prompt.strip():
                 codice = wrap_chart(agent.fix_code(domanda, df, codice, risultato))
                 risultato = execute_pandas_code(codice, df)
         if tentativo and not (isinstance(risultato, str) and risultato.startswith("Errore")):
-            st.caption(f"✅ Codice corretto automaticamente dopo {tentativo} tentativo/i.")
+            st.caption(f"Codice corretto automaticamente dopo {tentativo} tentativo/i.")
 
         # Spiegazione testuale (seconda chiamata LLM), se abilitata e il calcolo è andato a buon fine
         spiegazione = None

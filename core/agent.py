@@ -130,7 +130,8 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
             "Scrivi in italiano una panoramica introduttiva chiara e utile (4-6 frasi): "
             "di cosa parlano i dati, quali sono le colonne principali e il loro significato, "
             "e 2-3 spunti di analisi interessanti che l'utente potrebbe esplorare. "
-            "NON mostrare codice."
+            "NON mostrare codice. Scrivi i numeri in modo leggibile, con separatore "
+            "delle migliaia (es. 2.261.537, non 2261536.78) e al massimo due decimali."
         )
         user_prompt = (
             f"Profilo del dataset:\n{dataset_summary}\n\n"
@@ -151,7 +152,8 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
             "chiaro e conciso (massimo 3-4 frasi). Interpreta il risultato dei dati "
             "per rispondere direttamente alla domanda dell'utente, citando i numeri "
             "chiave. NON mostrare codice e NON descrivere il procedimento tecnico: "
-            "spiega solo cosa dicono i dati."
+            "spiega solo cosa dicono i dati. Scrivi i numeri in modo leggibile, con "
+            "separatore delle migliaia (es. 2.261.537) e al massimo due decimali."
         )
         user_prompt = (
             f"Domanda dell'utente:\n{user_question}\n\n"
