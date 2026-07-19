@@ -170,6 +170,15 @@ def corr_heatmap(corr):
     return fig
 
 
+def histogram(df, col, nbins: int = 30):
+    """Distribuzione (istogramma) di una colonna numerica."""
+    if not _PLOTLY_OK:
+        raise RuntimeError("Plotly non è installato (pip install plotly).")
+    fig = px.histogram(df, x=col, nbins=nbins)
+    fig.update_layout(bargap=0.05, yaxis_title="record")
+    return apply_theme(fig)
+
+
 def _fig_summary(fig, max_rows: int = 30) -> str:
     righe = []
     for trace in fig.data:
