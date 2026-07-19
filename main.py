@@ -288,7 +288,15 @@ with st.sidebar:
         sel_category = None
     unit = st.text_input("Unità di misura (opzionale)", value="",
                          placeholder="es. €, kg, %, unità",
-                         help="Mostrata accanto ai valori nei KPI e nelle risposte.").strip()
+                         help="Mostrata accanto ai valori nei KPI e nelle risposte. "
+                              "Per misure economiche senza unità si usa $ come standard.").strip()
+
+# Dataset economico senza unità indicata dall'utente → dollaro come standard.
+_ECON_HINTS = ("sales", "revenue", "profit", "amount", "price", "cost", "income",
+               "expense", "budget", "margin", "fatturato", "vendite", "ricavi",
+               "costo", "prezzo", "importo", "spesa", "utile", "margine", "incasso")
+if not unit and sel_measure and any(h in sel_measure.lower() for h in _ECON_HINTS):
+    unit = "$"
 
 
 def _wu(v) -> str:
