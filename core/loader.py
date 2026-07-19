@@ -131,6 +131,10 @@ def _insights_text(df: pd.DataFrame, res: dict) -> str:
         parti = ", ".join(f"{a}–{b} (r={r:.2f})" for a, b, r in res["corr_pairs"][:3])
         lines.append(f"Correlazioni più forti tra le misure: {parti}. "
                      "(Correlazione, non causa.)")
+    if res.get("findings"):
+        lines.append("Osservazioni automatiche (già calcolate, da NON ricalcolare):")
+        for f in res["findings"]:
+            lines.append(f"  - {f}")
     return "\n".join(lines)
 
 
@@ -249,6 +253,51 @@ def _correlations(df: pd.DataFrame, measures: list, soglia: float = 0.6):
     return corr, coppie
 
 
+def _findings(df: pd.DataFrame, res: dict, main_num) -> list:
+    """
+    Osservazioni automatiche calcolate in Pandas (numeri, MAI dedotti dall'LLM):
+    quota del leader, crescita di periodo, variazione recente, outlier. Ritorna
+    una lista di frasi pronte da mostrare e da passare alla narrazione.
+    """
+    out = []
+    if not main_num:
+        return out
+
+    tot = df[main_num].sum()
+    if "top" in res and tot:
+        cat, num, top = res["top"]
+        if len(top):
+            lead = top.iloc[0]
+            out.append(f"{lead[cat]} da solo pesa il {fmt_num(lead[num] / tot * 100)}% "
+                       f"del totale di {num}.")
+
+    if "trend" in res:
+        _, num, per = res["trend"]
+        col = per[num]
+        if len(col) >= 2:
+            first, last, prev = col.iloc[0], col.iloc[-1], col.iloc[-2]
+            if first:
+                g = (last - first) / abs(first) * 100
+                out.append(f"Dal primo all'ultimo periodo {num} è "
+                           f"{'in crescita' if g >= 0 else 'in calo'} del {fmt_num(abs(g))}%.")
+            if prev:
+                g2 = (last - prev) / abs(prev) * 100
+                out.append(f"Nell'ultimo periodo {num} è {'salito' if g2 >= 0 else 'sceso'} "
+                           f"del {fmt_num(abs(g2))}% rispetto al precedente.")
+
+    s = df[main_num].dropna()
+    if len(s) >= 20:
+        q1, q3 = s.quantile(0.25), s.quantile(0.75)
+        iqr = q3 - q1
+        if iqr > 0:
+            soglia = q3 + 1.5 * iqr
+            n_out = int((s > soglia).sum())
+            if n_out:
+                out.append(f"{fmt_num(n_out)} record hanno {main_num} molto sopra la norma "
+                           f"(oltre {fmt_num(soglia)}): possibili picchi da verificare.")
+    return out
+
+
 def analyze(df: pd.DataFrame, measure=None, category=None) -> dict:
     """
     Calcola insight quantitativi sul CONTENUTO del dataset, adattandosi alla sua
@@ -294,6 +343,11 @@ def analyze(df: pd.DataFrame, measure=None, category=None) -> dict:
             per = monthly_trend(df, dcol)
             if per is not None:
                 res["trend"] = (dcol, "conteggio", per)
+
+    # Osservazioni automatiche deterministiche (per narrazione e card UI)
+    findings = _findings(df, res, main_num)
+    if findings:
+        res["findings"] = findings
 
     # Correlazioni tra misure (indipendenti dalla modalità)
     corr, coppie = _correlations(df, measures)

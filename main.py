@@ -304,6 +304,11 @@ st.subheader("Report iniziale sui dati")
 if st.session_state.get("overview_text"):
     answer_card("Sintesi dei dati", st.session_state.overview_text)
 
+# Insight automatici (numeri calcolati in Pandas, non dedotti dall'AI)
+if insights.get("findings"):
+    st.markdown("**Insight automatici**")
+    st.markdown("\n".join(f"- {f}" for f in insights["findings"]))
+
 # Statistiche numeriche (numeri formattati in modo leggibile)
 if "numeric_stats" in insights:
     st.markdown("**Statistiche delle colonne numeriche**")
