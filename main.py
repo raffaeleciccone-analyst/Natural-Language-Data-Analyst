@@ -127,7 +127,7 @@ def inject_css(dark: bool):
               background: {c['surface']}; border: 1px solid {c['border']};
               border-radius: 14px; padding: 15px 18px 14px;
               box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 10px 26px -20px rgba(0,0,0,0.35);
-              min-height: 118px; height: 100%;
+              height: 120px; overflow: hidden;
           }}
           .readout .r-k {{ font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em;
               text-transform: uppercase; color: {c['ink2']}; }}
@@ -135,7 +135,7 @@ def inject_css(dark: bool):
               letter-spacing: -0.02em; margin-top: 7px; line-height: 1;
               font-variant-numeric: tabular-nums; color: {c['ink']}; }}
           .readout .r-v.sm {{ font-size: 1.1rem; line-height: 1.2; margin-top: 12px;
-              word-break: break-word; }}
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
           .readout .r-tick {{ height: 6px; margin-top: 12px; border-radius: 2px;
               background: linear-gradient(90deg, var(--bar,{c['accent']}) 60%, {c['border']} 60%); }}
           .readout .r-sub {{ font-family: var(--mono); font-size: 0.7rem; color: {c['muted']}; margin-top: 8px; }}
@@ -200,7 +200,9 @@ def answer_card(label: str, text: str):
 
 def readout(col, label: str, value: str, sub: str = "", tick: str = "#0e7c86", small: bool = False):
     """Card KPI in stile 'console': valore monospazio + tacca colorata."""
-    sub_html = f"<div class='r-sub'>{html.escape(sub)}</div>" if sub else ""
+    # Il sotto-valore è SEMPRE presente (vuoto = spazio riservato) così le card
+    # hanno tutte la stessa altezza.
+    sub_html = f"<div class='r-sub'>{html.escape(sub) if sub else '&nbsp;'}</div>"
     cls = "r-v sm" if small else "r-v"
     col.markdown(
         f"<div class='readout'>"

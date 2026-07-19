@@ -70,9 +70,31 @@ def is_plotly_figure(obj) -> bool:
     return (type(obj).__module__ or "").startswith("plotly.")
 
 
+def _make_bars_readable(fig):
+    """
+    Rende leggibili i grafici a barre con etichette lunghe: converte in ORIZZONTALE
+    (nomi sull'asse y) invece di lasciarli verticali con testo ruotato. Idempotente.
+    Vale per qualsiasi figura, anche se il modello ha usato px.bar a modo suo.
+    """
+    flipped = False
+    for tr in fig.data:
+        if getattr(tr, "type", None) != "bar" or getattr(tr, "orientation", None) == "h":
+            continue
+        xs = list(tr.x) if tr.x is not None else []
+        if xs and all(isinstance(v, str) for v in xs) and max((len(v) for v in xs), default=0) > 16:
+            tr.x, tr.y = tr.y, tr.x
+            tr.orientation = "h"
+            flipped = True
+    if flipped:  # scambia i titoli degli assi per coerenza
+        xt = fig.layout.xaxis.title.text
+        yt = fig.layout.yaxis.title.text
+        fig.layout.xaxis.title.text, fig.layout.yaxis.title.text = yt, xt
+
+
 def apply_theme(fig):
     """Applica il tema visuale coerente (colori, griglia, tipografia) a una figura Plotly."""
     t = _THEMES["dark" if _DARK else "light"]
+    _make_bars_readable(fig)
     fig.update_layout(
         colorway=t["colorway"],
         paper_bgcolor=t["surface"],
@@ -85,7 +107,8 @@ def apply_theme(fig):
         hoverlabel=dict(font_size=13, font_family=_FONT_MONO),
     )
     axis_style = dict(gridcolor=t["grid"], zerolinecolor=t["axis"], linecolor=t["axis"],
-                      tickfont=dict(color=t["secondary"], family=_FONT_MONO, size=11))
+                      tickfont=dict(color=t["secondary"], family=_FONT_MONO, size=11),
+                      automargin=True)  # riserva spazio per le etichette (niente tagli)
     fig.update_xaxes(**axis_style)
     fig.update_yaxes(**axis_style)
     return fig
