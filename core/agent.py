@@ -210,3 +210,32 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
             return self.provider.generate(system_prompt, user_prompt).strip()
         except Exception as e:
             return f"_(Impossibile generare la spiegazione: {e})_"
+
+    def executive_report(self, insights_summary: str) -> str:
+        """
+        Genera un report esecutivo in markdown a partire dai NUMERI già calcolati.
+        Il modello scrive solo la narrazione: non deve calcolare né inventare numeri.
+        """
+        system_prompt = (
+            "Sei un analista dati senior. Ti vengono forniti insight GIÀ CALCOLATI su "
+            "un dataset. Scrivi in italiano un report esecutivo in Markdown con "
+            "ESATTAMENTE queste sezioni, nell'ordine, ciascuna come intestazione '## ':\n"
+            "## Executive Summary\n## Key Insights\n## Business Recommendations\n"
+            "## Possible Risks\n## Next Steps\n\n"
+            "REGOLE TASSATIVE:\n"
+            "- Usa SOLO i numeri presenti nell'input; non calcolarne di nuovi e non "
+            "inventarne. Se un dato non c'è, non citarlo.\n"
+            "- Executive Summary e Key Insights: affermativi, basati sui numeri.\n"
+            "- Business Recommendations e Possible Risks: formulali come IPOTESI basate "
+            "solo sui dati caricati (usa 'potrebbe', 'suggerisce'), mai come certezze; "
+            "ricorda che correlazione non è causa.\n"
+            "- Niente codice, niente tabelle grezze. Frasi brevi, elenchi puntati dove utile."
+        )
+        user_prompt = (
+            f"Insight calcolati sul dataset:\n{insights_summary}\n\n"
+            "Scrivi il report esecutivo in Markdown con le cinque sezioni richieste."
+        )
+        try:
+            return self.provider.generate(system_prompt, user_prompt).strip()
+        except Exception as e:
+            return f"_(Impossibile generare il report: {e})_"

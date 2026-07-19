@@ -390,6 +390,37 @@ if corr_fig is not None:
 with st.expander("Struttura delle colonne (tipi, mancanti, valori)"):
     st.dataframe(st.session_state.get("profile"), use_container_width=True, hide_index=True)
 
+# --- Report esecutivo (l'AI narra gli insight GIÀ calcolati) ---
+st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
+st.subheader("Report esecutivo")
+st.caption("Executive Summary, Key Insights, Recommendations, Risks e Next Steps, "
+           "basati sui numeri calcolati dai dati caricati.")
+
+# Il report resta valido finché non cambiano dati, misura/categoria, provider o unità.
+exec_sig = (report_sig, provider, model_name, unit)
+if st.session_state.get("exec_report") and st.session_state.get("exec_report_sig") != exec_sig:
+    st.session_state.exec_report = None
+
+if st.button("Genera report esecutivo", disabled=not insights.get("text")):
+    if DEMO_MODE and st.session_state.get("_demo_q", 0) >= DEMO_MAX_QUESTIONS:
+        st.warning(f"Hai raggiunto il limite della demo ({DEMO_MAX_QUESTIONS} generazioni). "
+                   "Clona il repo da GitHub per uso illimitato.")
+    else:
+        if DEMO_MODE:
+            st.session_state["_demo_q"] = st.session_state.get("_demo_q", 0) + 1
+        _txt = insights["text"]
+        if unit:
+            _txt = f"L'unità di misura dei valori è '{unit}'.\n" + _txt
+        with st.spinner("L'AI sta redigendo il report esecutivo..."):
+            st.session_state.exec_report = agent.executive_report(_txt)
+            st.session_state.exec_report_sig = exec_sig
+
+if st.session_state.get("exec_report"):
+    with st.container(border=True):
+        st.markdown(st.session_state.exec_report)
+    st.download_button("Scarica il report (.md)", st.session_state.exec_report,
+                       file_name="report_esecutivo.md", mime="text/markdown")
+
 st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
 st.subheader("Fai una domanda ai tuoi dati")
 
