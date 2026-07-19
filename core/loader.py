@@ -2,11 +2,24 @@ import pandas as pd
 import os
 import json
 import re
+from typing import NamedTuple
 
 from core.utils import column_kind, fmt_num
 
 # Estensioni file supportate per l'upload
 SUPPORTED_EXTENSIONS = ["csv", "xlsx", "xls", "json"]
+
+
+class Grouped(NamedTuple):
+    """
+    Un aggregato del report. `key` è la colonna-chiave (categoria per la classifica,
+    data per l'andamento), `measure` la colonna di valori, `data` il DataFrame
+    [key, measure]. Essendo un NamedTuple resta spacchettabile come prima
+    (`k, m, d = grouped`) ma è leggibile via `.key` / `.measure` / `.data`.
+    """
+    key: str
+    measure: str
+    data: pd.DataFrame
 
 
 _DATE_HINT = re.compile(r'(date|data|time|giorno|mese|anno|timestamp|periodo|scadenza)', re.I)
@@ -272,6 +285,19 @@ def _correlations(df: pd.DataFrame, measures: list, soglia: float = 0.6):
     return corr, coppie
 
 
+def _last_period_partial(df: pd.DataFrame, dcol: str, per: pd.DataFrame) -> bool:
+    """
+    True se l'ultimo mese della serie non è coperto fino alla sua fine: i dati
+    arrivano prima dell'ultimo giorno del mese, quindi quel periodo è parziale.
+    """
+    try:
+        month_start = per[dcol].iloc[-1]
+        month_end = month_start + pd.offsets.MonthEnd(0)
+        return df[dcol].max() < month_end
+    except Exception:
+        return False
+
+
 def _findings(df: pd.DataFrame, res: dict, main_num) -> list:
     """
     Osservazioni automatiche calcolate in Pandas (numeri, MAI dedotti dall'LLM):
@@ -283,7 +309,7 @@ def _findings(df: pd.DataFrame, res: dict, main_num) -> list:
         return out
 
     tot = df[main_num].sum()
-    if "top" in res and len(res["top"][2]):
+    if "top" in res and len(res["top"].data):
         cat, num, top = res["top"]
         lead = top.iloc[0]
         # Solo con totale positivo e quota sensata (0-100%): con misure che possono
@@ -293,18 +319,21 @@ def _findings(df: pd.DataFrame, res: dict, main_num) -> list:
                        f"{fmt_num(lead[num] / tot * 100)}% del totale di {num}.")
 
     if "trend" in res:
-        _, num, per = res["trend"]
+        dcol, num, per = res["trend"]
         col = per[num]
         if len(col) >= 2:
             first, last, prev = col.iloc[0], col.iloc[-1], col.iloc[-2]
+            # L'ultimo mese può essere ancora in corso (dati fino a metà mese): in tal
+            # caso la variazione è gonfiata/sgonfiata e va segnalata come parziale.
+            nota = " (ultimo periodo parziale)" if _last_period_partial(df, dcol, per) else ""
             if first:
                 g = (last - first) / abs(first) * 100
                 out.append(f"Dal primo all'ultimo periodo {num} è "
-                           f"{'in crescita' if g >= 0 else 'in calo'} del {fmt_num(abs(g))}%.")
+                           f"{'in crescita' if g >= 0 else 'in calo'} del {fmt_num(abs(g))}%{nota}.")
             if prev:
                 g2 = (last - prev) / abs(prev) * 100
                 out.append(f"Nell'ultimo periodo {num} è {'salito' if g2 >= 0 else 'sceso'} "
-                           f"del {fmt_num(abs(g2))}% rispetto al precedente.")
+                           f"del {fmt_num(abs(g2))}% rispetto al precedente{nota}.")
 
     s = df[main_num].dropna()
     if len(s) >= 20:
@@ -349,22 +378,23 @@ def analyze(df: pd.DataFrame, measure=None, category=None) -> dict:
         if cat:
             top = (df.groupby(cat, as_index=False)[main_num].sum()
                      .sort_values(main_num, ascending=False).head(10))
-            res["top"] = (cat, main_num, top)
+            res["top"] = Grouped(cat, main_num, top)
 
         if dcol:
             per = monthly_trend(df, dcol, main_num)
             if per is not None:
-                res["trend"] = (dcol, main_num, per)
+                res["trend"] = Grouped(dcol, main_num, per)
 
     elif cat:
         # --- MODALITÀ SENZA MISURA: conteggi e distribuzioni ---
         vc = df[cat].value_counts().head(10)
-        res["top"] = (cat, "conteggio", pd.DataFrame({cat: vc.index, "conteggio": vc.values}))
+        res["top"] = Grouped(cat, "conteggio",
+                             pd.DataFrame({cat: vc.index, "conteggio": vc.values}))
 
         if dcol:
             per = monthly_trend(df, dcol)
             if per is not None:
-                res["trend"] = (dcol, "conteggio", per)
+                res["trend"] = Grouped(dcol, "conteggio", per)
 
     # Osservazioni automatiche deterministiche (per narrazione e card UI)
     findings = _findings(df, res, main_num)

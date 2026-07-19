@@ -289,9 +289,9 @@ if st.session_state.get("report_sig") != report_sig:
         st.session_state.insights = insights
 
         st.session_state.top_fig = (
-            _try_fig(to_chart, insights["top"][2], kind="bar") if "top" in insights else None)
+            _try_fig(to_chart, insights["top"].data, kind="bar") if "top" in insights else None)
         st.session_state.trend_fig = (
-            _try_fig(to_chart, insights["trend"][2], kind="line") if "trend" in insights else None)
+            _try_fig(to_chart, insights["trend"].data, kind="line") if "trend" in insights else None)
         st.session_state.corr_fig = (
             _try_fig(corr_heatmap, insights["corr"]) if "corr" in insights else None)
         st.session_state.dist_fig = (
@@ -364,7 +364,7 @@ def render_linked_charts(df, insights, top_fig, trend_fig):
 
     if trend_fig is not None and "trend" in insights:
         dcol, num, _ = insights["trend"]
-        cat = insights["top"][0] if "top" in insights else None
+        cat = insights["top"].key if "top" in insights else None
         with graf_cols[idx]:
             sub = None
             if selected_cat is not None and cat is not None:
