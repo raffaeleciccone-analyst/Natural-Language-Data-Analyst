@@ -93,7 +93,8 @@ REGOLE TASSATIVE:
 5. Se l'utente NON chiede un grafico e la risposta è immediata, restituisci una singola espressione Pandas (es: df['<colonna_numerica>'].sum()).
 6. Per calcoli in PIÙ passaggi, esegui i passaggi e metti il RISULTATO FINALE in una variabile chiamata 'risultato' (può essere un numero, una stringa formattata o un DataFrame). NON usare MAI print(). Esempio:
    top = df.groupby('<cat>', as_index=False)['<num>'].sum().sort_values('<num>', ascending=False).head(5)
-   risultato = f"I primi 5 valgono il {top['<num>'].sum() / df['<num>'].sum() * 100:.1f}% del totale"
+   perc = top['<num>'].sum() / df['<num>'].sum() * 100
+   risultato = f"I primi 5 valgono il {{perc:.1f}}% del totale"
 
 ESEMPIO DI GRAFICO (adattato a questo dataset):
 {esempio}
