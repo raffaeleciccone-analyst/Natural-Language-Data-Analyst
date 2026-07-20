@@ -1,6 +1,7 @@
 import html
 import io
 import os
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -33,9 +34,13 @@ from core.utils import fmt_num
 log = get_logger(__name__)
 
 # --- Configurazione pagina ---
+# Favicon: logo del progetto (PNG trasparente in assets/); ripiego sull'emoji se
+# il file non è presente, così l'app parte comunque.
+_FAVICON = Path(__file__).parent / "assets" / "favicon.png"
+_PAGE_ICON = str(_FAVICON) if _FAVICON.exists() else "📊"
 st.set_page_config(
     page_title="Natural Language Data Analyst",
-    page_icon="📊",
+    page_icon=_PAGE_ICON,
     layout="wide",
     initial_sidebar_state="expanded",
 )

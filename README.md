@@ -1,8 +1,8 @@
 # Natural Language Data Analyst
 
-*Analista dati AI-powered che interroghi in linguaggio naturale.*
+*Analista di dati AI-powered che interroghi in linguaggio naturale.*
 
-> ▶️ **Prova la demo: https://ai-data-analyst-assistant-z.streamlit.app/**
+> ▶️ **Prova la demo: https://natural-language-data-analyst.streamlit.app/**
 
 Interroga i tuoi dati in **linguaggio naturale**. Fai una domanda — ad esempio
 *"Qual è il mese con più vendite?"* oppure *"Mostrami le vendite per regione"* —
