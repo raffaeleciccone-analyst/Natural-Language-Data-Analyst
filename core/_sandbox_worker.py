@@ -33,8 +33,10 @@ def _limit_memory(mb: int) -> None:
         return
     try:
         b = mb * 1024 * 1024
-        # attributi POSIX-only: mypy su Windows non li conosce, a runtime ci sono
-        resource.setrlimit(resource.RLIMIT_AS, (b, b))  # type: ignore[attr-defined]
+        # attributi POSIX-only: su Windows mypy non li conosce (serve 'attr-defined'),
+        # su Linux invece li conosce (l'ignore sarebbe inutile → 'unused-ignore' evita
+        # che warn_unused_ignores faccia fallire la CI). Coprire entrambe le piattaforme.
+        resource.setrlimit(resource.RLIMIT_AS, (b, b))  # type: ignore[attr-defined, unused-ignore]
     except Exception as e:  # pragma: no cover
         log.warning("Impossibile impostare il cap memoria a %d MB: %s", mb, e)
 
