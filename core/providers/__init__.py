@@ -6,12 +6,12 @@ Per aggiungere un nuovo provider (es. Google Gemini, Groq, Mistral):
 2. importala qui e aggiungi una riga in _PROVIDERS e DEFAULT_MODELS
 Nient'altro nel resto del codice deve cambiare.
 """
-from .base import LLMProvider
-from .ollama_provider import OllamaProvider
 from .anthropic_provider import AnthropicProvider
-from .openai_provider import OpenAIProvider
+from .base import LLMProvider
 from .gemini_provider import GeminiProvider
 from .groq_provider import GroqProvider
+from .ollama_provider import OllamaProvider
+from .openai_provider import OpenAIProvider
 
 # Modello di default suggerito per ciascun provider
 DEFAULT_MODELS = {
@@ -50,6 +50,8 @@ def get_provider(name: str, model_name: str | None = None,
     cls = _PROVIDERS[key]
     model = model_name or DEFAULT_MODELS[key]
 
+    # cls è sempre una sottoclasse CONCRETA (mai LLMProvider astratta), ma mypy vede
+    # solo il supertipo type[LLMProvider] e non può saperlo: ignore mirato.
     if key in REQUIRES_API_KEY:
-        return cls(model_name=model, temperature=temperature, api_key=api_key)
-    return cls(model_name=model, temperature=temperature)
+        return cls(model_name=model, temperature=temperature, api_key=api_key)  # type: ignore[abstract]
+    return cls(model_name=model, temperature=temperature)  # type: ignore[abstract]

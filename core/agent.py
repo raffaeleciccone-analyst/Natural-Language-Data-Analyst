@@ -1,7 +1,10 @@
 import pandas as pd
 
+from core.log import get_logger
 from core.providers import LLMProvider, get_provider
 from core.utils import clean_code, column_kind
+
+log = get_logger(__name__)
 
 
 def _sanitize_sample(value) -> str:
@@ -127,6 +130,7 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
         try:
             raw = self.provider.generate(system_prompt, user_prompt)
         except Exception as e:
+            log.error("Generazione codice fallita (%s): %s", self.provider.name, e)
             return f"# Errore di comunicazione con il provider LLM ({self.provider.name}): {e}"
         return clean_code(raw or "")
 
@@ -135,6 +139,7 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
         try:
             return self.provider.generate(system_prompt, user_prompt).strip()
         except Exception as e:
+            log.error("Generazione narrativa (%s) fallita: %s", cosa, e)
             return f"_(Impossibile generare {cosa}: {e})_"
 
     def _chart_intent(self, question: str):

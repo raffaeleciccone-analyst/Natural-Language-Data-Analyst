@@ -94,11 +94,15 @@ e la categoria su cui basare KPI e classifiche.
 ## Architettura
 
 ```
-main.py            interfaccia Streamlit (report, KPI, grafici collegati, chat)
-core/loader.py     lettura multi-formato, profilo del dataset, analisi automatica
-core/agent.py      traduzione domanda → codice Pandas (adattata allo schema)
-core/executor.py   validazione AST, sandbox, esecuzione isolata, grafici Plotly
-core/providers/    astrazione multi-LLM (ollama, groq, anthropic, openai, gemini)
+main.py               interfaccia Streamlit (report, KPI, grafici collegati, chat)
+core/loader.py        lettura multi-formato, profilo del dataset, analisi automatica
+core/agent.py         traduzione domanda → codice Pandas (adattata allo schema)
+core/executor.py      validazione AST, sandbox, esecuzione isolata, grafici Plotly
+core/ui_components.py  componenti di presentazione Streamlit (card, tabelle, grafici)
+core/providers/       astrazione multi-LLM (ollama, groq, anthropic, openai, gemini)
+core/config.py        configurazione centralizzata (timeout, sandbox, retry) da env
+core/log.py           logging applicativo
+tests/                suite pytest (con focus sulla sandbox di sicurezza)
 ```
 
 Il flusso di una domanda: l'agente costruisce un prompt con lo schema reale del
@@ -114,10 +118,33 @@ dall'AI per la risposta testuale.
 - **Analisi statica AST** del codice generato: vietati import, accessi ad
   attributi privati/dunder, metodi di I/O (`to_*`/`read_*`/`write_*` su file o
   rete) e costrutti di esecuzione dinamica (`eval`, `exec`, ...).
-- **Sottoprocesso isolato** con timeout (e limite di memoria dove supportato):
-  barriera di processo attorno al codice generato dall'LLM.
+- **Sottoprocesso isolato** con timeout: barriera di processo attorno al codice
+  generato dall'LLM.
+- **Limite di memoria del worker** tramite `RLIMIT_AS`. *Limite noto:* è
+  disponibile solo su POSIX (Linux/macOS); **su Windows il modulo `resource` non
+  esiste, quindi il worker è contenuto dal solo timeout**, non da un cap di RAM.
+  In deploy di produzione (Linux) il limite è attivo.
+- **Fail-closed opzionale**: se il sottoprocesso non è avviabile, l'esecuzione
+  ripiega in-process (senza timeout né cap memoria). In deploy pubblico si
+  disattiva il ripiego con `ALLOW_INPROCESS_FALLBACK=false`, così l'app blocca
+  l'esecuzione invece di degradare la sandbox.
 - I valori di esempio delle celle inseriti nel prompt sono **sanitizzati** per
   mitigare la prompt injection da file caricati.
+
+## Sviluppo e qualità
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+pytest        # test (inclusi i test di sicurezza sul validatore AST)
+ruff check .  # lint
+mypy core main.py  # type-check
+```
+
+Ogni push esegue lint, type-check e test in CI (GitHub Actions, `.github/workflows/ci.yml`).
+
+I parametri di runtime sono centralizzati in `core/config.py` e sovrascrivibili da
+variabile d'ambiente, tra cui: `EXEC_TIMEOUT`, `MEMORY_LIMIT_MB`,
+`ALLOW_INPROCESS_FALLBACK`, `LLM_REQUEST_TIMEOUT`, `LLM_MAX_RETRIES`, `LOG_LEVEL`.
 
 ## Deploy
 

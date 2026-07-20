@@ -1,11 +1,14 @@
-# Core
-streamlit>=1.36
-pandas>=2.0
-plotly>=5.20         # grafici interattivi
-openpyxl>=3.1        # lettura file Excel (.xlsx)
+# === Dipendenze core (pinnate alle versioni testate: riproducibilità) ===
+# Aggiornarle è una scelta consapevole: cambia la riga, rilancia i test, committa.
+streamlit==1.59.2
+pandas==3.0.2
+plotly==6.9.0         # grafici interattivi
+openpyxl==3.1.5       # lettura file Excel (.xlsx)
 
-# Provider LLM (installa solo quelli che usi)
-ollama>=0.3          # modelli locali
-anthropic>=0.40      # Claude (opzionale)
-openai>=1.40         # GPT (opzionale)
-google-genai>=0.3    # Gemini (opzionale)
+# === Provider LLM (opzionali: installa solo quelli che usi) ===
+# Qui teniamo un floor + un tetto di major, perché non fanno parte del set core
+# testato in CI. Fissa anche questi al '==' se il tuo deploy li usa in produzione.
+ollama==0.6.2                 # modelli locali (default del progetto)
+anthropic>=0.40,<1.0         # Claude (opzionale)
+openai>=1.40,<2.0            # GPT / Groq via API compatibile (opzionale)
+google-genai>=0.3,<2.0       # Gemini (opzionale)

@@ -1,19 +1,36 @@
 import html
-import logging
+import io
 import os
 
 import pandas as pd
 import streamlit as st
 
-from core.loader import (load_dataset, read_any, profile, analyze, measure_columns,
-                         best_category, category_columns, monthly_trend,
-                         SUPPORTED_EXTENSIONS)
-from core.utils import fmt_num, IT_NUM_FORMAT
 from core.agent import DataAgent
-from core.executor import (execute_pandas_code, summarize_result, apply_theme,
-                           to_chart, corr_heatmap, histogram)
-from core.providers import available_providers, DEFAULT_MODELS, REQUIRES_API_KEY
+from core.executor import (
+    apply_theme,
+    corr_heatmap,
+    execute_pandas_code,
+    histogram,
+    summarize_result,
+    to_chart,
+)
+from core.loader import (
+    SUPPORTED_EXTENSIONS,
+    analyze,
+    best_category,
+    category_columns,
+    load_dataset,
+    measure_columns,
+    profile,
+    read_any,
+)
+from core.log import get_logger
+from core.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers
+from core.ui_components import answer_card, build_kpis, readout, render_linked_charts, render_result
 from core.ui_theme import console_css
+from core.utils import fmt_num
+
+log = get_logger(__name__)
 
 # --- Configurazione pagina ---
 st.set_page_config(
@@ -30,7 +47,7 @@ _KEY_ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY",
 def _secret(key: str, default: str = "") -> str:
     """Legge un valore da st.secrets (deploy) o dalle variabili d'ambiente (locale)."""
     try:
-        val = st.secrets.get(key)  # type: ignore[attr-defined]
+        val = st.secrets.get(key)
         if val is not None:
             return str(val)
     except Exception:
@@ -107,32 +124,6 @@ with st.sidebar:
 st.markdown(console_css(), unsafe_allow_html=True)
 
 
-def answer_card(label: str, text: str):
-    """Renderizza un testo in un riquadro dedicato (con escaping HTML)."""
-    safe = html.escape(text).replace("\n", "<br>")
-    st.markdown(
-        f"<div class='answer-card'>"
-        f"<div class='answer-label'>{html.escape(label)}</div>"
-        f"<div class='answer-body'>{safe}</div></div>",
-        unsafe_allow_html=True,
-    )
-
-
-def readout(col, label: str, value: str, sub: str = "", tick: str = "#0e7c86", small: bool = False):
-    """Card KPI in stile 'console': valore monospazio + tacca colorata."""
-    # Il sotto-valore è SEMPRE presente (vuoto = spazio riservato) così le card
-    # hanno tutte la stessa altezza.
-    sub_html = f"<div class='r-sub'>{html.escape(sub) if sub else '&nbsp;'}</div>"
-    cls = "r-v sm" if small else "r-v"
-    col.markdown(
-        f"<div class='readout'>"
-        f"<div class='r-k'>{html.escape(label)}</div>"
-        f"<div class='{cls}'>{html.escape(value)}</div>"
-        f"<div class='r-tick' style='--bar:{tick}'></div>{sub_html}</div>",
-        unsafe_allow_html=True,
-    )
-
-
 # --- Inizializzazione dell'agente (per-sessione, non in cache globale) ---
 # Nota di sicurezza: NON usiamo st.cache_resource, che è una cache condivisa fra
 # tutte le sessioni del server: la API key finirebbe in memoria globale. Teniamo
@@ -158,18 +149,38 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- Caricamento del DataFrame ---
+# --- Caricamento del DataFrame (con cache) ---
+# Streamlit ri-esegue l'intero script a ogni interazione: senza cache il file
+# verrebbe riletto e ri-parsato a ogni click. @st.cache_data memoizza sul CONTENUTO
+# (nome + byte), quindi la rilettura avviene solo quando il file cambia davvero.
+class _NamedBytesIO(io.BytesIO):
+    """BytesIO con un attributo `.name`, così read_any riconosce l'estensione."""
+    def __init__(self, data: bytes, name: str):
+        super().__init__(data)
+        self.name = name
+
+
+@st.cache_data(show_spinner=False)
+def load_uploaded_cached(name: str, data: bytes) -> pd.DataFrame:
+    return read_any(_NamedBytesIO(data, name))
+
+
+@st.cache_data(show_spinner=False)
+def load_default_cached() -> pd.DataFrame:
+    return load_dataset()
+
+
 df = None
 source_label = None
 if uploaded_file is not None:
     try:
-        df = read_any(uploaded_file)
+        df = load_uploaded_cached(uploaded_file.name, uploaded_file.getvalue())
         source_label = f"File caricato: {uploaded_file.name}"
     except Exception as e:
         st.error(f"Errore nel caricamento del file: {e}")
 else:
     try:
-        df = load_dataset()
+        df = load_default_cached()
         source_label = "Dataset di default (Superstore Sales)"
     except FileNotFoundError:
         df = None
@@ -214,41 +225,10 @@ if not unit and sel_measure and any(h in sel_measure.lower() for h in _ECON_HINT
     unit = "$"
 
 
-def build_kpis(df, sel_measure, sel_category, unit):
-    """
-    Costruisce le card KPI adattandosi ai dati: con una MISURA -> totale/media/
-    massimo/leader; SENZA misura -> conteggi. Ritorna una lista di tuple
-    (label, value, sub, tick, small). Nessun effetto Streamlit (facile da testare).
-    """
-    def wu(v):  # accosta l'unità di misura, se indicata
-        return f"{fmt_num(v)} {unit}".strip() if unit else fmt_num(v)
-
-    kpis = []
-    if sel_measure:
-        s = df[sel_measure]
-        kpis.append((f"Totale {sel_measure}", wu(s.sum()), "", "#0e7c86", False))
-        kpis.append((f"Media {sel_measure}", wu(s.mean()), "", "#eda100", False))
-        kpis.append((f"Massimo {sel_measure}", wu(s.max()), "", "#2a78d6", False))
-        if sel_category:
-            leader = df.groupby(sel_category)[sel_measure].sum().sort_values(ascending=False)
-            kpis.append((f"Top {sel_category}", str(leader.index[0]), wu(leader.iloc[0]), "#008300", True))
-        else:
-            kpis.append(("Record", fmt_num(len(df)), "", "#008300", False))
-    elif sel_category:  # nessuna misura: KPI a conteggi
-        vc = df[sel_category].value_counts()
-        kpis.append(("Record", fmt_num(len(df)), "", "#2a78d6", False))
-        kpis.append((f"{sel_category} distinte", fmt_num(df[sel_category].nunique()), "", "#eda100", False))
-        kpis.append((f"Top {sel_category}", str(vc.index[0]), f"{fmt_num(vc.iloc[0])} record", "#008300", True))
-    else:
-        kpis.append(("Record", fmt_num(len(df)), "", "#2a78d6", False))
-        kpis.append(("Colonne", str(df.shape[1]), "", "#008300", False))
-    return kpis
-
-
 # --- Riga di KPI (adattivi: misure oppure conteggi) ---
 kpis = build_kpis(df, sel_measure, sel_category, unit)
 kpi_cols = st.columns(len(kpis))
-for _col, (_lab, _val, _sub, _tick, _small) in zip(kpi_cols, kpis):
+for _col, (_lab, _val, _sub, _tick, _small) in zip(kpi_cols, kpis, strict=False):
     readout(_col, _lab, _val, sub=_sub, tick=_tick, small=_small)
 
 st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
@@ -264,10 +244,11 @@ def _try_fig(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except Exception as e:
-        logging.warning("Figura del report non generata da %s: %s", getattr(fn, "__name__", fn), e)
+        log.warning("Figura del report non generata da %s: %s", getattr(fn, "__name__", fn), e)
         return None
 
 
+content_hash: int | None
 try:
     content_hash = int(pd.util.hash_pandas_object(df, index=False).sum())
 except Exception:
@@ -331,58 +312,6 @@ if "numeric_stats" in insights:
             stats_disp[_c] = stats_disp[_c].map(fmt_num)
     st.dataframe(stats_disp, use_container_width=True, hide_index=True)
 
-def render_linked_charts(df, insights, top_fig, trend_fig):
-    """
-    Classifica + andamento affiancati e COLLEGATI: cliccando una barra della
-    classifica l'andamento si filtra sulla categoria scelta (ri-cliccando si
-    toglie il filtro). Isola qui la logica di interazione del report.
-    """
-    if top_fig is None and trend_fig is None:
-        return
-    both = top_fig is not None and trend_fig is not None
-    if both:
-        st.caption("Clicca una barra della classifica per filtrare l'andamento; "
-                   "ri-clicca la stessa barra per togliere il filtro.")
-    graf_cols = st.columns(2 if both else 1)
-    idx = 0
-    selected_cat = None
-
-    if top_fig is not None:
-        cat, num, _ = insights["top"]
-        with graf_cols[idx]:
-            st.markdown(f"**Classifica: {num} per {cat}**")
-            event = st.plotly_chart(apply_theme(top_fig), use_container_width=True,
-                                    on_select="rerun", key="report_top")
-            try:
-                pts = event.selection.points
-                if pts:
-                    px_ = pts[0].get("x")
-                    selected_cat = px_ if isinstance(px_, str) else pts[0].get("y")
-            except Exception:
-                selected_cat = None
-        idx += 1
-
-    if trend_fig is not None and "trend" in insights:
-        dcol, num, _ = insights["trend"]
-        cat = insights["top"].key if "top" in insights else None
-        with graf_cols[idx]:
-            sub = None
-            if selected_cat is not None and cat is not None:
-                key_val = str(selected_cat).rstrip("…")
-                mask = df[cat].astype(str) == str(selected_cat)
-                if not mask.any():
-                    mask = df[cat].astype(str).str.startswith(key_val)
-                sub = monthly_trend(df[mask], dcol, insights.get("measure"))
-
-            if sub is not None:
-                st.markdown(f"**Andamento di {num} — {cat}: {selected_cat}**")
-                st.plotly_chart(apply_theme(to_chart(sub, kind="line")),
-                                use_container_width=True, key="report_trend_filtered")
-            else:
-                st.markdown(f"**Andamento di {num} nel tempo**")
-                st.plotly_chart(apply_theme(trend_fig), use_container_width=True, key="report_trend")
-
-
 render_linked_charts(df, insights, st.session_state.get("top_fig"),
                      st.session_state.get("trend_fig"))
 
@@ -438,44 +367,6 @@ if st.session_state.get("exec_report"):
 
 st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
 st.subheader("Fai una domanda ai tuoi dati")
-
-
-# --- Rendering di un risultato (kp = chiave univoca del turno, evita ID duplicati) ---
-def render_value(value, kp: str = "r"):
-    """Mostra il dato del risultato (tabella / numero / testo), con numeri leggibili."""
-    if value is None:
-        return
-    if isinstance(value, pd.DataFrame):
-        num_cols = list(value.select_dtypes("number").columns)
-        styled = (value.style.format(subset=num_cols, **IT_NUM_FORMAT)
-                  if num_cols else value)
-        st.dataframe(styled, use_container_width=True, hide_index=True, key=f"{kp}_df")
-    elif isinstance(value, pd.Series):
-        st.dataframe(value.rename("valore").to_frame(), use_container_width=True, key=f"{kp}_ser")
-    elif isinstance(value, (int, float)):
-        st.metric("Risultato", fmt_num(value))
-    elif isinstance(value, str) and value != "Codice eseguito correttamente.":
-        st.markdown(f"**Risultato:** {value}")
-
-
-def render_result(code: str, result, explanation: str | None = None, kp: str = "r"):
-    # 1. Risposta testuale (in un riquadro dedicato)
-    if explanation:
-        answer_card("Risposta", explanation)
-
-    # 2. Risultato visuale: grafico E/O dati
-    if isinstance(result, str):  # stringa d'errore
-        st.error(result)
-    elif isinstance(result, dict):
-        if result.get("fig") is not None:
-            st.plotly_chart(apply_theme(result["fig"]), use_container_width=True, key=f"{kp}_fig")
-        render_value(result.get("value"), kp)
-    else:
-        render_value(result, kp)
-
-    # 3. Codice generato (in fondo, collassato)
-    with st.expander("Codice Pandas generato"):
-        st.code(code, language="python")
 
 
 if "messages" not in st.session_state:

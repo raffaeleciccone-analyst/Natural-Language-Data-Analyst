@@ -1,0 +1,30 @@
+[project]
+name = "natural-language-data-analyst"
+version = "1.1.0"
+description = "Interroga i tuoi dati in linguaggio naturale: l'LLM racconta, Pandas calcola."
+requires-python = ">=3.10"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+# E/W: stile (pycodestyle), F: errori reali (pyflakes), I: ordine import,
+# B: bug comuni (bugbear), UP: modernizzazioni sintassi.
+select = ["E", "W", "F", "I", "B", "UP"]
+# E501 (riga troppo lunga) è gestita dal formatter; qui non blocchiamo la CI su
+# commenti leggermente lunghi.
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true   # gli SDK dei provider sono opzionali e senza stub
+warn_unused_ignores = true
+warn_redundant_casts = true
+# Adozione graduale: non pretendiamo l'annotazione completa su tutto il codice
+# esistente. Il valore è intercettare gli errori di tipo evidenti.
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

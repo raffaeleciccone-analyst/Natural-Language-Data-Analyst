@@ -1,3 +1,5 @@
+from core.config import settings
+
 from .base import LLMProvider
 
 
@@ -8,10 +10,10 @@ class OpenAIProvider(LLMProvider):
     # base_url alternativa (per API compatibili OpenAI); None = endpoint OpenAI.
     base_url: str | None = None
 
-    def generate(self, system_prompt: str, user_prompt: str) -> str:
+    def _call(self, system_prompt: str, user_prompt: str) -> str:
         from openai import OpenAI  # import lazy
 
-        kwargs = {}
+        kwargs: dict[str, object] = {"timeout": settings.request_timeout}
         if self.api_key:
             kwargs["api_key"] = self.api_key
         if self.base_url:

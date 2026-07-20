@@ -1,8 +1,9 @@
-import pandas as pd
-import os
 import json
+import os
 import re
 from typing import NamedTuple
+
+import pandas as pd
 
 from core.utils import column_kind, fmt_num
 
@@ -304,7 +305,7 @@ def _findings(df: pd.DataFrame, res: dict, main_num) -> list:
     quota del leader, crescita di periodo, variazione recente, outlier. Ritorna
     una lista di frasi pronte da mostrare e da passare alla narrazione.
     """
-    out = []
+    out: list[str] = []
     if not main_num:
         return out
 

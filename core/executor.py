@@ -7,14 +7,17 @@ import sys
 
 import pandas as pd
 
+from core.config import settings
+from core.log import get_logger
 from core.utils import clean_code
 
+log = get_logger(__name__)
+
 # Esecuzione isolata in un sottoprocesso con timeout (chiude i DoS da loop/allocazioni
-# e aggiunge una barriera di processo). Metti a False per eseguire in-process (più
-# veloce, per uso locale con file fidati). Il fallback in-process scatta comunque se
-# il sottoprocesso non è avviabile.
-SANDBOX_SUBPROCESS = True
-EXEC_TIMEOUT = 12  # secondi
+# e aggiunge una barriera di processo). I parametri vivono in core.config; qui restano
+# alias comodi per leggibilità e per i test.
+SANDBOX_SUBPROCESS = settings.sandbox_subprocess
+EXEC_TIMEOUT = settings.exec_timeout  # secondi
 
 # Import lazy di Plotly: se non è installato, i grafici falliscono con un
 # messaggio chiaro ma il resto dell'app continua a funzionare.
@@ -59,7 +62,6 @@ def _make_bars_readable(fig):
     (nomi sull'asse y) invece di lasciarli verticali con testo ruotato. Idempotente.
     Vale per qualsiasi figura, anche se il modello ha usato px.bar a modo suo.
     """
-    flipped = False
     for tr in fig.data:
         if getattr(tr, "type", None) != "bar" or getattr(tr, "orientation", None) == "h":
             continue
@@ -67,7 +69,6 @@ def _make_bars_readable(fig):
         if xs and all(isinstance(v, str) for v in xs) and max((len(v) for v in xs), default=0) > 16:
             tr.x, tr.y = tr.y, tr.x
             tr.orientation = "h"
-            flipped = True
     # Barre orizzontali: tronca le etichette lunghe (nome intero nell'hover), togli
     # i titoli degli assi (ridondanti: bastano etichette, scala e titolo del grafico)
     # e dai un'altezza proporzionata.
@@ -190,7 +191,7 @@ def _fig_summary(fig, max_rows: int = 30) -> str:
         y_attr = getattr(trace, "y", None)
         xs = list(x_attr) if x_attr is not None else []
         ys = list(y_attr) if y_attr is not None else []
-        coppie = ", ".join(f"{x}={y}" for x, y in list(zip(xs, ys))[:max_rows])
+        coppie = ", ".join(f"{x}={y}" for x, y in list(zip(xs, ys, strict=False))[:max_rows])
         righe.append(f"{nome}: {coppie}")
     return "Dati del grafico -> " + " | ".join(righe)
 
@@ -285,17 +286,30 @@ def _validate_ast(tree: ast.AST) -> None:
             raise UnsafeCodeError("accesso a chiavi dunder non consentito")
 
 
+def _iter_stmts_in_order(body):
+    """
+    Percorre gli statement in ordine di ESECUZIONE, entrando nei corpi di
+    if/for/with/try. `ast.walk` non garantisce l'ordine e il vecchio confronto sul
+    `lineno` era un'euristica fragile: qui l'ordine è quello reale del sorgente.
+    """
+    for node in body:
+        yield node
+        for field in ("body", "orelse", "finalbody"):
+            child = getattr(node, field, None)
+            if isinstance(child, list):
+                yield from _iter_stmts_in_order(child)
+
+
 def _last_assigned_name(tree: ast.AST):
     """Nome dell'ultima variabile assegnata (anche dentro if/for), per recuperarne il valore."""
-    name, best_line = None, -1
-    for node in ast.walk(tree):
+    name = None
+    for node in _iter_stmts_in_order(getattr(tree, "body", [])):
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Name) and node.lineno >= best_line:
-                    name, best_line = target.id, node.lineno
+                if isinstance(target, ast.Name):
+                    name = target.id
         elif isinstance(node, (ast.AugAssign, ast.AnnAssign)) and isinstance(node.target, ast.Name):
-            if node.lineno >= best_line:
-                name, best_line = node.target.id, node.lineno
+            name = node.target.id
     return name
 
 
@@ -320,6 +334,9 @@ def _parse_and_validate(code: str):
     try:
         _validate_ast(tree)
     except UnsafeCodeError as e:
+        # Traccia QUALE regola ha bocciato il codice: prezioso per capire i
+        # tentativi di escape del modello (e per le regression di sicurezza).
+        log.warning("Sandbox: codice rifiutato (%s) — %r", e, code[:200])
         return f"Errore di sicurezza: {e}. \nCodice tentato: {code}"
 
     return tree
@@ -428,14 +445,22 @@ def execute_pandas_code(code_string: str, df: pd.DataFrame):
     if isinstance(parsed, str):
         return parsed
 
-    # Esecuzione isolata in sottoprocesso (con timeout); fallback in-process.
-    if SANDBOX_SUBPROCESS:
+    # Esecuzione isolata in sottoprocesso (con timeout e cap memoria su POSIX).
+    if settings.sandbox_subprocess:
         try:
-            return _run_in_subprocess(code, df, EXEC_TIMEOUT)
+            return _run_in_subprocess(code, df, settings.exec_timeout)
         except subprocess.TimeoutExpired:
-            return (f"Errore: esecuzione interrotta dopo {EXEC_TIMEOUT}s "
+            return (f"Errore: esecuzione interrotta dopo {settings.exec_timeout}s "
                     "(codice troppo lento o troppo pesante).")
-        except Exception:
-            pass  # sottoprocesso non avviabile -> esecuzione in-process
+        except Exception as e:
+            # Il sottoprocesso non è avviabile. L'in-process NON ha timeout né
+            # limite di memoria: degradare a esso indebolisce la sandbox. Per questo
+            # è dietro un flag che il deploy pubblico tiene spento (fail-closed).
+            if not settings.allow_inprocess_fallback:
+                log.error("Sandbox subprocess non avviabile e fallback disattivato: %s", e)
+                return ("Errore: ambiente di esecuzione isolato non disponibile. "
+                        "Per sicurezza l'esecuzione è stata bloccata.")
+            log.warning("Sandbox subprocess non avviabile (%s): fallback in-process "
+                        "SENZA timeout/limite memoria.", e)
 
     return _run_code(code, df)

@@ -10,22 +10,40 @@ import os
 import pickle
 import sys
 
+from core.config import settings
+from core.log import get_logger
 
-def _limit_memory(mb: int = 1500) -> None:
-    """Limita la memoria del processo dove possibile (POSIX). Su Windows è no-op."""
+log = get_logger(__name__)
+
+
+def _limit_memory(mb: int) -> None:
+    """
+    Limita la RAM del processo dove possibile.
+
+    Nota di sicurezza importante: `resource.setrlimit(RLIMIT_AS)` esiste solo su
+    POSIX. Su Windows il modulo `resource` non c'è, quindi questo è un NO-OP: il
+    contenimento del worker su Windows resta il solo TIMEOUT (imposto dal genitore),
+    non c'è un cap di memoria. È un limite noto e dichiarato, non una svista.
+    """
     try:
-        import resource
+        import resource  # POSIX-only
+    except ImportError:
+        log.info("Cap memoria non disponibile su questa piattaforma (Windows): "
+                 "il worker è contenuto dal solo timeout.")
+        return
+    try:
         b = mb * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_AS, (b, b))
-    except Exception:
-        pass
+        # attributi POSIX-only: mypy su Windows non li conosce, a runtime ci sono
+        resource.setrlimit(resource.RLIMIT_AS, (b, b))  # type: ignore[attr-defined]
+    except Exception as e:  # pragma: no cover
+        log.warning("Impossibile impostare il cap memoria a %d MB: %s", mb, e)
 
 
 def main() -> None:
     raw = sys.stdin.buffer.read()
     code, df = pickle.loads(raw)
 
-    _limit_memory()
+    _limit_memory(settings.memory_limit_mb)
 
     # Manteniamo lo stdout reale per il risultato; durante l'esecuzione dirottiamo
     # eventuali stampe verso stderr, così su stdout finisce solo il pickle.

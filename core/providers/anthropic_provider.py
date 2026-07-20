@@ -1,3 +1,5 @@
+from core.config import settings
+
 from .base import LLMProvider
 
 
@@ -11,7 +13,7 @@ class AnthropicProvider(LLMProvider):
 
     ENV_VAR = "ANTHROPIC_API_KEY"
 
-    def generate(self, system_prompt: str, user_prompt: str) -> str:
+    def _call(self, system_prompt: str, user_prompt: str) -> str:
         import anthropic  # import lazy
 
         # Se api_key è None, il client risolve le credenziali dall'ambiente
@@ -22,6 +24,7 @@ class AnthropicProvider(LLMProvider):
             max_tokens=2048,  # sufficiente per una singola espressione/blocco pandas
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
+            timeout=settings.request_timeout,  # evita chiamate appese all'infinito
         )
 
         # message.content è una lista di blocchi: prendiamo solo il testo
