@@ -177,24 +177,48 @@ def corr_heatmap(corr):
 
 def histogram(df, col, nbins: int = 40):
     """
-    Distribuzione (istogramma) di una colonna numerica.
+    Distribuzione (istogramma) di una colonna numerica, adattivo al tipo di dati.
 
-    Con dati molto asimmetrici (pochi valori estremi che schiacciano tutto il
-    resto in un'unica barra, lasciando una lunga scia di barrette illeggibili),
-    limita la vista fino al 99° percentile: la forma della distribuzione torna
-    leggibile e gli outlier esclusi sono dichiarati in un'annotazione.
+    Molti dataset economici (vendite, importi, prezzi) sono log-normali: tanti
+    valori piccoli e pochi enormi. Su un asse lineare tutto si schiaccia in
+    un'unica barra a sinistra con una scia illeggibile. La scelta della scala è
+    automatica e sicura per qualsiasi dataset caricato:
+
+    * dati tutti positivi e fortemente asimmetrici → istogramma in SCALA
+      LOGARITMICA (bin uniformi su log10): la distribuzione si "raddrizza" in una
+      campana leggibile e si vede dove si concentra davvero la massa dei valori;
+    * altrimenti (presenza di zeri/negativi o distribuzione regolare) → scala
+      LINEARE con vista fino al 99° percentile e nota sugli outlier esclusi.
     """
     _require_plotly()
     serie = pd.to_numeric(df[col], errors="coerce").dropna()
     if serie.empty:
         raise ValueError(f"La colonna '{col}' non contiene valori numerici.")
 
+    mediana = float(serie.median())
     p_high = float(serie.quantile(0.99))
+    # Log solo se ha senso: valori strettamente positivi (log10 richiede > 0) e
+    # coda destra marcata (il 99° pct dista molte volte dalla mediana). L'euristica
+    # è conservativa: dataset "normali" (età, punteggi…) restano in lineare.
+    usa_log = float(serie.min()) > 0 and mediana > 0 and (p_high / mediana) > 8
+
+    if usa_log:
+        import numpy as np
+        log_vals = np.log10(serie)
+        fig = px.histogram(x=log_vals, nbins=nbins)
+        # Etichette dell'asse alle potenze di 10, ma scritte in scala originale
+        # (1, 10, 100, 1.000…): l'utente legge i valori veri, non gli esponenti.
+        lo, hi = int(np.floor(log_vals.min())), int(np.ceil(log_vals.max()))
+        tick = list(range(lo, hi + 1))
+        fig.update_xaxes(tickvals=tick, ticktext=[fmt_num(10 ** t) for t in tick])
+        fig.update_layout(bargap=0.05, yaxis_title="record", showlegend=False,
+                          xaxis_title=f"{col} (scala logaritmica)")
+        return apply_theme(fig)
+
+    # Ripiego lineare: limita la vista al 99° percentile se c'è una coda di outlier.
     n_out = int((serie > p_high).sum())
-    # Skew reale: alcuni outlier oltre il 99° pct e un range che li rende dominanti.
     skewed = n_out > 0 and p_high > float(serie.min())
     dati = serie[serie <= p_high] if skewed else serie
-
     fig = px.histogram(dati, nbins=nbins)
     fig.update_layout(bargap=0.05, yaxis_title="record",
                       xaxis_title=str(col), showlegend=False)
