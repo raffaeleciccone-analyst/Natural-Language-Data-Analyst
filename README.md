@@ -55,8 +55,8 @@ si limita a raccontarli.
 
 ### 2. Installazione
 ```bash
-git clone https://github.com/raffaeleciccone-analyst/ai-data-analyst-assistant.git
-cd ai-data-analyst-assistant
+git clone https://github.com/raffaeleciccone-analyst/Natural-Language-Data-Analyst.git
+cd Natural-Language-Data-Analyst
 
 python -m venv .venv
 # Windows:  .venv\Scripts\activate
