@@ -135,9 +135,11 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
         return clean_code(raw or "")
 
     def _narrate(self, system_prompt: str, user_prompt: str, cosa: str) -> str:
-        """Genera testo narrativo (non codice); in caso di errore ritorna un avviso in corsivo."""
+        """Genera testo narrativo (non codice); in caso di errore ritorna un avviso in corsivo.
+        La narrativa è testo puro: rimuove i backtick che alcuni modelli aggiungono a
+        caso, perché in Markdown diventano frammenti monospace verdi senza senso."""
         try:
-            return self.provider.generate(system_prompt, user_prompt).strip()
+            return self.provider.generate(system_prompt, user_prompt).strip().replace("`", "")
         except Exception as e:
             log.error("Generazione narrativa (%s) fallita: %s", cosa, e)
             return f"_(Impossibile generare {cosa}: {e})_"
@@ -235,7 +237,10 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
             "- Business Recommendations e Possible Risks: formulali come IPOTESI basate "
             "solo sui dati caricati (usa 'potrebbe', 'suggerisce'), mai come certezze; "
             "ricorda che correlazione non è causa.\n"
-            "- Niente codice, niente tabelle grezze. Frasi brevi, elenchi puntati dove utile."
+            "- Niente codice, niente tabelle grezze. Frasi brevi, elenchi puntati dove utile.\n"
+            "- NON usare MAI il backtick (`) né blocchi di codice: scrivi i numeri come "
+            "testo normale. Per enfasi usa al massimo il grassetto (**testo**). "
+            "Un numero come 669.519 va scritto così, mai come `669.519`."
         )
         user_prompt = (
             f"Insight calcolati sul dataset:\n{insights_summary}\n\n"

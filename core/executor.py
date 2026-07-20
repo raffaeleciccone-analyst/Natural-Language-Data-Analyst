@@ -9,7 +9,7 @@ import pandas as pd
 
 from core.config import settings
 from core.log import get_logger
-from core.utils import clean_code
+from core.utils import clean_code, fmt_num
 
 log = get_logger(__name__)
 
@@ -175,11 +175,37 @@ def corr_heatmap(corr):
     return fig
 
 
-def histogram(df, col, nbins: int = 30):
-    """Distribuzione (istogramma) di una colonna numerica."""
+def histogram(df, col, nbins: int = 40):
+    """
+    Distribuzione (istogramma) di una colonna numerica.
+
+    Con dati molto asimmetrici (pochi valori estremi che schiacciano tutto il
+    resto in un'unica barra, lasciando una lunga scia di barrette illeggibili),
+    limita la vista fino al 99° percentile: la forma della distribuzione torna
+    leggibile e gli outlier esclusi sono dichiarati in un'annotazione.
+    """
     _require_plotly()
-    fig = px.histogram(df, x=col, nbins=nbins)
-    fig.update_layout(bargap=0.05, yaxis_title="record")
+    serie = pd.to_numeric(df[col], errors="coerce").dropna()
+    if serie.empty:
+        raise ValueError(f"La colonna '{col}' non contiene valori numerici.")
+
+    p_high = float(serie.quantile(0.99))
+    n_out = int((serie > p_high).sum())
+    # Skew reale: alcuni outlier oltre il 99° pct e un range che li rende dominanti.
+    skewed = n_out > 0 and p_high > float(serie.min())
+    dati = serie[serie <= p_high] if skewed else serie
+
+    fig = px.histogram(dati, nbins=nbins)
+    fig.update_layout(bargap=0.05, yaxis_title="record",
+                      xaxis_title=str(col), showlegend=False)
+    if skewed:
+        fig.add_annotation(
+            xref="paper", yref="paper", x=1, y=1.06, xanchor="right", yanchor="bottom",
+            showarrow=False, align="right",
+            text=(f"Vista fino al 99° percentile ({fmt_num(p_high)}) · "
+                  f"{fmt_num(n_out)} outlier oltre soglia non mostrati"),
+            font=dict(size=11, color=_THEME["secondary"]),
+        )
     return apply_theme(fig)
 
 
