@@ -37,4 +37,4 @@ progetto, non per gli utenti finali.
 Il codice generato gira già in una sandbox (validazione AST) dentro un sottoprocesso
 isolato con timeout, e in modalità demo c'è un limite di domande per sessione.
 Per un uso pubblico con **dati non fidati** valuta ulteriori limiti a livello di
-sistema (memoria/rete del container). Vedi anche [HANDOFF.md](HANDOFF.md).
+sistema (memoria/rete del container).
