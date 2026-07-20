@@ -1,3 +1,5 @@
+from typing import Any
+
 from core.config import settings
 
 from .base import LLMProvider
@@ -13,7 +15,9 @@ class OpenAIProvider(LLMProvider):
     def _call(self, system_prompt: str, user_prompt: str) -> str:
         from openai import OpenAI  # import lazy
 
-        kwargs: dict[str, object] = {"timeout": settings.request_timeout}
+        # dict[str, Any]: sono kwargs eterogenei per il costruttore OpenAI; con
+        # 'object' mypy rifiuterebbe lo splat verso ogni parametro tipizzato.
+        kwargs: dict[str, Any] = {"timeout": settings.request_timeout}
         if self.api_key:
             kwargs["api_key"] = self.api_key
         if self.base_url:

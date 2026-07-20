@@ -5,4 +5,7 @@
 pytest>=8.0
 ruff>=0.6
 mypy>=1.11
-pandas-stubs>=2.0     # stub di tipo per pandas (mypy)
+# Nota: 'pandas-stubs' NON è incluso di proposito. Le sue release seguono pandas
+# 2.x, mentre qui usiamo pandas 3.0: gli stub disallineati producevano decine di
+# falsi positivi in mypy. Finché non esiste una versione per pandas 3.x, pandas
+# resta senza stub (type-check comunque attivo sul resto del codice).

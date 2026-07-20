@@ -17,7 +17,10 @@ select = ["E", "W", "F", "I", "B", "UP"]
 ignore = ["E501"]
 
 [tool.mypy]
-python_version = "3.10"
+# Target 3.12: è la versione su cui gira la CI e, soprattutto, gli stub di numpy
+# 2.5 usano la sintassi 'type X = ...' (PEP 695) che mypy sa parsare solo con
+# python_version >= 3.12. L'app a runtime resta comunque compatibile con 3.10+.
+python_version = "3.12"
 ignore_missing_imports = true   # gli SDK dei provider sono opzionali e senza stub
 warn_unused_ignores = true
 warn_redundant_casts = true

@@ -2,6 +2,8 @@
 # Aggiornarle è una scelta consapevole: cambia la riga, rilancia i test, committa.
 streamlit==1.59.2
 pandas==3.0.2
+numpy==2.5.1          # dipendenza di pandas: pinnata perché la sua versione influisce
+                      # sugli stub di tipo usati in CI (riproducibilità del type-check)
 plotly==6.9.0         # grafici interattivi
 openpyxl==3.1.5       # lettura file Excel (.xlsx)
 
