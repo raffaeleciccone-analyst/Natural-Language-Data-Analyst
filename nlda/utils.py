@@ -34,6 +34,17 @@ def fmt_num(x) -> str:
     return s.replace(",", "§").replace(".", ",").replace("§", ".")
 
 
+def with_unit(text: str, unit: str) -> str:
+    """
+    Antepone l'unità di misura a un testo destinato all'LLM.
+
+    Il modello non ha modo di conoscerla: senza questo aggancio inventerebbe
+    un'unità plausibile ('euro', 'unità') o la ometterebbe, e i numeri della
+    narrazione perderebbero significato.
+    """
+    return f"L'unità di misura dei valori è '{unit}'.\n{text}" if unit else text
+
+
 def column_kind(series: pd.Series) -> str:
     """Classifica il tipo di una colonna in una categoria comprensibile."""
     if pd.api.types.is_bool_dtype(series):

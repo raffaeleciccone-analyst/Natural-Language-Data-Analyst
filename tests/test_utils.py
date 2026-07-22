@@ -1,7 +1,7 @@
 """Test delle utility condivise (formattazione numerica IT, pulizia codice, tipi colonna)."""
 import pandas as pd
 
-from nlda.utils import clean_code, column_kind, fmt_num
+from nlda.utils import clean_code, column_kind, fmt_num, with_unit
 
 
 def test_clean_code_rimuove_fence_markdown():
@@ -29,3 +29,15 @@ def test_column_kind():
     assert column_kind(pd.Series(["a", "b"])) == "testo"
     assert column_kind(pd.Series([True, False])) == "booleana"
     assert column_kind(pd.to_datetime(pd.Series(["2023-01-01", "2023-02-01"]))) == "data"
+
+
+def test_with_unit_antepone_lunita():
+    out = with_unit("Totale: 1000", "€")
+    assert out.startswith("L'unità di misura dei valori è '€'.")
+    assert "Totale: 1000" in out
+
+
+def test_with_unit_senza_unita_lascia_il_testo_intatto():
+    # Senza unità NON si deve aggiungere una frase: il modello la userebbe come
+    # informazione e inventerebbe un'unità che i dati non hanno.
+    assert with_unit("Totale: 1000", "") == "Totale: 1000"

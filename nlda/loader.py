@@ -5,7 +5,10 @@ from typing import NamedTuple
 
 import pandas as pd
 
+from nlda.log import get_logger
 from nlda.utils import column_kind, fmt_num
+
+log = get_logger(__name__)
 
 # Estensioni file supportate per l'upload
 SUPPORTED_EXTENSIONS = ["csv", "xlsx", "xls", "json"]
@@ -208,6 +211,53 @@ def measure_columns(df: pd.DataFrame) -> list:
     """API pubblica: colonne numeriche 'misura' del dataset (identificatori esclusi)."""
     num_cols = df.select_dtypes("number").columns.tolist()
     return _measure_columns(df, num_cols) if num_cols else []
+
+
+# Misure che, se presenti, l'utente si aspetta di trovare in cima al selettore:
+# sono quelle su cui si basa quasi sempre un report di vendite.
+_MEASURE_PRIORITY = ("Sales", "Profit", "Revenue", "Amount", "Total")
+
+
+def ordered_measures(measures: list) -> list:
+    """
+    Riordina le misure mettendo davanti quelle "principali", preservando l'ordine
+    originale per tutte le altre. Serve a scegliere un default sensato quando il
+    dataset ha molte colonne numeriche.
+    """
+    priorita = [c for c in _MEASURE_PRIORITY if c in measures]
+    return priorita + [c for c in measures if c not in priorita]
+
+
+# Indizi di misura economica, in inglese e in italiano: se il nome della colonna
+# ne contiene uno e l'utente non ha indicato un'unità, il dollaro è più
+# informativo di nessuna unità.
+_ECON_HINTS = ("sales", "revenue", "profit", "amount", "price", "cost", "income",
+               "expense", "budget", "margin", "fatturato", "vendite", "ricavi",
+               "costo", "prezzo", "importo", "spesa", "utile", "margine", "incasso")
+
+
+def default_unit(measure) -> str:
+    """Unità implicita per una misura economica, o stringa vuota se non deducibile."""
+    if measure and any(h in str(measure).lower() for h in _ECON_HINTS):
+        return "$"
+    return ""
+
+
+def dataset_signature(df: pd.DataFrame, source_label) -> tuple:
+    """
+    Firma che identifica il CONTENUTO del dataset, non solo la sua provenienza.
+
+    Serve a capire quando ricalcolare report e profilo: due file diversi con lo
+    stesso nome devono dare firme diverse, e lo stesso file ricaricato deve dare
+    la stessa firma. Se l'hash non è calcolabile (tipi esotici) si degrada a
+    None: la firma resta valida su nome, forma e colonne.
+    """
+    try:
+        content_hash: int | None = int(pd.util.hash_pandas_object(df, index=False).sum())
+    except Exception as e:  # noqa: BLE001 — colonne non hashabili: si degrada
+        log.warning("Hash del contenuto non calcolabile: %s", e)
+        content_hash = None
+    return (source_label, df.shape, tuple(df.columns), content_hash)
 
 
 def best_category(df: pd.DataFrame):
