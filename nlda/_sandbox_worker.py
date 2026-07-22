@@ -48,20 +48,31 @@ def _limit_memory(mb: int) -> None:
 
 
 def main() -> None:
+    # L'ORDINE conta, ed è il motivo per cui il worker può essere pre-avviato.
+    #
+    # Prima si paga tutto ciò che non dipende dalla richiesta: import di pandas e
+    # plotly (843 ms misurati, di cui 599 pandas e 197 plotly; l'interprete nudo
+    # ne costa 30) e il cap di memoria. Solo DOPO ci si mette in attesa su stdin.
+    #
+    # Cosi' il genitore puo' tenere pronto un processo che ha gia' importato tutto
+    # e dorme in attesa di lavoro: quando arriva una domanda, il costo fisso e'
+    # gia' stato pagato altrove. Se gli import venissero dopo la lettura di stdin
+    # — com'era prima — un processo pre-avviato non avrebbe importato nulla e il
+    # preriscaldamento non servirebbe a niente.
+    from nlda.sandbox.runner import _run_code, serialize_result
+
+    _limit_memory(settings.memory_limit_mb)
+
+    # Manteniamo lo stdout reale per il risultato; durante l'esecuzione dirottiamo
+    # eventuali stampe verso stderr, così su stdout finisce solo il JSON.
+    real_stdout_fd = os.dup(1)
+    os.dup2(2, 1)
+
     raw = sys.stdin.buffer.read()
     # La sorgente è il processo GENITORE, non l'utente: è lui a costruire questo
     # pickle da un DataFrame reale. La direzione pericolosa è l'opposta
     # (worker -> genitore) e infatti viaggia in JSON, mai in pickle.
     code, df = pickle.loads(raw)  # nosec B301
-
-    _limit_memory(settings.memory_limit_mb)
-
-    # Manteniamo lo stdout reale per il risultato; durante l'esecuzione dirottiamo
-    # eventuali stampe verso stderr, così su stdout finisce solo il pickle.
-    real_stdout_fd = os.dup(1)
-    os.dup2(2, 1)
-
-    from nlda.sandbox.runner import _run_code, serialize_result
 
     result = _run_code(code, df)
     out = serialize_result(result)
