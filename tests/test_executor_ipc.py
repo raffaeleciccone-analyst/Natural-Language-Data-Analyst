@@ -147,6 +147,42 @@ def test_sottoprocesso_reale_propaga_la_causa_dell_errore(sales_df: pd.DataFrame
     assert out.kind == "runtime"
 
 
+# --- Morte del worker: la causa decide se ritentare ----------------------------
+# Un worker che non parte (import fallito, dipendenza mancante) e' un deploy rotto:
+# ritentarlo costerebbe tre chiamate all'LLM per OGNI domanda, senza speranza. Un
+# worker abbattuto dal codice generato e' invece un caso correggibile.
+def _worker_morto(returncode: int, stderr: bytes):
+    import subprocess as sp
+    return lambda *a, **k: sp.CompletedProcess(args=[], returncode=returncode,
+                                               stdout=b"", stderr=stderr)
+
+
+def test_worker_che_non_parte_non_e_ritentabile(monkeypatch, sales_df: pd.DataFrame):
+    monkeypatch.setattr("core.executor.subprocess.run",
+                        _worker_morto(1, b"ModuleNotFoundError: No module named 'pandas'"))
+    out = execute_pandas_code("df['Sales'].sum()", sales_df)
+    assert isinstance(out, ExecutionFailure)
+    assert out.kind == "internal"
+    assert out.retryable is False
+
+
+def test_worker_ucciso_dal_codice_e_ritentabile(monkeypatch, sales_df: pd.DataFrame):
+    # Ucciso da un segnale (returncode negativo): tipico dell'OOM killer.
+    monkeypatch.setattr("core.executor.subprocess.run", _worker_morto(-9, b""))
+    out = execute_pandas_code("df['Sales'].sum()", sales_df)
+    assert isinstance(out, ExecutionFailure)
+    assert out.kind == "runtime"
+    assert out.retryable is True
+
+
+def test_memory_error_e_ritentabile(monkeypatch, sales_df: pd.DataFrame):
+    monkeypatch.setattr("core.executor.subprocess.run",
+                        _worker_morto(1, b"Traceback...\nMemoryError"))
+    out = execute_pandas_code("df['Sales'].sum()", sales_df)
+    assert isinstance(out, ExecutionFailure)
+    assert out.kind == "runtime"
+
+
 def test_sottoprocesso_reale_blocca_codice_pericoloso(sales_df: pd.DataFrame):
     out = execute_pandas_code("df.to_csv('x.csv')", sales_df)
     assert isinstance(out, ExecutionFailure)

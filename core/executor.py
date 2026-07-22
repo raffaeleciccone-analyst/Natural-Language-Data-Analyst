@@ -626,12 +626,27 @@ def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int) -> ExecutionRe
         input=payload, capture_output=True, cwd=root, env=env, timeout=timeout,
     )
     if proc.returncode != 0 or not proc.stdout:
-        err = (proc.stderr or b"").decode(errors="replace").strip()[-200:]
-        # 'runtime' e non 'internal': il worker parte ed è il codice generato ad
-        # abbatterlo (tipicamente esaurendo la memoria), quindi rigenerarlo più
-        # leggero è un tentativo sensato.
-        return ExecutionFailure("runtime", "Errore: esecuzione terminata in modo anomalo "
-                                f"(possibile esaurimento memoria). {err}".strip(), code)
+        err = (proc.stderr or b"").decode(errors="replace").strip()[-300:]
+        # Il worker è morto: la causa dipende da CHI l'ha ucciso, e da questo
+        # discende se ritentare abbia senso.
+        #   - abbattuto DAL codice generato (segnale/OOM, MemoryError) -> 'runtime':
+        #     rigenerarlo più leggero è un tentativo plausibile;
+        #   - non partito affatto (import fallito, PYTHONPATH rotto, dipendenza
+        #     mancante nell'ambiente del sottoprocesso) -> 'internal': è rotto il
+        #     deploy, non il codice. Ritentare brucerebbe tre chiamate all'LLM per
+        #     ogni domanda, senza alcuna possibilità di successo.
+        # In assenza di prove si sceglie 'internal': l'errore silenzioso costoso è
+        # il deploy rotto che continua a pagare token, non l'OOM che non ritenta.
+        ucciso_dal_codice = proc.returncode < 0 or "MemoryError" in err
+        if ucciso_dal_codice:
+            return ExecutionFailure("runtime", "Errore: esecuzione terminata in modo anomalo "
+                                    "(possibile esaurimento memoria). Prova una domanda "
+                                    "che aggreghi meno dati.", code)
+        log.error("Worker terminato senza risultato (returncode=%s): %s", proc.returncode, err)
+        return ExecutionFailure(
+            "internal", "Errore: l'ambiente di esecuzione isolato non ha prodotto un "
+            "risultato. Se il problema persiste, l'installazione potrebbe essere incompleta.",
+            code)
     # Ritorno (worker -> padre): JSON. Un payload malformato produce un errore
     # leggibile, MAI l'esecuzione di codice nel padre.
     try:
