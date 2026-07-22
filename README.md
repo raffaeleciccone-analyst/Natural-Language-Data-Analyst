@@ -131,19 +131,23 @@ e la categoria su cui basare KPI e classifiche.
 ## Architettura
 
 ```
-main.py               interfaccia Streamlit (report, KPI, grafici collegati, chat)
-nlda/loader.py        lettura multi-formato, profilo del dataset, analisi automatica
-nlda/agent.py         traduzione domanda → codice Pandas (adattata allo schema)
-nlda/executor.py      validazione AST, sandbox, esecuzione isolata, grafici Plotly
-nlda/ui_components.py  componenti di presentazione Streamlit (card, tabelle, grafici)
-nlda/service.py       orchestrazione del turno (domanda → codice → esito → spiegazione)
-nlda/results.py       esito tipizzato dell'esecuzione (successo / fallimento con causa)
-nlda/errors.py        eccezioni applicative
-nlda/providers/       astrazione multi-LLM (ollama, groq, anthropic, openai, gemini)
-nlda/config.py        configurazione centralizzata (timeout, sandbox, retry) da env
-nlda/log.py           logging applicativo
-scripts/              utilità accessorie (rigenerazione della favicon)
-tests/                suite pytest (con focus sulla sandbox di sicurezza)
+main.py                    interfaccia Streamlit (report, KPI, grafici collegati, chat)
+nlda/service.py            orchestrazione del turno (domanda → codice → esito → spiegazione)
+nlda/agent.py              traduzione domanda → codice Pandas (adattata allo schema)
+nlda/sandbox/validator.py  allowlist di nodi AST: decide se il codice è ammissibile
+nlda/sandbox/runner.py     esecuzione nel sottoprocesso e canale di ritorno JSON
+nlda/charts.py             figure Plotly e loro aspetto
+nlda/loader.py             lettura multi-formato, profilo del dataset, analisi automatica
+nlda/ui_components.py      componenti di presentazione Streamlit (card, tabelle, grafici)
+nlda/results.py            esito tipizzato dell'esecuzione (successo / fallimento con causa)
+nlda/sanitize.py           difesa dai dati non fidati che finiscono nel prompt
+nlda/errors.py             eccezioni applicative
+nlda/demo.py               quota della demo pubblica
+nlda/providers/            astrazione multi-LLM (ollama, groq, anthropic, openai, gemini)
+nlda/config.py             configurazione centralizzata (timeout, sandbox, retry) da env
+nlda/log.py                logging applicativo
+scripts/                   favicon, registrazione del corpus, smoke ed eval
+tests/                     suite pytest (con focus sulla sandbox di sicurezza)
 ```
 
 Il flusso di una domanda: l'agente costruisce un prompt con lo schema reale del
