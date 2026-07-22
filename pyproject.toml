@@ -14,7 +14,7 @@ license = "MIT"
 # riproducibilità vale più dell'aggiornamento automatico, e numpy in particolare
 # determina gli stub di tipo con cui gira il type-check in CI.
 dependencies = [
-    "streamlit==1.59.2",
+    "streamlit==1.60.0",
     "pandas==3.0.2",
     "numpy==2.5.1",
     "plotly==6.9.0",
