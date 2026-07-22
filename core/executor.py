@@ -6,11 +6,19 @@ import pickle
 import re
 import subprocess
 import sys
+from typing import cast
 
 import pandas as pd
 
 from core.config import settings
 from core.log import get_logger
+from core.results import (
+    FAILURE_KINDS,
+    ExecutionFailure,
+    ExecutionResult,
+    ExecutionSuccess,
+    FailureKind,
+)
 from core.utils import clean_code, fmt_num
 
 log = get_logger(__name__)
@@ -266,9 +274,11 @@ def _make_summary(fig, value, max_rows: int = 30) -> str:
 def summarize_result(result, max_rows: int = 30) -> str:
     """
     Testo di riepilogo di un risultato per l'LLM. Il flusso reale passa sempre un
-    dict {"fig", "value", "summary"} (il riepilogo è già calcolato nel worker);
-    resta un ripiego per oggetti grezzi (Series/DataFrame/scalari).
+    ExecutionSuccess (il riepilogo è già calcolato nel worker); resta un ripiego
+    per oggetti grezzi (Series/DataFrame/scalari) e per il vecchio dict.
     """
+    if isinstance(result, ExecutionSuccess):
+        return result.summary or _make_summary(result.fig, result.value, max_rows)
     if isinstance(result, dict):
         return result.get("summary") or _make_summary(result.get("fig"), result.get("value"), max_rows)
     return _obj_summary(result, max_rows)
@@ -425,22 +435,22 @@ def _last_assigned_name(tree: ast.AST):
     return name
 
 
-def _parse_and_validate(code: str):
+def _parse_and_validate(code: str) -> "ast.Module | ExecutionFailure":
     """
     Parsifica il codice e applica la sandbox statica. Ritorna l'AST se il codice è
-    valido ed eseguibile, altrimenti una stringa d'errore già formattata.
+    valido ed eseguibile, altrimenti il fallimento con la sua causa.
     Unico punto di verità condiviso tra esecuzione in-process e pre-controllo.
     """
     try:
         tree = ast.parse(code, mode="exec")
     except SyntaxError as e:
-        return f"Errore di sintassi nel codice generato: {e} \nCodice tentato: {code}"
+        return ExecutionFailure("syntax", f"Errore di sintassi nel codice generato: {e}", code)
 
     # Nessuno statement eseguibile (es. il provider ha restituito solo un commento
     # "# Errore di comunicazione..."): è un fallimento, non un successo.
     if not tree.body:
         msg = code.lstrip("# ").strip() or "il modello non ha prodotto codice eseguibile"
-        return f"Errore: {msg}"
+        return ExecutionFailure("syntax", f"Errore: {msg}", code)
 
     # Sandbox statica: rifiuta le costruzioni pericolose prima di eseguire
     try:
@@ -449,18 +459,18 @@ def _parse_and_validate(code: str):
         # Traccia QUALE regola ha bocciato il codice: prezioso per capire i
         # tentativi di escape del modello (e per le regression di sicurezza).
         log.warning("Sandbox: codice rifiutato (%s) — %r", e, code[:200])
-        return f"Errore di sicurezza: {e}. \nCodice tentato: {code}"
+        return ExecutionFailure("security", f"Errore di sicurezza: {e}.", code)
 
     return tree
 
 
-def _run_code(code: str, df: pd.DataFrame):
+def _run_code(code: str, df: pd.DataFrame) -> ExecutionResult:
     """
-    Valida ed esegue il codice. Ritorna il risultato (valore/figura) o una stringa
-    d'errore. È il cuore eseguito sia in-process sia nel sottoprocesso.
+    Valida ed esegue il codice. È il cuore eseguito sia in-process sia nel
+    sottoprocesso: ritorna sempre un esito tipizzato, mai una stringa d'errore.
     """
     parsed = _parse_and_validate(code)
-    if isinstance(parsed, str):
+    if isinstance(parsed, ExecutionFailure):
         return parsed
     tree = parsed
 
@@ -500,10 +510,10 @@ def _run_code(code: str, df: pd.DataFrame):
             value = "Codice eseguito correttamente."
 
         # Il riepilogo testuale è calcolato QUI (figura reale) e viaggia col risultato.
-        return {"fig": fig, "value": value, "summary": _make_summary(fig, value)}
+        return ExecutionSuccess(fig=fig, value=value, summary=_make_summary(fig, value))
 
     except Exception as e:
-        return f"Errore di esecuzione sul codice generato: {e} \nCodice tentato: {code}"
+        return ExecutionFailure("runtime", f"Errore di esecuzione sul codice generato: {e}", code)
 
 
 # --- Canale di ritorno dal worker: SOLO dati, mai oggetti ----------------------
@@ -563,31 +573,49 @@ def _decode_value(payload):
     return None
 
 
-def serialize_result(result) -> dict:
-    """Prepara il risultato per il trasferimento dal sottoprocesso, in forma JSON."""
-    if isinstance(result, str):  # stringa d'errore
-        return {"kind": "err", "msg": result}
-    fig = result.get("fig")
+def serialize_result(result: ExecutionResult) -> dict:
+    """
+    Prepara l'esito per il trasferimento dal sottoprocesso, in forma JSON.
+    Anche il fallimento viaggia strutturato: la CAUSA ('kind') deve sopravvivere
+    al viaggio, altrimenti il padre dovrebbe reinferirla dal testo del messaggio.
+    """
+    if isinstance(result, ExecutionFailure):
+        return {"kind": "err",
+                "failure": {"kind": result.kind, "message": result.message, "code": result.code}}
+    fig = result.fig
     return {"kind": "ok",
             "fig": fig.to_json() if fig is not None else None,
-            "value": _encode_value(result.get("value")),
-            "summary": result.get("summary")}
+            "value": _encode_value(result.value),
+            "summary": result.summary}
 
 
-def _deserialize_result(payload):
+def _deserialize_failure(payload: dict) -> ExecutionFailure:
+    """Ricostruisce il fallimento dal payload, senza fidarsi di ciò che contiene."""
+    fail = payload.get("failure")
+    if not isinstance(fail, dict):
+        return ExecutionFailure("internal", "Errore sconosciuto dall'ambiente di esecuzione isolato.")
+    raw = fail.get("kind")
+    # Un 'kind' fuori dai valori previsti non deve diventare una causa arbitraria:
+    # il worker è non fidato, quindi si degrada su 'internal'.
+    kind: FailureKind = cast(FailureKind, raw) if raw in FAILURE_KINDS else "internal"
+    return ExecutionFailure(kind, str(fail.get("message") or "Errore sconosciuto."),
+                            str(fail.get("code") or ""))
+
+
+def _deserialize_result(payload) -> ExecutionResult:
     if not isinstance(payload, dict):
-        return "Errore: risultato non valido dal sottoprocesso."
+        return ExecutionFailure("internal", "Errore: risultato non valido dal sottoprocesso.")
     if payload.get("kind") == "err":
-        return payload.get("msg", "Errore sconosciuto.")
+        return _deserialize_failure(payload)
     fig = None
     if payload.get("fig"):
         import plotly.io as pio
         fig = apply_theme(pio.from_json(payload["fig"]))
-    return {"fig": fig, "value": _decode_value(payload.get("value")),
-            "summary": payload.get("summary")}
+    return ExecutionSuccess(fig=fig, value=_decode_value(payload.get("value")),
+                            summary=str(payload.get("summary") or ""))
 
 
-def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int):
+def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int) -> ExecutionResult:
     """Esegue il codice in un interprete separato con timeout. Solleva se non avviabile."""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     env = dict(os.environ, PYTHONPATH=root + os.pathsep + os.environ.get("PYTHONPATH", ""))
@@ -599,24 +627,28 @@ def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int):
     )
     if proc.returncode != 0 or not proc.stdout:
         err = (proc.stderr or b"").decode(errors="replace").strip()[-200:]
-        return ("Errore: esecuzione terminata in modo anomalo "
-                f"(possibile esaurimento memoria). {err}".strip())
+        # 'runtime' e non 'internal': il worker parte ed è il codice generato ad
+        # abbatterlo (tipicamente esaurendo la memoria), quindi rigenerarlo più
+        # leggero è un tentativo sensato.
+        return ExecutionFailure("runtime", "Errore: esecuzione terminata in modo anomalo "
+                                f"(possibile esaurimento memoria). {err}".strip(), code)
     # Ritorno (worker -> padre): JSON. Un payload malformato produce un errore
     # leggibile, MAI l'esecuzione di codice nel padre.
     try:
         data = json.loads(proc.stdout.decode("utf-8"))
     except (ValueError, UnicodeDecodeError) as e:
         log.error("Payload non valido dal sottoprocesso: %s", e)
-        return "Errore: risultato non leggibile dall'ambiente di esecuzione isolato."
+        return ExecutionFailure(
+            "internal", "Errore: risultato non leggibile dall'ambiente di esecuzione isolato.", code)
     return _deserialize_result(data)
 
 
-def execute_pandas_code(code_string: str, df: pd.DataFrame):
+def execute_pandas_code(code_string: str, df: pd.DataFrame) -> ExecutionResult:
     code = clean_code(code_string)
 
     # Pre-controllo rapido (fail-fast, senza avviare un processo)
     parsed = _parse_and_validate(code)
-    if isinstance(parsed, str):
+    if isinstance(parsed, ExecutionFailure):
         return parsed
 
     # Esecuzione isolata in sottoprocesso (con timeout e cap memoria su POSIX).
@@ -624,16 +656,18 @@ def execute_pandas_code(code_string: str, df: pd.DataFrame):
         try:
             return _run_in_subprocess(code, df, settings.exec_timeout)
         except subprocess.TimeoutExpired:
-            return (f"Errore: esecuzione interrotta dopo {settings.exec_timeout}s "
-                    "(codice troppo lento o troppo pesante).")
+            return ExecutionFailure(
+                "timeout", f"Errore: esecuzione interrotta dopo {settings.exec_timeout}s "
+                "(codice troppo lento o troppo pesante).", code)
         except Exception as e:
             # Il sottoprocesso non è avviabile. L'in-process NON ha timeout né
             # limite di memoria: degradare a esso indebolisce la sandbox. Per questo
             # è dietro un flag che il deploy pubblico tiene spento (fail-closed).
             if not settings.allow_inprocess_fallback:
                 log.error("Sandbox subprocess non avviabile e fallback disattivato: %s", e)
-                return ("Errore: ambiente di esecuzione isolato non disponibile. "
-                        "Per sicurezza l'esecuzione è stata bloccata.")
+                return ExecutionFailure(
+                    "internal", "Errore: ambiente di esecuzione isolato non disponibile. "
+                    "Per sicurezza l'esecuzione è stata bloccata.", code)
             log.warning("Sandbox subprocess non avviabile (%s): fallback in-process "
                         "SENZA timeout/limite memoria.", e)
 

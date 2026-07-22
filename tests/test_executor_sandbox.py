@@ -17,11 +17,12 @@ from core.executor import (
     _run_code,
     execute_pandas_code,
 )
+from core.results import ExecutionFailure, ExecutionSuccess
 
 
 def _is_rejected(code: str) -> bool:
-    """True se la sandbox statica rifiuta il codice (ritorna una stringa d'errore)."""
-    return isinstance(_parse_and_validate(code), str)
+    """True se la sandbox statica rifiuta il codice (ritorna un fallimento invece dell'AST)."""
+    return isinstance(_parse_and_validate(code), ExecutionFailure)
 
 
 # --- Codice PERICOLOSO: deve essere sempre rifiutato ---------------------------
@@ -135,27 +136,58 @@ def test_ultimo_assegnato_augassign():
     assert _last_assigned_name(ast.parse(code)) == "x"
 
 
+# --- Causa del rifiuto ---------------------------------------------------------
+# La causa è ciò su cui il resto dell'app decide (in particolare se ritentare):
+# vale la pena fissarla, non solo il fatto che il codice sia stato rifiutato.
+def test_il_rifiuto_di_sicurezza_non_e_ritentabile():
+    fail = _parse_and_validate("df.to_csv('x.csv')")
+    assert isinstance(fail, ExecutionFailure)
+    assert fail.kind == "security"
+    # Rigenerare il codice porterebbe allo stesso blocco: ritentare è solo spreco.
+    assert fail.retryable is False
+
+
+def test_errore_di_sintassi_e_ritentabile():
+    fail = _parse_and_validate("df['Sales'.sum()")
+    assert isinstance(fail, ExecutionFailure)
+    assert fail.kind == "syntax"
+    assert fail.retryable is True
+
+
+def test_codice_senza_statement_e_un_fallimento():
+    # Il provider irraggiungibile restituisce un commento-sentinella: niente AST
+    # eseguibile, quindi un fallimento e non un successo vuoto.
+    fail = _parse_and_validate("# Errore di comunicazione con il provider LLM")
+    assert isinstance(fail, ExecutionFailure)
+    assert fail.kind == "syntax"
+
+
 # --- Esecuzione end-to-end -----------------------------------------------------
 def test_run_code_espressione(sales_df: pd.DataFrame):
     res = _run_code("df['Sales'].sum()", sales_df)
-    assert isinstance(res, dict)
-    assert res["value"] == sales_df["Sales"].sum()
+    assert isinstance(res, ExecutionSuccess)
+    assert res.value == sales_df["Sales"].sum()
 
 
 def test_run_code_multistatement_con_risultato(sales_df: pd.DataFrame):
     code = "tot = df['Sales'].sum()\nrisultato = tot * 2"
     res = _run_code(code, sales_df)
-    assert res["value"] == sales_df["Sales"].sum() * 2
+    assert isinstance(res, ExecutionSuccess)
+    assert res.value == sales_df["Sales"].sum() * 2
 
 
-def test_run_code_errore_ritorna_stringa(sales_df: pd.DataFrame):
-    res = _run_code("df['ColonnaInesistente'].sum()", sales_df)
-    assert isinstance(res, str)
-    assert res.startswith("Errore")
+def test_run_code_errore_ritorna_fallimento_runtime(sales_df: pd.DataFrame):
+    code = "df['ColonnaInesistente'].sum()"
+    res = _run_code(code, sales_df)
+    assert isinstance(res, ExecutionFailure)
+    assert res.kind == "runtime"
+    assert res.retryable is True
+    assert res.code == code  # il codice fallito viaggia col fallimento, per la correzione
 
 
 def test_execute_pandas_code_blocca_codice_pericoloso(sales_df: pd.DataFrame):
     # Percorso pubblico completo: il pre-controllo deve bloccare prima di eseguire.
     out = execute_pandas_code("df.to_csv('x.csv')", sales_df)
-    assert isinstance(out, str)
-    assert "sicurezza" in out.lower()
+    assert isinstance(out, ExecutionFailure)
+    assert out.kind == "security"
+    assert "sicurezza" in out.message.lower()

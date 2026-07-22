@@ -13,6 +13,7 @@ import streamlit as st
 
 from core.executor import apply_theme, to_chart
 from core.loader import monthly_trend
+from core.results import ExecutionFailure, ExecutionResult
 from core.utils import IT_NUM_FORMAT, fmt_num
 
 
@@ -162,21 +163,21 @@ def render_value(value, kp: str = "r") -> None:
         st.markdown(f"**Risultato:** {value}")
 
 
-def render_result(code: str, result, explanation: "str | None" = None, kp: str = "r") -> None:
+def render_result(code: str, result: ExecutionResult,
+                  explanation: "str | None" = None, kp: str = "r") -> None:
     """Rende un turno completo: risposta testuale, risultato visuale, codice generato."""
     # 1. Risposta testuale (in un riquadro dedicato)
     if explanation:
         answer_card("Risposta", explanation)
 
-    # 2. Risultato visuale: grafico E/O dati
-    if isinstance(result, str):  # stringa d'errore
-        st.error(result)
-    elif isinstance(result, dict):
-        if result.get("fig") is not None:
-            st.plotly_chart(apply_theme(result["fig"]), use_container_width=True, key=f"{kp}_fig")
-        render_value(result.get("value"), kp)
+    # 2. Risultato visuale: grafico E/O dati. All'utente si mostra solo il
+    # messaggio del fallimento: la causa tecnica ('kind') serve al codice, non a lui.
+    if isinstance(result, ExecutionFailure):
+        st.error(result.message)
     else:
-        render_value(result, kp)
+        if result.fig is not None:
+            st.plotly_chart(apply_theme(result.fig), use_container_width=True, key=f"{kp}_fig")
+        render_value(result.value, kp)
 
     # 3. Codice generato (in fondo, collassato)
     with st.expander("Codice Pandas generato"):

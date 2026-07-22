@@ -7,14 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from core.agent import DataAgent
-from core.executor import (
-    apply_theme,
-    corr_heatmap,
-    execute_pandas_code,
-    histogram,
-    summarize_result,
-    to_chart,
-)
+from core.executor import apply_theme, corr_heatmap, histogram, to_chart
 from core.loader import (
     SUPPORTED_EXTENSIONS,
     analyze,
@@ -27,6 +20,7 @@ from core.loader import (
 )
 from core.log import get_logger
 from core.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers
+from core.service import AnalysisService, Turn
 from core.ui_components import answer_card, build_kpis, readout, render_linked_charts, render_result
 from core.ui_theme import console_css
 from core.utils import fmt_num
@@ -78,7 +72,7 @@ def demo_allows(kind: str) -> bool:
     return True
 
 
-def _with_unit(text: str) -> str:
+def _with_unit(text: str, unit: str) -> str:
     """Antepone al testo l'unità di misura, se l'utente ne ha indicata una (per l'LLM)."""
     return f"L'unità di misura dei valori è '{unit}'.\n{text}" if unit else text
 
@@ -144,6 +138,9 @@ def get_agent(provider: str, model_name: str, api_key: str) -> DataAgent:
 
 
 agent = get_agent(provider, model_name, api_key)
+# L'orchestrazione della domanda vive nel servizio (testabile senza Streamlit);
+# qui resta solo il flusso della pagina.
+service = AnalysisService(agent)
 
 # --- Header ---
 st.title("Natural Language Data Analyst")
@@ -291,7 +288,7 @@ if st.session_state.get("overview_sig") != overview_sig:
     st.session_state.overview_sig = overview_sig
     if spiega_ai and insights.get("text"):
         with st.spinner("L'AI sta preparando la sintesi dei dati..."):
-            st.session_state.overview_text = agent.overview(_with_unit(insights["text"]))
+            st.session_state.overview_text = agent.overview(_with_unit(insights["text"], unit))
     else:
         st.session_state.overview_text = None
 
@@ -361,7 +358,8 @@ if st.session_state.get("exec_report") and st.session_state.get("exec_report_sig
 if st.button("Genera report esecutivo", disabled=not insights.get("text")):
     if demo_allows("generazioni"):
         with st.spinner("L'AI sta redigendo il report esecutivo..."):
-            st.session_state.exec_report = agent.executive_report(_with_unit(insights["text"]))
+            st.session_state.exec_report = agent.executive_report(
+                _with_unit(insights["text"], unit))
             st.session_state.exec_report_sig = exec_sig
 
 if st.session_state.get("exec_report"):
@@ -378,30 +376,11 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 
-def process_question(prompt: str):
-    """Genera il codice, lo esegue (con retry), produce la spiegazione e salva il turno."""
+def process_question(prompt: str) -> None:
+    """Delega il turno al servizio e lo aggiunge allo storico della sessione."""
     with st.spinner("Analisi in corso..."):
-        # L'agente decide da sé se serve un grafico e avvolge i dati (unica fonte).
-        codice = agent.ask_code(prompt, df)
-        risultato = execute_pandas_code(codice, df)
-
-        tentativo = 0
-        while (isinstance(risultato, str) and risultato.startswith("Errore") and tentativo < 3):
-            tentativo += 1
-            codice = agent.fix_code(prompt, df, codice, risultato)
-            risultato = execute_pandas_code(codice, df)
-
-        spiegazione = None
-        if spiega_ai and isinstance(risultato, dict):
-            _summ = risultato.get("summary") or summarize_result(risultato)
-            if unit:
-                _summ = f"Unità di misura: '{unit}'.\n" + _summ
-            spiegazione = agent.explain(prompt, _summ)
-
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    st.session_state.messages.append(
-        {"role": "assistant", "code": codice, "result": risultato, "explanation": spiegazione}
-    )
+        turn = service.answer(prompt, df, explain=spiega_ai, unit=unit)
+    st.session_state.messages.append(turn)
 
 
 # --- Box domanda (inline, integrato nel flusso) ---
@@ -418,18 +397,11 @@ if submitted and user_q and user_q.strip():
         process_question(user_q.strip())
 
 # --- Storico conversazione (turno più recente in alto) ---
-_msgs = st.session_state.messages
-_turns = []
-_i = 0
-while _i < len(_msgs):
-    u = _msgs[_i]
-    a = _msgs[_i + 1] if _i + 1 < len(_msgs) and _msgs[_i + 1]["role"] == "assistant" else None
-    _turns.append((u, a))
-    _i += 2 if a else 1
-
-for _oi, (u, a) in reversed(list(enumerate(_turns))):
+# Lo storico è una lista di Turn: domanda e risposta stanno nello stesso oggetto,
+# quindi non serve più ricostruire le coppie scorrendo messaggi alternati.
+_turns: list[Turn] = st.session_state.messages
+for _oi, _turn in reversed(list(enumerate(_turns))):
     with st.chat_message("user"):
-        st.write(u["content"])
-    if a is not None:
-        with st.chat_message("assistant"):
-            render_result(a["code"], a["result"], a.get("explanation"), kp=f"h{_oi}")
+        st.write(_turn.question)
+    with st.chat_message("assistant"):
+        render_result(_turn.code, _turn.result, _turn.explanation, kp=f"h{_oi}")
