@@ -14,7 +14,7 @@
 #   anthropic -> anthropic>=0.40,<1.0
 #   gemini    -> google-genai>=0.3,<2.0
 
-streamlit==1.59.2
+streamlit==1.60.0
 pandas==3.0.3
 numpy==2.5.1          # pinnata: la sua versione determina gli stub di tipo usati in CI
 plotly==6.9.0
