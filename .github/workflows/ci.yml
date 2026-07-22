@@ -24,16 +24,29 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Installa le dipendenze (app + dev)
+      - name: Installa le dipendenze (app + tutti gli SDK + dev)
         run: |
           python -m pip install --upgrade pip
           # requirements.txt per primo: fissa le versioni esatte con cui il
           # type-check è riproducibile (gli stub dipendono dalla release di numpy).
           pip install -r requirements.txt
-          pip install -e ".[dev]"
+          # `all` (non solo `dev`): i test di contratto sui provider verificano gli
+          # argomenti passati contro la firma REALE dell'SDK installato. Senza
+          # anthropic/google-genai/ollama quei test si salterebbero in silenzio,
+          # cioè proprio dove servono: a intercettare un major che cambia firma.
+          pip install -e ".[all,dev]"
 
-      - name: Pytest
-        run: pytest
+      # Soglia di copertura sotto il valore misurato (81% su `nlda`): deve
+      # segnalare una REGRESSIONE, non essere un obiettivo aspirazionale che
+      # fallisce subito e viene disattivato al primo fastidio. Si alza quando la
+      # copertura sale in modo stabile.
+      #
+      # main.py resta FUORI dal gate: è lo script Streamlit (esegue la UI al solo
+      # import, quindi nessun test lo importa) e la sua copertura è di fatto 0%.
+      # Includerlo abbasserebbe la soglia per tutti gli altri moduli, cioè
+      # renderebbe il gate cieco proprio sul codice che i test coprono davvero.
+      - name: Pytest (con soglia di copertura)
+        run: pytest --cov=nlda --cov-report=term-missing --cov-fail-under=78
 
   # Lint e type-check su una sola versione: non dipendono dall'interprete e
   # ripeterli tre volte allungherebbe la CI senza aggiungere informazione.
@@ -52,7 +65,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install -e ".[dev]"
+          # Anche qui `all`: con gli SDK installati mypy vede i loro tipi reali e
+          # controlla davvero il codice dei provider, invece di lasciarlo cadere
+          # sotto `ignore_missing_imports`. Verificato in locale che il
+          # type-check resta pulito con tutti e quattro gli SDK presenti.
+          pip install -e ".[all,dev]"
 
       - name: Ruff (lint)
         run: ruff check .

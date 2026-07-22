@@ -5,8 +5,13 @@ Nessuna chiamata all'LLM: costruire DataAgent con il provider locale non contatt
 niente (l'import del client è lazy, dentro _call). Qui testiamo la logica pura.
 """
 import pandas as pd
+import pytest
 
+import nlda.providers.base as base_mod
 from nlda.agent import DataAgent, _describe_schema, _sanitize_sample
+from nlda.config import Settings
+from nlda.errors import ProviderError
+from nlda.providers.base import LLMProvider
 
 
 def _agent() -> DataAgent:
@@ -60,3 +65,60 @@ def test_describe_schema_elenca_le_colonne():
     schema = _describe_schema(df)
     assert "Region" in schema
     assert "Sales" in schema
+
+
+class _ProviderRotto(LLMProvider):
+    """Provider che fallisce sempre: imita un modello irraggiungibile."""
+
+    def __init__(self):
+        super().__init__(model_name="rotto")
+
+    def _call(self, system_prompt: str, user_prompt: str) -> str:
+        raise RuntimeError("connessione rifiutata")
+
+
+class _ProviderFinto(LLMProvider):
+    """Provider che risponde con un testo fisso, senza rete."""
+
+    def __init__(self, risposta: str):
+        super().__init__(model_name="finto")
+        self.risposta = risposta
+
+    def _call(self, system_prompt: str, user_prompt: str) -> str:
+        return self.risposta
+
+
+@pytest.fixture(autouse=True)
+def _niente_attese(monkeypatch):
+    """Azzera il backoff: i retry del provider non devono rallentare la suite."""
+    monkeypatch.setattr(base_mod, "settings", Settings(max_retries=0, retry_backoff=0.0))
+
+
+@pytest.mark.parametrize("metodo, argomenti", [
+    ("overview", ("profilo del dataset",)),
+    ("explain", ("quanto vendo?", "totale 100")),
+    ("executive_report", ("insight già calcolati",)),
+])
+def test_narrativa_fallita_non_propaga_ma_avvisa(metodo, argomenti):
+    # Differenza deliberata rispetto a `_generate`: la narrativa è un complemento,
+    # non il risultato. Se il modello non risponde l'utente deve comunque vedere i
+    # numeri calcolati da Pandas, con un avviso al posto del commento.
+    agente = DataAgent(provider=_ProviderRotto())
+    testo = getattr(agente, metodo)(*argomenti)
+    assert testo.startswith("_(Impossibile generare ") and testo.endswith(")_")
+    assert "connessione rifiutata" in testo
+
+
+def test_generazione_codice_fallita_solleva_providererror(sales_df: pd.DataFrame):
+    # Il contrapposto: qui il guasto è definitivo e NON va mascherato da un
+    # commento, altrimenti l'executor lo scambierebbe per codice da correggere.
+    agente = DataAgent(provider=_ProviderRotto())
+    with pytest.raises(ProviderError):
+        agente.ask_code("qual è il totale?", sales_df)
+
+
+def test_narrativa_ripulita_dai_backtick():
+    # Alcuni modelli infilano backtick a caso: in Markdown diventano frammenti
+    # monospace in mezzo alla frase.
+    agente = DataAgent(provider=_ProviderFinto("  Le vendite valgono `1.000`.  "))
+    assert agente.explain("quanto?", "1000") == "Le vendite valgono 1.000."

@@ -2,6 +2,7 @@
 import io
 
 import pandas as pd
+import pytest
 
 from nlda.loader import (
     _maybe_parse_dates,
@@ -61,3 +62,55 @@ def test_analyze_produce_insight(sales_df: pd.DataFrame):
     assert res["category"] == "Region"
     assert "top" in res and "trend" in res
     assert isinstance(res["text"], str) and res["text"]
+
+
+# --- read_any: gli altri formati accettati dall'upload -------------------------
+def _upload(contenuto: bytes, nome: str) -> io.BytesIO:
+    """Imita il file caricato da Streamlit: un buffer di byte con un attributo .name."""
+    buf = io.BytesIO(contenuto)
+    buf.name = nome  # type: ignore[attr-defined]
+    return buf
+
+
+def test_read_any_excel():
+    # L'estensione .xlsx è offerta nella UI: senza questo test la lettura Excel
+    # (e la dipendenza openpyxl che la rende possibile) non è verificata da nulla.
+    origine = pd.DataFrame({"Region": ["North", "South"], "Sales": [100, 200]})
+    out = io.BytesIO()
+    origine.to_excel(out, index=False, engine="openpyxl")
+    out.seek(0)
+
+    df = read_any(_upload(out.getvalue(), "vendite.xlsx"))
+    assert list(df.columns) == ["Region", "Sales"]
+    assert df["Sales"].sum() == 300
+
+
+def test_read_any_json_lista_di_record():
+    payload = b'[{"Region": "North", "Sales": 100}, {"Region": "South", "Sales": 200}]'
+    df = read_any(_upload(payload, "vendite.json"))
+    assert list(df.columns) == ["Region", "Sales"]
+    assert len(df) == 2
+
+
+def test_read_any_json_annidato_diventa_stringa():
+    # Liste e dizionari dentro una cella romperebbero groupby, grafici e tabelle:
+    # vengono serializzati in stringa (colonne appiattite dove possibile).
+    payload = b'[{"Region": "North", "Tags": ["a", "b"], "Info": {"code": 1}}]'
+    df = read_any(_upload(payload, "annidato.json"))
+    assert df.loc[0, "Tags"] == '["a", "b"]'
+    # json_normalize appiattisce i dizionari in colonne separate.
+    assert "Info.code" in df.columns
+    # Nessuna cella resta di tipo lista/dict.
+    assert not df.map(lambda v: isinstance(v, (list, dict))).any().any()
+
+
+def test_read_any_json_scalare_e_rifiutato():
+    # Un JSON valido ma che non descrive una tabella (qui un numero) deve dare un
+    # errore comprensibile, non un DataFrame senza senso più avanti nel flusso.
+    with pytest.raises(ValueError, match="JSON"):
+        read_any(_upload(b'42', "numero.json"))
+
+
+def test_read_any_json_malformato_solleva():
+    with pytest.raises(ValueError):  # json.JSONDecodeError è una sottoclasse
+        read_any(_upload(b'{non-json}', "rotto.json"))
