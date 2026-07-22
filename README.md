@@ -147,11 +147,12 @@ tests/                suite pytest (con focus sulla sandbox di sicurezza)
 ```
 
 Il flusso di una domanda: l'agente costruisce un prompt con lo schema reale del
-dataset (nomi, tipi, esempi sanitizzati delle colonne), il provider LLM genera
-il codice, l'executor lo valida via AST e lo esegue in un sottoprocesso isolato
-con timeout; in caso di errore il codice viene corretto e ritentato. Il
-risultato (dati e/o figura) torna all'interfaccia insieme a un riepilogo usato
-dall'AI per la risposta testuale.
+dataset (nomi **e** valori delle colonne, sanitizzati), il provider LLM genera il
+codice, l'executor lo valida con l'allowlist AST e lo esegue in un sottoprocesso
+dedicato con timeout; se fallisce per un motivo correggibile il codice viene
+rigenerato e ritentato, altrimenti il turno si chiude subito. Il risultato (dati
+e/o figura) torna all'interfaccia insieme a un riepilogo usato dall'AI per la
+risposta testuale.
 
 ## Sicurezza
 
