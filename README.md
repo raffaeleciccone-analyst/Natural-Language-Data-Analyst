@@ -198,6 +198,33 @@ mypy nlda main.py  # type-check
 Le dipendenze vivono in `pyproject.toml`. `requirements.txt` resta solo come
 manifest di deploy: Streamlit Community Cloud installa esclusivamente da lì.
 
+### Come si verifica un'app che dipende da un modello
+
+Un test che sostituisce l'LLM con un finto non tocca né il testo del prompt né la
+forma reale delle risposte: è un punto cieco in cui i difetti passano con la
+suite verde. Qui la verifica è a strati, dal più deterministico al più incerto.
+
+| Strato | Cosa garantisce | Dove |
+|---|---|---|
+| **Golden dei prompt** | nessuna modifica accidentale al testo delle istruzioni | `tests/test_prompt_contract.py` |
+| **Contratti prompt ↔ runtime** | ciò che il prompt promette esiste, e il codice che insegna supera la nostra sandbox | idem |
+| **Corpus rigiocato** | risposte reali registrate attraversano l'intera pipeline in modo deterministico | `tests/test_corpus_replay.py` |
+| **Smoke** | con un modello vero, ogni domanda produce un risultato valido | `scripts/smoke.py` |
+| **Eval** | le risposte sono *corrette*, non solo eseguibili | `scripts/eval.py` |
+
+```bash
+pytest                                      # i primi tre strati, in CI
+python scripts/smoke.py                     # richiede un modello raggiungibile
+python scripts/eval.py                      # punteggio di correttezza
+python scripts/record_corpus.py             # rigenera il corpus registrato
+```
+
+Gli ultimi due parlano con un servizio esterno: girano in un workflow notturno
+separato (`.github/workflows/smoke.yml`), non sulle pull request. L'eval in
+particolare è una **misura**, non un test: il punteggio dipende dal modello e
+oscilla. Serve a confrontare provider e ad accorgersi se un cambio al prompt
+peggiora le risposte.
+
 Ogni push esegue in CI (GitHub Actions, `.github/workflows/ci.yml`):
 
 - **test** sulle tre versioni supportate (3.12, 3.13, 3.14);

@@ -1,0 +1,55 @@
+name: Smoke con modello reale
+
+# Deliberatamente SEPARATO dalla CI delle pull request. Questo job parla con un
+# servizio esterno: è lento e non deterministico, quindi bloccare una PR sul suo
+# esito significherebbe insegnare al team a ignorare i job rossi. Gira di notte e
+# a richiesta: se si rompe, si rompe senza fermare nessuno, ma lo si sa.
+on:
+  schedule:
+    - cron: "0 4 * * *"      # ogni notte alle 04:00 UTC
+  workflow_dispatch:          # e a mano, quando serve
+
+jobs:
+  smoke:
+    name: Domande reali a un modello vero
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installa le dipendenze
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e ".[openai]"
+
+      # Senza chiave non si fallisce: non tutti i fork hanno i secret, e un job
+      # rosso per una chiave assente è rumore, non informazione.
+      - name: Verifica la presenza della chiave
+        id: chiave
+        run: |
+          if [ -z "${{ secrets.GROQ_API_KEY }}" ]; then
+            echo "presente=no" >> "$GITHUB_OUTPUT"
+            echo "::notice::GROQ_API_KEY non configurata: smoke ed eval saltati."
+          else
+            echo "presente=si" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Smoke — la pipeline produce risultati validi?
+        if: steps.chiave.outputs.presente == 'si'
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: python scripts/smoke.py --provider groq --model llama-3.3-70b-versatile
+
+      # L'eval non fa fallire il job: il punteggio dipende dal modello e oscilla.
+      # Serve a essere LETTO nel log, non a bloccare.
+      - name: Eval — quante risposte sono corrette?
+        if: steps.chiave.outputs.presente == 'si'
+        continue-on-error: true
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: python scripts/eval.py --provider groq --model llama-3.3-70b-versatile
