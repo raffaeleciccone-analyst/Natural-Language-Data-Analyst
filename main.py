@@ -41,6 +41,7 @@ from nlda.loader import (
 from nlda.log import get_logger
 from nlda.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers
 from nlda.results import ExecutionFailure
+from nlda.sandbox.pool import riserva
 from nlda.service import AnalysisService, Turn
 from nlda.ui_components import answer_card, build_kpis, readout, render_linked_charts, render_result
 from nlda.ui_theme import console_css
@@ -510,6 +511,11 @@ def main() -> None:
 
     agent = get_agent(config.provider, config.model_name, config.api_key)
     service = AnalysisService(agent)
+
+    # Prepara un worker mentre l'utente legge il report: l'avvio costa ~840 ms di
+    # import (pandas, plotly) e pagarli qui significa non pagarli alla prima
+    # domanda. È idempotente, quindi i rerun continui di Streamlit non lo ripetono.
+    riserva.prewarm()
 
     st.title("Natural Language Data Analyst")
     st.markdown(

@@ -12,16 +12,11 @@ un modello e va trattato come potenzialmente compromesso.
 import ast
 import io
 import json
-import os
 import pickle  # nosec B403
 import subprocess  # nosec B404
-import sys
-from pathlib import Path
 from typing import cast
 
 import pandas as pd
-
-import nlda
 
 # px e go finiscono nel contesto di esecuzione del codice generato: il prompt
 # promette al modello che Plotly Express sia gia' disponibile come 'px'.
@@ -35,6 +30,7 @@ from nlda.results import (
     ExecutionSuccess,
     FailureKind,
 )
+from nlda.sandbox.pool import riserva
 from nlda.sandbox.validator import (
     SAFE_BUILTINS,
     _last_assigned_name,
@@ -251,24 +247,15 @@ def _deserialize_result(payload) -> ExecutionResult:
 
 def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int) -> ExecutionResult:
     """Esegue il codice in un interprete separato con timeout. Solleva se non avviabile."""
-    # Radice del progetto, cioè la cartella che CONTIENE il pacchetto `nlda`: è
-    # quella che deve stare su PYTHONPATH perché `python -m nlda._sandbox_worker`
-    # trovi il modulo. Si risale dal pacchetto e non da questo file, altrimenti il
-    # calcolo dipenderebbe da quanto è annidato — ed è già successo: spostando
-    # questo codice da `nlda/executor.py` a `nlda/sandbox/runner.py`, due
-    # `dirname` si fermavano a `nlda/` e il worker non era più raggiungibile.
-    root = str(Path(nlda.__file__).resolve().parent.parent)
-    env = dict(os.environ, PYTHONPATH=root + os.pathsep + os.environ.get("PYTHONPATH", ""))
     # Andata (padre -> worker): pickle, sorgente fidata e dtype del DataFrame preservati.
     payload = pickle.dumps((code, df))
-    proc = subprocess.run(
-        [sys.executable, "-m", "nlda._sandbox_worker"],
-        input=payload, capture_output=True, cwd=root, env=env, timeout=timeout,
-    # argv fisso e senza shell: il codice generato NON è un argomento, arriva su
-    # stdin, quindi non può essere interpretato dalla riga di comando.
-    )  # nosec B603
-    if proc.returncode != 0 or not proc.stdout:
-        err = (proc.stderr or b"").decode(errors="replace").strip()[-300:]
+    # La riserva calda consegna un worker che ha GIA' importato pandas e plotly:
+    # ~840 ms di costo fisso pagati in background invece che nell'attesa
+    # dell'utente. Resta comunque un processo fresco, che non ha mai eseguito
+    # nulla prima — l'isolamento non e' barattato con la velocita'.
+    returncode, stdout, stderr = riserva.esegui(payload, timeout)
+    if returncode != 0 or not stdout:
+        err = (stderr or b"").decode(errors="replace").strip()[-300:]
         # Il worker è morto: la causa dipende da CHI l'ha ucciso, e da questo
         # discende se ritentare abbia senso.
         #   - abbattuto DAL codice generato (segnale/OOM, MemoryError) -> 'runtime':
@@ -279,12 +266,12 @@ def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int) -> ExecutionRe
         #     ogni domanda, senza alcuna possibilità di successo.
         # In assenza di prove si sceglie 'internal': l'errore silenzioso costoso è
         # il deploy rotto che continua a pagare token, non l'OOM che non ritenta.
-        killed_by_code = proc.returncode < 0 or "MemoryError" in err
+        killed_by_code = returncode < 0 or "MemoryError" in err
         if killed_by_code:
             return ExecutionFailure("runtime", "Errore: esecuzione terminata in modo anomalo "
                                     "(possibile esaurimento memoria). Prova una domanda "
                                     "che aggreghi meno dati.", code)
-        log.error("Worker terminato senza risultato (returncode=%s): %s", proc.returncode, err)
+        log.error("Worker terminato senza risultato (returncode=%s): %s", returncode, err)
         return ExecutionFailure(
             "internal", "Errore: l'ambiente di esecuzione isolato non ha prodotto un "
             "risultato. Se il problema persiste, l'installazione potrebbe essere incompleta.",
@@ -292,7 +279,7 @@ def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int) -> ExecutionRe
     # Ritorno (worker -> padre): JSON. Un payload malformato produce un errore
     # leggibile, MAI l'esecuzione di codice nel padre.
     try:
-        data = json.loads(proc.stdout.decode("utf-8"))
+        data = json.loads(stdout.decode("utf-8"))
     except (ValueError, UnicodeDecodeError) as e:
         log.error("Payload non valido dal sottoprocesso: %s", e)
         return ExecutionFailure(

@@ -151,15 +151,19 @@ def test_sottoprocesso_reale_propaga_la_causa_dell_errore(sales_df: pd.DataFrame
 # Un worker che non parte (import fallito, dipendenza mancante) e' un deploy rotto:
 # ritentarlo costerebbe tre chiamate all'LLM per OGNI domanda, senza speranza. Un
 # worker abbattuto dal codice generato e' invece un caso correggibile.
-def _worker_morto(returncode: int, stderr: bytes):
-    import subprocess as sp
-    return lambda *a, **k: sp.CompletedProcess(args=[], returncode=returncode,
-                                               stdout=b"", stderr=stderr)
+def _worker_morto(monkeypatch, returncode: int, stderr: bytes) -> None:
+    """
+    Finge un worker morto, sostituendo la riserva calda.
+
+    Il bersaglio è `riserva.esegui` e non più `subprocess.run`: da quando esiste
+    la riserva, è lei il confine fra il processo padre e il worker.
+    """
+    monkeypatch.setattr("nlda.sandbox.runner.riserva.esegui",
+                        lambda payload, timeout: (returncode, b"", stderr))
 
 
 def test_worker_che_non_parte_non_e_ritentabile(monkeypatch, sales_df: pd.DataFrame):
-    monkeypatch.setattr("nlda.sandbox.runner.subprocess.run",
-                        _worker_morto(1, b"ModuleNotFoundError: No module named 'pandas'"))
+    _worker_morto(monkeypatch, 1, b"ModuleNotFoundError: No module named 'pandas'")
     out = execute_pandas_code("df['Sales'].sum()", sales_df)
     assert isinstance(out, ExecutionFailure)
     assert out.kind == "internal"
@@ -168,7 +172,7 @@ def test_worker_che_non_parte_non_e_ritentabile(monkeypatch, sales_df: pd.DataFr
 
 def test_worker_ucciso_dal_codice_e_ritentabile(monkeypatch, sales_df: pd.DataFrame):
     # Ucciso da un segnale (returncode negativo): tipico dell'OOM killer.
-    monkeypatch.setattr("nlda.sandbox.runner.subprocess.run", _worker_morto(-9, b""))
+    _worker_morto(monkeypatch, -9, b"")
     out = execute_pandas_code("df['Sales'].sum()", sales_df)
     assert isinstance(out, ExecutionFailure)
     assert out.kind == "runtime"
@@ -176,11 +180,26 @@ def test_worker_ucciso_dal_codice_e_ritentabile(monkeypatch, sales_df: pd.DataFr
 
 
 def test_memory_error_e_ritentabile(monkeypatch, sales_df: pd.DataFrame):
-    monkeypatch.setattr("nlda.sandbox.runner.subprocess.run",
-                        _worker_morto(1, b"Traceback...\nMemoryError"))
+    _worker_morto(monkeypatch, 1, b"Traceback...\nMemoryError")
     out = execute_pandas_code("df['Sales'].sum()", sales_df)
     assert isinstance(out, ExecutionFailure)
     assert out.kind == "runtime"
+
+
+def test_il_timeout_arriva_al_chiamante(monkeypatch, sales_df: pd.DataFrame):
+    # La riserva deve sollevare TimeoutExpired come faceva subprocess.run, così
+    # `execute_pandas_code` continua a tradurlo in kind='timeout' senza sapere
+    # se il worker fosse caldo o appena avviato.
+    import subprocess
+
+    def scade(payload, timeout):
+        raise subprocess.TimeoutExpired(cmd="worker", timeout=timeout)
+
+    monkeypatch.setattr("nlda.sandbox.runner.riserva.esegui", scade)
+    out = execute_pandas_code("df['Sales'].sum()", sales_df)
+    assert isinstance(out, ExecutionFailure)
+    assert out.kind == "timeout"
+    assert out.retryable is False
 
 
 def test_sottoprocesso_reale_blocca_codice_pericoloso(sales_df: pd.DataFrame):
