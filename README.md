@@ -240,7 +240,9 @@ Ogni push esegue in CI (GitHub Actions, `.github/workflows/ci.yml`):
 
 I parametri di runtime sono centralizzati in `nlda/config.py` e sovrascrivibili da
 variabile d'ambiente, tra cui: `EXEC_TIMEOUT`, `MEMORY_LIMIT_MB`,
-`ALLOW_INPROCESS_FALLBACK`, `LLM_REQUEST_TIMEOUT`, `LLM_MAX_RETRIES`, `LOG_LEVEL`.
+`ALLOW_INPROCESS_FALLBACK`, `LLM_REQUEST_TIMEOUT`, `LLM_MAX_RETRIES`, `LOG_LEVEL`,
+`MAX_ROWS` e `MAX_COLUMNS` (limiti sul file caricato: sono soglie di
+usabilita', non di memoria — oltre, ogni domanda richiede piu' di un secondo).
 
 ## Deploy
 
