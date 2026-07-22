@@ -43,14 +43,30 @@ def readout(col, label: str, value: str, sub: str = "",
     )
 
 
+def _leader_kpi(label: str, ranking: pd.Series, fmt_sub):
+    """
+    Card 'Top ...' costruita dalla prima riga di una classifica, oppure None se la
+    classifica è VUOTA. Il caso vuoto è reale e raggiungibile dalla UI: un CSV con le
+    sole intestazioni, oppure una colonna categoriale con soli valori mancanti (il
+    groupby scarta i NaN). Senza questa guardia `ranking.index[0]` solleva IndexError
+    e Streamlit mostra la schermata d'errore al posto dell'app.
+    """
+    if ranking.empty:
+        return None
+    return (label, str(ranking.index[0]), fmt_sub(ranking.iloc[0]), "#008300", True)
+
+
 def build_kpis(df, sel_measure, sel_category, unit):
     """
     Costruisce le card KPI adattandosi ai dati: con una MISURA -> totale/media/
     massimo/leader; SENZA misura -> conteggi. Ritorna una lista di tuple
     (label, value, sub, tick, small). Nessun effetto Streamlit (facile da testare).
+    Su dataset vuoto non solleva: ripiega sulle card a conteggio.
     """
     def wu(v):  # accosta l'unità di misura, se indicata
         return f"{fmt_num(v)} {unit}".strip() if unit else fmt_num(v)
+
+    record_kpi = ("Record", fmt_num(len(df)), "", "#008300", False)
 
     kpis = []
     if sel_measure:
@@ -58,16 +74,19 @@ def build_kpis(df, sel_measure, sel_category, unit):
         kpis.append((f"Totale {sel_measure}", wu(s.sum()), "", "#0e7c86", False))
         kpis.append((f"Media {sel_measure}", wu(s.mean()), "", "#eda100", False))
         kpis.append((f"Massimo {sel_measure}", wu(s.max()), "", "#2a78d6", False))
+        leader = None
         if sel_category:
-            leader = df.groupby(sel_category)[sel_measure].sum().sort_values(ascending=False)
-            kpis.append((f"Top {sel_category}", str(leader.index[0]), wu(leader.iloc[0]), "#008300", True))
-        else:
-            kpis.append(("Record", fmt_num(len(df)), "", "#008300", False))
+            ranking = df.groupby(sel_category)[sel_measure].sum().sort_values(ascending=False)
+            leader = _leader_kpi(f"Top {sel_category}", ranking, wu)
+        # Senza categoria (o senza un leader calcolabile) la quarta card resta il conteggio
+        kpis.append(leader or record_kpi)
     elif sel_category:  # nessuna misura: KPI a conteggi
         vc = df[sel_category].value_counts()
         kpis.append(("Record", fmt_num(len(df)), "", "#2a78d6", False))
         kpis.append((f"{sel_category} distinte", fmt_num(df[sel_category].nunique()), "", "#eda100", False))
-        kpis.append((f"Top {sel_category}", str(vc.index[0]), f"{fmt_num(vc.iloc[0])} record", "#008300", True))
+        leader = _leader_kpi(f"Top {sel_category}", vc, lambda v: f"{fmt_num(v)} record")
+        if leader is not None:
+            kpis.append(leader)
     else:
         kpis.append(("Record", fmt_num(len(df)), "", "#2a78d6", False))
         kpis.append(("Colonne", str(df.shape[1]), "", "#008300", False))
