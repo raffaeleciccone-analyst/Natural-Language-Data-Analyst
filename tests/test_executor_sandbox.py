@@ -55,6 +55,20 @@ REJECTED = [
     "df.style",
     # cicli potenzialmente infiniti
     "while True:\n    x = 1",
+    # --- costrutti fuori dall'allowlist dei nodi AST ---------------------------
+    # Non sono exploit noti: sono superficie che a un'espressione Pandas non serve.
+    # Restano fuori per costruzione, non perché qualcuno li abbia elencati.
+    "def f():\n    return 1",
+    "class C:\n    x = 1",
+    "with pd.option_context('display.max_rows', 5):\n    x = 1",
+    "try:\n    x = 1\nexcept Exception:\n    x = 2",
+    "raise ValueError('x')",
+    "assert len(df) > 0",
+    "del df['Sales']",
+    "global x",
+    "async def f():\n    x = 1",
+    "(x := df['Sales'].sum())",          # walrus
+    "match len(df):\n    case 0:\n        x = 1",
 ]
 
 
@@ -76,6 +90,25 @@ ALLOWED = [
     "df.to_dict()",
     # assegnazioni multiple + risultato
     "risultato = df['Sales'].sum()",
+    # --- idiomi che l'allowlist NON deve rompere -------------------------------
+    # Sono le forme che il system prompt insegna al modello a produrre: se una di
+    # queste venisse rifiutata, l'app smetterebbe di rispondere a domande legittime.
+    "df[df['Sales'] > 100]",                                   # maschera booleana
+    "df[(df['Sales'] > 100) & (df['Profit'] > 0)]",             # maschere combinate
+    "df[~(df['Sales'] > 100)]",                                 # negazione bitwise
+    "df.iloc[:5]",                                              # slice
+    "df.loc[:, ['Region', 'Sales']]",                           # slice + lista
+    "df['Sales'].apply(lambda v: v * 2)",                       # lambda
+    "[c for c in df.columns]",                                  # comprehension
+    "risultato = f\"totale {df['Sales'].sum():.1f}\"",           # f-string
+    "x = 1 if len(df) else 2",                                  # espressione condizionale
+    "tot = 0\nfor i in range(3):\n    tot += i\nrisultato = tot",  # for + augassign
+    "if len(df) > 0:\n    risultato = df['Sales'].sum()",        # if
+    # l'idioma completo insegnato dalla regola 7 del system prompt
+    "dett = df.groupby('Region', as_index=False)['Sales'].sum()\n"
+    "dett['percentuale'] = (dett['Sales'] / dett['Sales'].sum() * 100).round(1)\n"
+    "risultato = dett\n"
+    "fig = to_chart(dett[['Region', 'Sales']], kind='bar')",
 ]
 
 

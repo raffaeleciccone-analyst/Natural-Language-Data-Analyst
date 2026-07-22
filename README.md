@@ -119,9 +119,15 @@ dall'AI per la risposta testuale.
 ## Sicurezza
 
 - **Whitelist di builtin** minimale nell'ambiente di esecuzione.
-- **Analisi statica AST** del codice generato: vietati import, accessi ad
-  attributi privati/dunder, metodi di I/O (`to_*`/`read_*`/`write_*` su file o
-  rete) e costrutti di esecuzione dinamica (`eval`, `exec`, ...).
+- **Analisi statica AST in allowlist**: il validatore ammette solo la manciata di
+  nodi che servono a un'espressione Pandas (assegnazioni, chiamate, operatori,
+  slice, comprehension, lambda). Tutto il resto è rifiutato *per costruzione* —
+  `import`, `def`, `class`, `with`, `try`, `global`, `del`, `async`, walrus,
+  `match` — compresi i costrutti che il linguaggio aggiungerà in futuro.
+- Sui nodi ammessi valgono poi regole mirate: niente attributi privati/dunder,
+  niente metodi di I/O (`to_*`/`read_*`/`write_*` su file o rete, con una
+  whitelist di convertitori puri in memoria), niente esecuzione dinamica
+  (`eval`, `exec`, `query`, `format`).
 - **Sottoprocesso isolato** con timeout: barriera di processo attorno al codice
   generato dall'LLM.
 - **Canale di ritorno non eseguibile**: il worker restituisce al processo padre

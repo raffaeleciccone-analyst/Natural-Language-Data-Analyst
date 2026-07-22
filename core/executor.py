@@ -311,17 +311,77 @@ class UnsafeCodeError(Exception):
     """Sollevata quando il codice generato contiene costruzioni non consentite."""
 
 
+# --- Allowlist dei nodi AST ----------------------------------------------------
+# Il default è NEGARE: tutto ciò che non compare qui viene rifiutato.
+#
+# Perché non una denylist: una lista di costrutti vietati descrive gli attacchi
+# che conosciamo oggi e resta indietro a ogni evoluzione della sintassi (match,
+# walrus, async, e qualunque cosa arrivi domani). Elencando invece la manciata di
+# nodi che servono davvero a un'espressione Pandas, restano fuori per costruzione
+# def/class/import/with/try/raise/global/yield/async e i costrutti futuri, senza
+# doverli prevedere uno per uno.
+#
+# Nota sul contenimento delle risorse: 'for' e le comprehension restano ammessi
+# perché sono iterazione legittima; un ciclo troppo lungo è contenuto dal TIMEOUT
+# del sottoprocesso (e dal cap di memoria su POSIX), non dal validatore. 'while'
+# resta escluso perché 'while True' è il caso degenere più comune e non serve mai
+# a un'aggregazione Pandas.
+_ALLOWED_NODES = {
+    ast.Module, ast.Expr,
+    # assegnazioni e flusso minimo
+    ast.Assign, ast.AugAssign, ast.AnnAssign, ast.If, ast.For,
+    ast.Pass, ast.Break, ast.Continue,
+    # espressioni
+    ast.Name, ast.Attribute, ast.Subscript, ast.Slice, ast.Call, ast.keyword,
+    ast.Constant, ast.JoinedStr, ast.FormattedValue, ast.IfExp, ast.Starred,
+    ast.List, ast.Tuple, ast.Dict, ast.Set,
+    ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp, ast.comprehension,
+    ast.Lambda, ast.arguments, ast.arg,
+    ast.BinOp, ast.UnaryOp, ast.BoolOp, ast.Compare,
+}
+
+# Classi base ammesse in blocco: contesti (Load/Store) e operatori (+, ==, and, ~...).
+# Sono nodi foglia senza potere espressivo proprio: elencarne le ~30 sottoclassi
+# aggiungerebbe rumore senza aggiungere sicurezza.
+_ALLOWED_NODE_BASES = (ast.expr_context, ast.operator, ast.unaryop, ast.cmpop, ast.boolop)
+
+# Messaggi mirati per i costrutti che un modello prova più spesso: un errore
+# comprensibile vale più di "costrutto 'ImportFrom' non consentito".
+_DENIED_MESSAGES = {
+    "Import": "gli import non sono consentiti",
+    "ImportFrom": "gli import non sono consentiti",
+    "While": "i cicli 'while' non sono consentiti",
+    "FunctionDef": "la definizione di funzioni non è consentita",
+    "AsyncFunctionDef": "la definizione di funzioni non è consentita",
+    "ClassDef": "la definizione di classi non è consentita",
+    "With": "il blocco 'with' non è consentito",
+    "AsyncWith": "il blocco 'with' non è consentito",
+    "Try": "il blocco 'try' non è consentito",
+    "Raise": "'raise' non è consentito",
+    "Global": "'global' non è consentito",
+    "Nonlocal": "'nonlocal' non è consentito",
+    "Delete": "'del' non è consentito",
+    "Return": "'return' non è consentito fuori da una funzione",
+}
+
+
+def _node_is_allowed(node: ast.AST) -> bool:
+    return type(node) in _ALLOWED_NODES or isinstance(node, _ALLOWED_NODE_BASES)
+
+
 def _validate_ast(tree: ast.AST) -> None:
     """
     Sandbox statica: consente solo espressioni/assegnazioni Pandas 'innocue'.
-    Blocca import, attributi dunder/privati, nomi pericolosi, metodi di I/O o
-    di esecuzione, e chiavi dunder. Solleva UnsafeCodeError.
+    Rifiuta ogni nodo AST fuori dall'allowlist e, sui nodi ammessi, blocca
+    attributi dunder/privati, nomi pericolosi, metodi di I/O o di esecuzione e
+    chiavi dunder. Solleva UnsafeCodeError.
     """
     for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            raise UnsafeCodeError("gli import non sono consentiti")
-        if isinstance(node, ast.While):
-            raise UnsafeCodeError("i cicli 'while' non sono consentiti")
+        if not _node_is_allowed(node):
+            nome = type(node).__name__
+            raise UnsafeCodeError(
+                _DENIED_MESSAGES.get(nome, f"il costrutto '{nome}' non è consentito")
+            )
         if isinstance(node, ast.Attribute):
             a = node.attr
             if a.startswith("_"):
