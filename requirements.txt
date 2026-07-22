@@ -12,7 +12,7 @@
 #
 # Se cambi provider alla demo, sostituisci la riga dell'SDK qui sotto:
 #   anthropic -> anthropic>=0.40,<1.0
-#   gemini    -> google-genai>=0.3,<2.0
+#   gemini    -> google-genai>=0.3,<3.0
 
 streamlit==1.60.0
 pandas==3.0.3
