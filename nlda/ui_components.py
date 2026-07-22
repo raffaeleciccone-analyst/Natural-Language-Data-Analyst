@@ -106,13 +106,13 @@ def render_linked_charts(df, insights, top_fig, trend_fig) -> None:
     if both:
         st.caption("Clicca una barra della classifica per filtrare l'andamento; "
                    "ri-clicca la stessa barra per togliere il filtro.")
-    graf_cols = st.columns(2 if both else 1)
+    chart_cols = st.columns(2 if both else 1)
     idx = 0
     selected_cat = None
 
     if top_fig is not None:
         cat, num, _ = insights["top"]
-        with graf_cols[idx]:
+        with chart_cols[idx]:
             st.markdown(f"**Classifica: {num} per {cat}**")
             event = st.plotly_chart(apply_theme(top_fig), width="stretch",
                                     on_select="rerun", key="report_top")
@@ -128,7 +128,7 @@ def render_linked_charts(df, insights, top_fig, trend_fig) -> None:
     if trend_fig is not None and "trend" in insights:
         dcol, num, _ = insights["trend"]
         cat = insights["top"].key if "top" in insights else None
-        with graf_cols[idx]:
+        with chart_cols[idx]:
             sub = None
             if selected_cat is not None and cat is not None:
                 key_val = str(selected_cat).rstrip("…")

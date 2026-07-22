@@ -160,9 +160,9 @@ def to_chart(res, kind: str = "bar"):
         # Loggato e non ignorato: un grafico non ordinato è un difetto visibile
         # all'utente e senza traccia sarebbe impossibile capirne il motivo.
         log.warning("Ordinamento del grafico non riuscito su '%s': %s", y, e)
-    etichette = data[x].astype(str)
-    lunghe = bool(len(etichette)) and etichette.str.len().max() > 16
-    if lunghe or len(data) > 12:
+    labels = data[x].astype(str)
+    long_labels = bool(len(labels)) and labels.str.len().max() > 16
+    if long_labels or len(data) > 12:
         data = data.head(15).sort_values(y, ascending=True)  # orizzontale: max in alto
         fig = px.bar(data, x=y, y=x, orientation="h")
     else:
@@ -203,20 +203,20 @@ def histogram(df, col, nbins: int = 40):
       LINEARE con vista fino al 99° percentile e nota sugli outlier esclusi.
     """
     _require_plotly()
-    serie = pd.to_numeric(df[col], errors="coerce").dropna()
-    if serie.empty:
+    values = pd.to_numeric(df[col], errors="coerce").dropna()
+    if values.empty:
         raise ValueError(f"La colonna '{col}' non contiene valori numerici.")
 
-    mediana = float(serie.median())
-    p_high = float(serie.quantile(0.99))
+    median = float(values.median())
+    p_high = float(values.quantile(0.99))
     # Log solo se ha senso: valori strettamente positivi (log10 richiede > 0) e
     # coda destra marcata (il 99° pct dista molte volte dalla mediana). L'euristica
     # è conservativa: dataset "normali" (età, punteggi…) restano in lineare.
-    usa_log = float(serie.min()) > 0 and mediana > 0 and (p_high / mediana) > 8
+    use_log = float(values.min()) > 0 and median > 0 and (p_high / median) > 8
 
-    if usa_log:
+    if use_log:
         import numpy as np
-        log_vals = np.log10(serie)
+        log_vals = np.log10(values)
         fig = px.histogram(x=log_vals, nbins=nbins)
         # Etichette dell'asse alle potenze di 10, ma scritte in scala originale
         # (1, 10, 100, 1.000…): l'utente legge i valori veri, non gli esponenti.
@@ -228,10 +228,10 @@ def histogram(df, col, nbins: int = 40):
         return apply_theme(fig)
 
     # Ripiego lineare: limita la vista al 99° percentile se c'è una coda di outlier.
-    n_out = int((serie > p_high).sum())
-    skewed = n_out > 0 and p_high > float(serie.min())
-    dati = serie[serie <= p_high] if skewed else serie
-    fig = px.histogram(dati, nbins=nbins)
+    n_out = int((values > p_high).sum())
+    skewed = n_out > 0 and p_high > float(values.min())
+    shown = values[values <= p_high] if skewed else values
+    fig = px.histogram(shown, nbins=nbins)
     fig.update_layout(bargap=0.05, yaxis_title="record",
                       xaxis_title=str(col), showlegend=False)
     if skewed:
@@ -246,16 +246,16 @@ def histogram(df, col, nbins: int = 40):
 
 
 def _fig_summary(fig, max_rows: int = 30) -> str:
-    righe = []
+    lines = []
     for trace in fig.data:
-        nome = getattr(trace, "name", None) or "serie"
+        name = getattr(trace, "name", None) or "serie"
         x_attr = getattr(trace, "x", None)
         y_attr = getattr(trace, "y", None)
         xs = list(x_attr) if x_attr is not None else []
         ys = list(y_attr) if y_attr is not None else []
-        coppie = ", ".join(f"{x}={y}" for x, y in list(zip(xs, ys, strict=False))[:max_rows])
-        righe.append(f"{nome}: {coppie}")
-    return "Dati del grafico -> " + " | ".join(righe)
+        pairs = ", ".join(f"{x}={y}" for x, y in list(zip(xs, ys, strict=False))[:max_rows])
+        lines.append(f"{name}: {pairs}")
+    return "Dati del grafico -> " + " | ".join(lines)
 
 
 def _obj_summary(obj, max_rows: int = 30) -> str:
@@ -390,9 +390,9 @@ def _validate_ast(tree: ast.AST) -> None:
     """
     for node in ast.walk(tree):
         if not _node_is_allowed(node):
-            nome = type(node).__name__
+            name = type(node).__name__
             raise UnsafeCodeError(
-                _DENIED_MESSAGES.get(nome, f"il costrutto '{nome}' non è consentito")
+                _DENIED_MESSAGES.get(name, f"il costrutto '{name}' non è consentito")
             )
         if isinstance(node, ast.Attribute):
             a = node.attr
@@ -505,7 +505,10 @@ def _run_code(code: str, df: pd.DataFrame) -> ExecutionResult:
             f = local_context.get("fig")
             if is_plotly_figure(f):
                 fig = apply_theme(f)
-            for name in ("risultato", "result"):
+            # Il prompt insegna 'result'; 'risultato' resta accettato perché
+            # è il nome che il modello ha imparato in passato e che continua a
+            # comparire: rifiutarlo trasformerebbe una risposta valida in un errore.
+            for name in ("result", "risultato"):
                 if local_context.get(name) is not None:
                     value = local_context[name]
                     break
@@ -649,8 +652,8 @@ def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int) -> ExecutionRe
         #     ogni domanda, senza alcuna possibilità di successo.
         # In assenza di prove si sceglie 'internal': l'errore silenzioso costoso è
         # il deploy rotto che continua a pagare token, non l'OOM che non ritenta.
-        ucciso_dal_codice = proc.returncode < 0 or "MemoryError" in err
-        if ucciso_dal_codice:
+        killed_by_code = proc.returncode < 0 or "MemoryError" in err
+        if killed_by_code:
             return ExecutionFailure("runtime", "Errore: esecuzione terminata in modo anomalo "
                                     "(possibile esaurimento memoria). Prova una domanda "
                                     "che aggreghi meno dati.", code)
