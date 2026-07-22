@@ -194,7 +194,13 @@ mypy nlda main.py  # type-check
 Le dipendenze vivono in `pyproject.toml`. `requirements.txt` resta solo come
 manifest di deploy: Streamlit Community Cloud installa esclusivamente da lì.
 
-Ogni push esegue lint, type-check e test in CI (GitHub Actions, `.github/workflows/ci.yml`).
+Ogni push esegue in CI (GitHub Actions, `.github/workflows/ci.yml`):
+
+- **test** sulle tre versioni supportate (3.12, 3.13, 3.14);
+- **lint e type-check** (ruff, mypy);
+- **immagine Docker**: build, avvio e verifica che l'HEALTHCHECK diventi sano e
+  che la sandbox funzioni dentro il container;
+- **sicurezza**: `pip-audit` sulle dipendenze e `bandit` sul codice.
 
 I parametri di runtime sono centralizzati in `nlda/config.py` e sovrascrivibili da
 variabile d'ambiente, tra cui: `EXEC_TIMEOUT`, `MEMORY_LIMIT_MB`,

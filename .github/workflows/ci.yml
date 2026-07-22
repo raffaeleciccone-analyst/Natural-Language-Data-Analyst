@@ -60,6 +60,60 @@ jobs:
       - name: Mypy (type-check)
         run: mypy nlda main.py
 
+  # L'immagine è parte del prodotto, non un extra: in container gira il deploy
+  # con i limiti di sistema attivi. Senza questo job un aggiornamento della base
+  # image (dependabot ne apre uno appena esce una nuova release di python:slim)
+  # passerebbe con la spunta verde senza che nessuno abbia mai provato a
+  # costruirla: il resto della CI non tocca mai il Dockerfile.
+  docker:
+    name: Immagine Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true              # resta locale al runner: non si pubblica nulla
+          tags: nlda:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: L'app parte e si dichiara sana
+        run: |
+          docker run -d --name nlda-ci nlda:ci
+          # Si attende il verdetto dell'HEALTHCHECK dell'immagine invece di
+          # interrogare la porta a mano: è lo stesso segnale che userebbe un
+          # orchestratore, quindi si verifica ciò che conta in produzione.
+          for _ in $(seq 1 40); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' nlda-ci)
+            [ "$status" != "starting" ] && break
+            sleep 3
+          done
+          echo "HEALTHCHECK: $status"
+          [ "$status" = "healthy" ]
+
+      - name: La sandbox funziona dentro il container
+        run: |
+          docker exec nlda-ci python -c "
+          import pandas as pd
+          from nlda.executor import execute_pandas_code
+          from nlda.results import ExecutionSuccess, ExecutionFailure
+          df = pd.DataFrame({'a': [1.0, 2.0]})
+          ok = execute_pandas_code(\"df['a'].sum()\", df)
+          ko = execute_pandas_code(\"df.to_csv('/tmp/x.csv')\", df)
+          assert isinstance(ok, ExecutionSuccess) and ok.value == 3.0, ok
+          assert isinstance(ko, ExecutionFailure) and ko.kind == 'security', ko
+          print('sandbox ok nel container')
+          "
+
+      - name: Log del container se qualcosa è fallito
+        if: failure()
+        run: docker logs nlda-ci
+
   # Il progetto esegue codice generato da un LLM: una CI che non guarda mai la
   # sicurezza sarebbe una contraddizione con la sua stessa ragione d'essere.
   security:
