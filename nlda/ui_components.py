@@ -17,10 +17,16 @@ from nlda.results import ExecutionFailure, ExecutionResult
 from nlda.utils import IT_NUM_FORMAT, fmt_num
 
 
-def answer_card(label: str, text: str) -> None:
-    """Renderizza un testo in un riquadro dedicato (con escaping HTML)."""
+def answer_card(label: str, text: str, container=None) -> None:
+    """
+    Renderizza un testo in un riquadro dedicato (con escaping HTML).
+
+    `container` permette di scrivere dentro uno spazio riservato in precedenza con
+    `st.empty()`: serve a disegnare la pagina subito e riempire più tardi la parte
+    che deve attendere il modello.
+    """
     safe = html.escape(text).replace("\n", "<br>")
-    st.markdown(
+    (container or st).markdown(
         f"<div class='answer-card'>"
         f"<div class='answer-label'>{html.escape(label)}</div>"
         f"<div class='answer-body'>{safe}</div></div>",
