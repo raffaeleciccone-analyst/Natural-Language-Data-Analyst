@@ -1,0 +1,35 @@
+# Tutto ciò che non serve DENTRO l'immagine: riduce il contesto di build, i
+# tempi e la superficie dell'immagine finale.
+
+.git
+.github
+.gitignore
+
+# Ambienti e cache locali
+.venv
+venv
+__pycache__
+*.py[cod]
+*.egg-info
+.mypy_cache
+.pytest_cache
+.ruff_cache
+
+# Sviluppo: non serve a far girare l'app
+tests
+scripts
+docs
+design
+DEPLOY.md
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Segreti: non devono MAI finire in un layer dell'immagine
+.env
+.streamlit/secrets.toml
+
+# Strumenti locali
+.claude
+.vscode
+.idea

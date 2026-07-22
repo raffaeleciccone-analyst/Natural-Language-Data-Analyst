@@ -32,9 +32,27 @@ progetto, non per gli utenti finali.
 - La chiave va **solo** nei Secrets di Streamlit Cloud, mai nel repo.
 - Ollama non è disponibile sul cloud (gira solo in locale).
 
+## Deploy con Docker (qualsiasi host)
+
+Streamlit Community Cloud è comodo ma non permette di scegliere i limiti di
+sistema. Su una VM o un PaaS che accetti container:
+
+```bash
+GROQ_API_KEY=gsk_... docker compose up -d --build
+```
+
+L'immagine espone un `HEALTHCHECK` su `/_stcore/health`, quindi orchestratori e
+load balancer sanno quando l'app è pronta.
+
 ## Sicurezza per un deploy pubblico
 
-Il codice generato gira già in una sandbox (validazione AST) dentro un sottoprocesso
-isolato con timeout, e in modalità demo c'è un limite di domande per sessione.
-Per un uso pubblico con **dati non fidati** valuta ulteriori limiti a livello di
-sistema (memoria/rete del container).
+Il codice generato è validato staticamente (allowlist di nodi AST) ed eseguito in
+un sottoprocesso dedicato con timeout, che restituisce al padre solo JSON. In
+modalità demo c'è anche un limite di domande per sessione.
+
+Il sottoprocesso però è una barriera *di processo*: gira come lo stesso utente
+dell'app, sullo stesso filesystem. Per un uso pubblico con **dati non fidati** il
+deploy in container è la configurazione consigliata, perché aggiunge ciò che il
+codice applicativo non può darsi da solo: filesystem in sola lettura, utente non
+privilegiato, capability rimosse, tetto di RAM e di processi. Vedi
+`docker-compose.yml`.

@@ -1,0 +1,52 @@
+# Esecuzione locale con i limiti di sistema attivi.
+#
+#   docker compose up --build          avvia su http://localhost:8501
+#   GROQ_API_KEY=gsk_... docker compose up
+#
+# Le opzioni di sicurezza qui sotto non sono decorative: dentro questo container
+# gira codice Python scritto da un modello linguistico. La validazione AST
+# decide cosa il codice può *dire*; il container decide cosa può *fare*.
+
+services:
+  app:
+    build:
+      context: .
+      # Restringi i provider installati se ti serve un'immagine più piccola:
+      # args: { EXTRAS: openai }
+    ports:
+      - "8501:8501"
+
+    environment:
+      # Chiavi passate dall'ambiente dell'host, mai scritte nell'immagine.
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      # Parametri della sandbox (vedi nlda/config.py).
+      ALLOW_INPROCESS_FALLBACK: "false"
+      EXEC_TIMEOUT: "12"
+      MEMORY_LIMIT_MB: "1500"
+
+    # Tetto di RAM del container: contiene il processo anche se il worker
+    # riuscisse ad aggirare RLIMIT_AS. È la rete di sicurezza esterna al codice.
+    mem_limit: 2g
+    pids_limit: 256          # niente fork-bomb dal codice generato
+
+    security_opt:
+      - no-new-privileges:true   # nessuna escalation via binari setuid
+    cap_drop:
+      - ALL                      # l'app non ha bisogno di alcuna capability
+
+    # Filesystem in sola lettura: il codice generato non può lasciare nulla su
+    # disco. Le poche directory che devono essere scrivibili sono tmpfs, quindi
+    # volatili e non condivise con l'host.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+      # uid/gid espliciti: un tmpfs viene montato di proprietà di root e
+      # sostituisce la home creata nell'immagine, quindi senza questi l'utente
+      # 'app' non riesce nemmeno a leggere la propria home (Streamlit ci cerca
+      # ~/.streamlit e fallisce con PermissionError all'avvio).
+      - /home/app:size=16m,uid=10001,gid=10001,mode=0700
+
+    restart: unless-stopped
