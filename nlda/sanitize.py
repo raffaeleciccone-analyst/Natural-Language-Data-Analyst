@@ -30,13 +30,20 @@ import re
 
 # Controllo, tranne tab/CR/LF che diventano spazi invece di sparire (togliere un
 # a capo senza sostituirlo unirebbe due parole).
+#
+# I codepoint sono scritti come SEQUENZE DI ESCAPE, mai come caratteri letterali.
+# Scriverli letteralmente metterebbe caratteri bidirezionali dentro questo file:
+# e' la vulnerabilita' "Trojan Source" (CVE-2021-42574), in cui il sorgente si
+# legge diverso da come si esegue. Bandit la segnala come B613, e l'ha segnalata
+# proprio qui: nel modulo che difende dagli invisibili.
 _DA_RIMUOVERE = re.compile(
-    "[\x00-\x08\x0b\x0c\x0e-\x1f\x7f"   # caratteri di controllo
-    "​-‏"                      # zero-width e marcatori di direzione
-    "  "                       # separatori di riga/paragrafo unicode
-    "‪-‮"                      # override bidirezionale
-    "⁦-⁩"                      # isolamenti bidirezionali
-    "﻿"                             # BOM / zero-width no-break space
+    "["
+    "\x00-\x08\x0b\x0c\x0e-\x1f\x7f"    # caratteri di controllo
+    "\u200b-\u200f"                       # zero-width e marcatori di direzione
+    "\u2028\u2029"                        # separatori di riga/paragrafo unicode
+    "\u202a-\u202e"                       # override bidirezionale
+    "\u2066-\u2069"                       # isolamenti bidirezionali
+    "\ufeff"                              # BOM / zero-width no-break space
     "]"
 )
 _SPAZI_VERTICALI = re.compile(r"[\t\n\r]+")
