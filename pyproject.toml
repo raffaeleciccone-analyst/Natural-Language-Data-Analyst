@@ -3,6 +3,7 @@ name = "natural-language-data-analyst"
 version = "1.1.0"
 description = "Interroga i tuoi dati in linguaggio naturale: l'LLM racconta, Pandas calcola."
 requires-python = ">=3.10"
+license = "MIT"
 
 [tool.ruff]
 line-length = 110
