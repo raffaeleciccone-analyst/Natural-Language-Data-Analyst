@@ -49,8 +49,10 @@ def _secret(key: str, default: str = "") -> str:
         val = st.secrets.get(key)
         if val is not None:
             return str(val)
-    except Exception:
-        pass
+    except Exception:  # noqa: BLE001
+        # Senza secrets.toml (uso locale) si ripiega sulle variabili d'ambiente:
+        # è la condizione normale fuori dal deploy, non un errore da segnalare.
+        pass  # nosec B110
     return os.getenv(key, default)
 
 

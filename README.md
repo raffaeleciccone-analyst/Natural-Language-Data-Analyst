@@ -1,7 +1,7 @@
 # Natural Language Data Analyst
 
 [![CI](https://github.com/raffaeleciccone-analyst/Natural-Language-Data-Analyst/actions/workflows/ci.yml/badge.svg)](https://github.com/raffaeleciccone-analyst/Natural-Language-Data-Analyst/actions/workflows/ci.yml)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 *Analista di dati AI-powered che interroghi in linguaggio naturale.*
@@ -48,14 +48,16 @@ si limita a raccontarli.
   risponde citando i numeri chiave.
 - **Unità di misura opzionale**: puoi indicarla dalla barra laterale; per le
   misure economiche senza unità indicata viene usato il dollaro come standard.
-- **Esecuzione sicura**: il codice generato è validato staticamente (analisi
-  AST: niente import, I/O su file o rete, costrutti pericolosi) ed eseguito in
-  un **sottoprocesso isolato con timeout**.
+- **Esecuzione sicura**: il codice generato è validato staticamente con una
+  **allowlist di nodi AST** (tutto ciò che non serve a un'espressione Pandas è
+  rifiutato per costruzione) ed eseguito in un **sottoprocesso dedicato con
+  timeout**, che restituisce al processo padre solo dati inerti. In container
+  si aggiunge l'isolamento dal sistema.
 
 ## Esecuzione in locale
 
 ### 1. Requisiti
-- **Python 3.10+** e **git**
+- **Python 3.12+** e **git**
 
 ### 2. Installazione
 ```bash

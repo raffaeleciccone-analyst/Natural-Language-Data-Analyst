@@ -62,7 +62,11 @@ class LLMProvider(ABC):
                             self.name, self.model_name, i, attempts, e)
                 if i < attempts:
                     time.sleep(settings.retry_backoff * (2 ** (i - 1)))
-        assert last_exc is not None
+        # Il ciclo esce solo dopo aver fallito ogni tentativo, quindi last_exc è
+        # sempre valorizzata. Non si usa un assert: con `python -O` sparirebbe e
+        # resterebbe un `raise None`, cioè un TypeError al posto dell'errore vero.
+        if last_exc is None:  # pragma: no cover — irraggiungibile: attempts >= 1
+            raise RuntimeError(f"{self.name}: nessun tentativo eseguito")
         raise last_exc
 
     @abstractmethod

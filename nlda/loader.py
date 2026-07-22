@@ -41,8 +41,9 @@ def _maybe_parse_dates(df: pd.DataFrame) -> pd.DataFrame:
             continue
         try:
             parsed = pd.to_datetime(sample, errors="coerce", dayfirst=True)
-        except Exception:
-            continue
+        except Exception:  # noqa: BLE001
+            # Colonna non interpretabile come data: si passa alla successiva.
+            continue  # nosec B112
         frac = parsed.notna().mean()
         if (bool(_DATE_HINT.search(str(col))) and frac >= 0.5) or frac >= 0.9:
             df[col] = pd.to_datetime(s, errors="coerce", dayfirst=True)

@@ -2,9 +2,9 @@ import ast
 import io
 import json
 import os
-import pickle
+import pickle  # nosec B403
 import re
-import subprocess
+import subprocess  # nosec B404
 import sys
 from typing import cast
 
@@ -156,8 +156,10 @@ def to_chart(res, kind: str = "bar"):
     # (nomi leggibili sull'asse y) invece di etichette ruotate e illeggibili.
     try:
         data = data.sort_values(y, ascending=False)
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001 — colonna non ordinabile: si mostra comunque
+        # Loggato e non ignorato: un grafico non ordinato è un difetto visibile
+        # all'utente e senza traccia sarebbe impossibile capirne il motivo.
+        log.warning("Ordinamento del grafico non riuscito su '%s': %s", y, e)
     etichette = data[x].astype(str)
     lunghe = bool(len(etichette)) and etichette.str.len().max() > 16
     if lunghe or len(data) > 12:
@@ -485,7 +487,11 @@ def _run_code(code: str, df: pd.DataFrame) -> ExecutionResult:
 
         # Caso 1: singola espressione pura (es. df['Sales'].sum() o px.bar(...))
         if len(tree.body) == 1 and isinstance(tree.body[0], ast.Expr):
-            v = eval(code, safe_globals, local_context)
+            # È il punto in cui la sandbox esegue davvero: 'code' ha già superato
+            # l'allowlist AST e gira con builtin ridotti, dentro un sottoprocesso
+            # con timeout. ast.literal_eval non è un'alternativa: servono chiamate
+            # Pandas, non letterali.
+            v = eval(code, safe_globals, local_context)  # nosec B307
             if is_plotly_figure(v):
                 fig = apply_theme(v)
             else:
@@ -493,7 +499,9 @@ def _run_code(code: str, df: pd.DataFrame) -> ExecutionResult:
         else:
             # Caso 2: statement -> exec. Può produrre CONTEMPORANEAMENTE un grafico
             # ('fig') e dei dati ('risultato').
-            exec(code, safe_globals, local_context)
+            # Stesse garanzie dell'eval qui sopra: allowlist AST, builtin ridotti,
+            # sottoprocesso con timeout.
+            exec(code, safe_globals, local_context)  # nosec B102
             f = local_context.get("fig")
             if is_plotly_figure(f):
                 fig = apply_theme(f)
@@ -546,8 +554,9 @@ def _encode_value(value) -> dict:
     if callable(item):
         try:
             value = item()
-        except Exception:  # noqa: BLE001 — array non scalari e simili: si degrada a testo
-            pass
+        except Exception:  # noqa: BLE001 — array non scalari e simili
+            # La degradazione a testo è il comportamento voluto, non un errore.
+            pass  # nosec B110
     if isinstance(value, (bool, int, float, str)):
         return {"kind": "scalar", "data": value}
     # Tutto il resto degrada a testo: meglio perdere il tipo che riaprire un canale
@@ -625,7 +634,9 @@ def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int) -> ExecutionRe
     proc = subprocess.run(
         [sys.executable, "-m", "nlda._sandbox_worker"],
         input=payload, capture_output=True, cwd=root, env=env, timeout=timeout,
-    )
+    # argv fisso e senza shell: il codice generato NON è un argomento, arriva su
+    # stdin, quindi non può essere interpretato dalla riga di comando.
+    )  # nosec B603
     if proc.returncode != 0 or not proc.stdout:
         err = (proc.stderr or b"").decode(errors="replace").strip()[-300:]
         # Il worker è morto: la causa dipende da CHI l'ha ucciso, e da questo

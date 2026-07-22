@@ -1,0 +1,29 @@
+version: 2
+
+# Le dipendenze dell'app sono pinnate al '==' per riproducibilità: senza un
+# aggiornamento automatico resterebbero ferme finché qualcuno non se ne ricorda,
+# ed è esattamente così che un progetto accumula vulnerabilità note.
+# Dependabot apre una PR, la CI la verifica (test su 3.12/3.13/3.14, pip-audit,
+# bandit): l'aggiornamento resta una scelta, ma diventa una scelta informata.
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(ci)"
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(docker)"

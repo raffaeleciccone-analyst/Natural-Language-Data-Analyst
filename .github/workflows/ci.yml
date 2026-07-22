@@ -6,16 +6,22 @@ on:
   pull_request:
 
 jobs:
-  quality:
-    name: Lint, type-check e test
+  # I test girano su OGNI versione supportata: `requires-python` è una promessa,
+  # e una promessa non verificata prima o poi è falsa.
+  test:
+    name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false        # un fallimento su 3.14 non deve nascondere 3.12
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
 
       - name: Installa le dipendenze (app + dev)
@@ -24,7 +30,28 @@ jobs:
           # requirements.txt per primo: fissa le versioni esatte con cui il
           # type-check è riproducibile (gli stub dipendono dalla release di numpy).
           pip install -r requirements.txt
-          # Il progetto in editable + gli strumenti di sviluppo, da pyproject.
+          pip install -e ".[dev]"
+
+      - name: Pytest
+        run: pytest
+
+  # Lint e type-check su una sola versione: non dipendono dall'interprete e
+  # ripeterli tre volte allungherebbe la CI senza aggiungere informazione.
+  quality:
+    name: Lint e type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installa le dipendenze
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
           pip install -e ".[dev]"
 
       - name: Ruff (lint)
@@ -33,5 +60,31 @@ jobs:
       - name: Mypy (type-check)
         run: mypy nlda main.py
 
-      - name: Pytest
-        run: pytest
+  # Il progetto esegue codice generato da un LLM: una CI che non guarda mai la
+  # sicurezza sarebbe una contraddizione con la sua stessa ragione d'essere.
+  security:
+    name: Sicurezza (dipendenze e codice)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installa gli strumenti
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit bandit
+
+      # Vulnerabilità note nelle dipendenze dichiarate.
+      - name: pip-audit (dipendenze)
+        run: pip-audit -r requirements.txt --strict
+
+      # Analisi statica di sicurezza sul codice. Le costruzioni pericolose ma
+      # deliberate (eval/exec della sandbox, pickle verso il worker, subprocess)
+      # sono annotate con `# nosec` e una motivazione nel punto d'uso: qui non
+      # ci sono soppressioni globali, quindi una NUOVA occorrenza fa fallire il job.
+      - name: bandit (codice)
+        run: bandit -r nlda main.py

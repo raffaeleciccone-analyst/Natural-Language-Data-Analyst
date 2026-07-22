@@ -13,7 +13,7 @@ al codice generato dall'LLM. Non importa mai main.py (nessun effetto Streamlit).
 """
 import json
 import os
-import pickle
+import pickle  # nosec B403
 import sys
 
 from nlda.config import settings
@@ -49,7 +49,10 @@ def _limit_memory(mb: int) -> None:
 
 def main() -> None:
     raw = sys.stdin.buffer.read()
-    code, df = pickle.loads(raw)
+    # La sorgente è il processo GENITORE, non l'utente: è lui a costruire questo
+    # pickle da un DataFrame reale. La direzione pericolosa è l'opposta
+    # (worker -> genitore) e infatti viaggia in JSON, mai in pickle.
+    code, df = pickle.loads(raw)  # nosec B301
 
     _limit_memory(settings.memory_limit_mb)
 

@@ -7,7 +7,7 @@ name = "natural-language-data-analyst"
 version = "1.1.0"
 description = "Interroga i tuoi dati in linguaggio naturale: l'LLM racconta, Pandas calcola."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = "MIT"
 
 # Dipendenze necessarie a far girare l'app. Pinnate alle versioni testate: la
@@ -55,7 +55,7 @@ packages = ["nlda"]
 
 [tool.ruff]
 line-length = 110
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
 # E/W: stile (pycodestyle), F: errori reali (pyflakes), I: ordine import,
@@ -66,9 +66,9 @@ select = ["E", "W", "F", "I", "B", "UP"]
 ignore = ["E501"]
 
 [tool.mypy]
-# Target 3.12: è la versione su cui gira la CI e, soprattutto, gli stub di numpy
-# 2.5 usano la sintassi 'type X = ...' (PEP 695) che mypy sa parsare solo con
-# python_version >= 3.12. L'app a runtime resta comunque compatibile con 3.10+.
+# Target 3.12: è il minimo supportato (vedi requires-python) e la versione su cui
+# gira il type-check. Vincolo aggiuntivo: gli stub di numpy 2.5 usano la sintassi
+# 'type X = ...' (PEP 695), che mypy sa parsare solo con python_version >= 3.12.
 python_version = "3.12"
 ignore_missing_imports = true   # gli SDK dei provider sono opzionali e senza stub
 warn_unused_ignores = true
