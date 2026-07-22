@@ -1,7 +1,11 @@
 """Estrae il solo logo (marchi) dall'icona, rimuovendo il riquadro scuro e lo
 sfondo esterno, e salva un PNG trasparente quadrato pronto come favicon.
 
-Rigenera la favicon da assets/logo-source.png:  python assets/make_favicon.py
+Script accessorio: non serve a far girare l'app e ha dipendenze proprie
+(Pillow, SciPy), dichiarate nell'extra 'tools' di pyproject.toml.
+
+    pip install -e ".[tools]"
+    python scripts/make_favicon.py
 """
 from pathlib import Path
 
@@ -9,9 +13,9 @@ import numpy as np
 from PIL import Image, ImageFilter
 from scipy import ndimage
 
-HERE = Path(__file__).parent
-SRC = str(HERE / "logo-source.png")
-OUT = str(HERE / "favicon.png")
+ASSETS = Path(__file__).resolve().parent.parent / "assets"
+SRC = str(ASSETS / "logo-source.png")
+OUT = str(ASSETS / "favicon.png")
 SIZE = 256  # lato del PNG finale
 
 im = Image.open(SRC).convert("RGB")

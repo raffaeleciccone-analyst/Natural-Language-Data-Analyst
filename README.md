@@ -66,8 +66,13 @@ python -m venv .venv
 # Windows:  .venv\Scripts\activate
 # macOS/Linux:  source .venv/bin/activate
 
-pip install -r requirements.txt
+pip install -e ".[all]"
 ```
+
+Gli SDK dei provider sono **opzionali**: `[all]` li installa tutti, ma puoi
+prendere solo quello che ti serve — `".[ollama]"`, `".[openai]"` (copre anche
+Groq), `".[anthropic]"`, `".[gemini]"`. L'app parte comunque: l'import di ogni
+SDK avviene solo quando scegli quel provider.
 
 ### 3. Scegli un modello LLM *(serve un LLM per generare le analisi)*
 
@@ -103,9 +108,13 @@ core/loader.py        lettura multi-formato, profilo del dataset, analisi automa
 core/agent.py         traduzione domanda → codice Pandas (adattata allo schema)
 core/executor.py      validazione AST, sandbox, esecuzione isolata, grafici Plotly
 core/ui_components.py  componenti di presentazione Streamlit (card, tabelle, grafici)
+core/service.py       orchestrazione del turno (domanda → codice → esito → spiegazione)
+core/results.py       esito tipizzato dell'esecuzione (successo / fallimento con causa)
+core/errors.py        eccezioni applicative
 core/providers/       astrazione multi-LLM (ollama, groq, anthropic, openai, gemini)
 core/config.py        configurazione centralizzata (timeout, sandbox, retry) da env
 core/log.py           logging applicativo
+scripts/              utilità accessorie (rigenerazione della favicon)
 tests/                suite pytest (con focus sulla sandbox di sicurezza)
 ```
 
@@ -149,11 +158,14 @@ dall'AI per la risposta testuale.
 ## Sviluppo e qualità
 
 ```bash
-pip install -r requirements.txt -r requirements-dev.txt
+pip install -e ".[all,dev]"
 pytest        # test (inclusi i test di sicurezza sul validatore AST)
 ruff check .  # lint
 mypy core main.py  # type-check
 ```
+
+Le dipendenze vivono in `pyproject.toml`. `requirements.txt` resta solo come
+manifest di deploy: Streamlit Community Cloud installa esclusivamente da lì.
 
 Ogni push esegue lint, type-check e test in CI (GitHub Actions, `.github/workflows/ci.yml`).
 

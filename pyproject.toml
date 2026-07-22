@@ -1,9 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "natural-language-data-analyst"
 version = "1.1.0"
 description = "Interroga i tuoi dati in linguaggio naturale: l'LLM racconta, Pandas calcola."
+readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
+
+# Dipendenze necessarie a far girare l'app. Pinnate alle versioni testate: la
+# riproducibilità vale più dell'aggiornamento automatico, e numpy in particolare
+# determina gli stub di tipo con cui gira il type-check in CI.
+dependencies = [
+    "streamlit==1.59.2",
+    "pandas==3.0.2",
+    "numpy==2.5.1",
+    "plotly==6.9.0",
+    "openpyxl==3.1.5",   # lettura file Excel (.xlsx)
+]
+
+# Gli SDK dei provider sono OPZIONALI: si installa solo quello che si usa.
+# L'import è lazy (dentro `_call`), quindi l'app parte anche senza gli altri.
+[project.optional-dependencies]
+ollama = ["ollama==0.6.2"]                # modelli locali, nessuna API key
+anthropic = ["anthropic>=0.40,<1.0"]
+openai = ["openai>=1.40,<2.0"]            # copre anche Groq: API compatibile
+gemini = ["google-genai>=0.3,<2.0"]
+all = [
+    "natural-language-data-analyst[ollama,anthropic,openai,gemini]",
+]
+# Strumenti di sviluppo: test, lint, type-check.
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    # Nota: 'pandas-stubs' NON è incluso di proposito. Le sue release seguono
+    # pandas 2.x mentre qui usiamo pandas 3.0: gli stub disallineati producevano
+    # decine di falsi positivi in mypy. Finché non esiste una versione per
+    # pandas 3.x, pandas resta senza stub (il type-check resta attivo sul resto).
+]
+# Script accessori non necessari all'app (vedi scripts/).
+tools = ["pillow>=10.0", "scipy>=1.11"]
+
+[project.urls]
+Repository = "https://github.com/raffaeleciccone-analyst/Natural-Language-Data-Analyst"
+
+# Il pacchetto importabile è `core`; il resto del repo (app, test, dati) non fa
+# parte della distribuzione.
+[tool.hatch.build.targets.wheel]
+packages = ["core"]
 
 [tool.ruff]
 line-length = 110

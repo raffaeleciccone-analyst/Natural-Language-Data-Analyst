@@ -1,16 +1,23 @@
-# === Dipendenze core (pinnate alle versioni testate: riproducibilità) ===
-# Aggiornarle è una scelta consapevole: cambia la riga, rilancia i test, committa.
+# === Manifest di DEPLOY (Streamlit Community Cloud) ===
+#
+# Streamlit Cloud installa esclusivamente da questo file, quindi non può essere
+# sostituito da pyproject.toml. Contiene il minimo necessario alla demo pubblica:
+# le dipendenze dell'app più il solo SDK del provider che il deploy usa davvero
+# (Groq, che parla l'API OpenAI — vedi DEPLOY.md).
+#
+# Per sviluppare in locale NON serve questo file: la fonte di verità è
+# pyproject.toml, che permette anche di scegliere i provider.
+#     pip install -e ".[all,dev]"     tutti i provider + strumenti di sviluppo
+#     pip install -e ".[ollama]"      solo Ollama (locale, senza API key)
+#
+# Se cambi provider alla demo, sostituisci la riga dell'SDK qui sotto:
+#   anthropic -> anthropic>=0.40,<1.0
+#   gemini    -> google-genai>=0.3,<2.0
+
 streamlit==1.59.2
 pandas==3.0.2
-numpy==2.5.1          # dipendenza di pandas: pinnata perché la sua versione influisce
-                      # sugli stub di tipo usati in CI (riproducibilità del type-check)
-plotly==6.9.0         # grafici interattivi
-openpyxl==3.1.5       # lettura file Excel (.xlsx)
+numpy==2.5.1          # pinnata: la sua versione determina gli stub di tipo usati in CI
+plotly==6.9.0
+openpyxl==3.1.5
 
-# === Provider LLM (opzionali: installa solo quelli che usi) ===
-# Qui teniamo un floor + un tetto di major, perché non fanno parte del set core
-# testato in CI. Fissa anche questi al '==' se il tuo deploy li usa in produzione.
-ollama==0.6.2                 # modelli locali (default del progetto)
-anthropic>=0.40,<1.0         # Claude (opzionale)
-openai>=1.40,<2.0            # GPT / Groq via API compatibile (opzionale)
-google-genai>=0.3,<2.0       # Gemini (opzionale)
+openai>=1.40,<2.0     # provider della demo (Groq via API compatibile OpenAI)
