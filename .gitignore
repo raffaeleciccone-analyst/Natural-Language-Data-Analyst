@@ -24,3 +24,9 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Artefatti di coverage (pytest-cov): generati a ogni run, non versionati.
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/

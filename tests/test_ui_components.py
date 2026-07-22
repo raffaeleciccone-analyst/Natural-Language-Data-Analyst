@@ -1,16 +1,28 @@
 """
-Test dei componenti di presentazione che NON toccano Streamlit.
+Test dei componenti di presentazione.
 
 `build_kpis` è puro per costruzione (ritorna tuple, nessun effetto Streamlit): è la
 parte della UI che si può testare davvero, ed è anche quella che l'utente colpisce per
 prima: viene chiamata prima di qualsiasi altro rendering. Qui la copriamo soprattutto
 sui dataset DEGENERI (vuoti, colonne tutte-NaN), perché è lì che una card "Top ..."
 può non avere alcuna riga da mostrare.
+
+Le funzioni di rendering vero (`render_value`, `render_result`, `render_linked_charts`)
+si testano sostituendo l'intero modulo `st` con un doppio: non si avvia l'app (troppo
+lento e con effetti collaterali), si verifica CHE COSA viene chiesto a Streamlit —
+quale widget, con quali dati e con quale chiave. Le chiavi contano: due widget con la
+stessa chiave fanno esplodere Streamlit a runtime.
 """
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
 import pandas as pd
 import pytest
 
-from nlda.ui_components import build_kpis
+import nlda.ui_components as ui
+from nlda.loader import Grouped
+from nlda.results import ExecutionFailure, ExecutionSuccess
+from nlda.ui_components import build_kpis, render_linked_charts, render_result, render_value
 
 
 @pytest.fixture
@@ -83,3 +95,176 @@ def test_ogni_kpi_ha_la_forma_attesa(empty_df: pd.DataFrame):
             assert isinstance(sub, str)
             assert tick.startswith("#")
             assert isinstance(small, bool)
+
+
+# --- Rendering: cosa viene chiesto a Streamlit ---------------------------------
+@pytest.fixture
+def st_finto(monkeypatch) -> MagicMock:
+    """
+    Sostituisce il modulo `st` dentro ui_components con un doppio che registra le
+    chiamate. Serve a testare il rendering senza avviare l'app: `AppTest` farebbe
+    partire Streamlit per davvero (decine di secondi) per verificare le stesse cose.
+    """
+    fake = MagicMock()
+    # `st.columns(n)` deve restituire n context manager distinti, come l'originale.
+    fake.columns.side_effect = lambda n: [MagicMock() for _ in range(n)]
+    # Nessuna barra selezionata, se un test non dice diversamente.
+    fake.plotly_chart.return_value = SimpleNamespace(selection=SimpleNamespace(points=[]))
+    monkeypatch.setattr(ui, "st", fake)
+    return fake
+
+
+def test_render_value_dataframe_va_in_tabella(st_finto: MagicMock):
+    render_value(pd.DataFrame({"Region": ["North"], "Sales": [100.0]}))
+    st_finto.dataframe.assert_called_once()
+    assert st_finto.dataframe.call_args.kwargs["key"] == "r_df"
+    st_finto.metric.assert_not_called()
+
+
+def test_render_value_series_va_in_tabella_con_chiave_propria(st_finto: MagicMock):
+    # Chiave diversa da quella del DataFrame: nello stesso turno possono comparire
+    # entrambi, e chiavi duplicate sono un errore di Streamlit.
+    render_value(pd.Series([1, 2, 3], name="Sales"))
+    assert st_finto.dataframe.call_args.kwargs["key"] == "r_ser"
+
+
+def test_render_value_scalare_diventa_una_metrica(st_finto: MagicMock):
+    render_value(1234.56)
+    st_finto.metric.assert_called_once()
+    # Il numero è formattato all'italiana (punto per le migliaia), non lasciato grezzo.
+    assert st_finto.metric.call_args.args[1] == "1.235"
+
+
+def test_render_value_stringa_va_in_markdown(st_finto: MagicMock):
+    render_value("Il totale è 100")
+    assert "Il totale è 100" in st_finto.markdown.call_args.args[0]
+
+
+def test_render_value_none_non_mostra_nulla(st_finto: MagicMock):
+    # Un codice che produce solo una figura ha value=None: non deve comparire
+    # una tabella vuota sotto il grafico.
+    render_value(None)
+    st_finto.dataframe.assert_not_called()
+    st_finto.metric.assert_not_called()
+    st_finto.markdown.assert_not_called()
+
+
+def test_render_value_ignora_il_messaggio_segnaposto(st_finto: MagicMock):
+    # "Codice eseguito correttamente." è il segnaposto dell'executor quando non
+    # c'è un risultato: mostrarlo come "Risultato: ..." confonderebbe l'utente.
+    render_value("Codice eseguito correttamente.")
+    st_finto.markdown.assert_not_called()
+
+
+def test_render_result_mostra_risposta_grafico_dati_e_codice(st_finto: MagicMock):
+    import plotly.express as px
+
+    fig = px.bar(pd.DataFrame({"x": ["a"], "y": [1]}), x="x", y="y")
+    risultato = ExecutionSuccess(fig=fig, value=pd.DataFrame({"Sales": [1.0]}), summary="ok")
+    render_result("df['Sales'].sum()", risultato, explanation="Le vendite salgono.")
+
+    assert st_finto.plotly_chart.call_args.kwargs["key"] == "r_fig"
+    st_finto.dataframe.assert_called_once()
+    st_finto.code.assert_called_once_with("df['Sales'].sum()", language="python")
+    st_finto.error.assert_not_called()
+
+
+def test_render_result_senza_figura_non_disegna_grafici(st_finto: MagicMock):
+    render_result("df['Sales'].sum()", ExecutionSuccess(fig=None, value=42, summary="ok"))
+    st_finto.plotly_chart.assert_not_called()
+    st_finto.metric.assert_called_once()
+
+
+def test_render_result_fallimento_mostra_solo_il_messaggio(st_finto: MagicMock):
+    # `kind` è la causa tecnica su cui decide il codice (retry, log): all'utente si
+    # mostra solo il messaggio. Vederlo trapelare nella UI sarebbe una regressione.
+    fallimento = ExecutionFailure(kind="security", message="Operazione non consentita.",
+                                  code="import os")
+    render_result("import os", fallimento)
+
+    st_finto.error.assert_called_once_with("Operazione non consentita.")
+    st_finto.plotly_chart.assert_not_called()
+    st_finto.dataframe.assert_not_called()
+    for chiamata in st_finto.mock_calls:
+        assert "security" not in str(chiamata)
+    # Il codice rifiutato resta comunque visibile: è ciò che l'utente deve capire.
+    st_finto.code.assert_called_once_with("import os", language="python")
+
+
+def _insights(df: pd.DataFrame) -> dict:
+    """Insight nella forma prodotta da `analyze` per classifica e andamento."""
+    top = (df.groupby("Region", as_index=False)["Sales"].sum()
+             .sort_values("Sales", ascending=False))
+    per = ui.monthly_trend(df, "Order Date", "Sales")
+    return {
+        "top": Grouped("Region", "Sales", top),
+        "trend": Grouped("Order Date", "Sales", per),
+        "measure": "Sales",
+    }
+
+
+def _figure(df: pd.DataFrame, insights: dict):
+    from nlda.executor import to_chart
+
+    return (to_chart(insights["top"].data, kind="bar"),
+            to_chart(insights["trend"].data, kind="line"))
+
+
+def test_render_linked_charts_senza_figure_non_fa_nulla(st_finto: MagicMock):
+    render_linked_charts(pd.DataFrame(), {}, None, None)
+    st_finto.columns.assert_not_called()
+    st_finto.plotly_chart.assert_not_called()
+
+
+def test_render_linked_charts_affianca_i_due_grafici(sales_df: pd.DataFrame, st_finto: MagicMock):
+    ins = _insights(sales_df)
+    top_fig, trend_fig = _figure(sales_df, ins)
+    render_linked_charts(sales_df, ins, top_fig, trend_fig)
+
+    st_finto.columns.assert_called_once_with(2)
+    chiavi = [c.kwargs["key"] for c in st_finto.plotly_chart.call_args_list]
+    assert chiavi == ["report_top", "report_trend"]
+    st_finto.caption.assert_called_once()  # istruzioni sul click solo quando serve
+
+
+def test_render_linked_charts_una_sola_figura_usa_una_colonna(sales_df: pd.DataFrame,
+                                                              st_finto: MagicMock):
+    ins = _insights(sales_df)
+    top_fig, _ = _figure(sales_df, ins)
+    render_linked_charts(sales_df, ins, top_fig, None)
+
+    st_finto.columns.assert_called_once_with(1)
+    st_finto.caption.assert_not_called()  # senza andamento non c'è nulla da filtrare
+    assert st_finto.plotly_chart.call_args.kwargs["key"] == "report_top"
+
+
+def test_click_sulla_barra_filtra_landamento(sales_df: pd.DataFrame, st_finto: MagicMock):
+    # Il collegamento tra i due grafici è la sola interazione del report: se si
+    # rompe, cliccare una barra non cambia più nulla e nessun errore lo segnala.
+    st_finto.plotly_chart.return_value = SimpleNamespace(
+        selection=SimpleNamespace(points=[{"x": "South"}])
+    )
+    ins = _insights(sales_df)
+    top_fig, trend_fig = _figure(sales_df, ins)
+    render_linked_charts(sales_df, ins, top_fig, trend_fig)
+
+    chiavi = [c.kwargs["key"] for c in st_finto.plotly_chart.call_args_list]
+    assert chiavi == ["report_top", "report_trend_filtered"]
+    titoli = " ".join(str(c.args[0]) for c in st_finto.markdown.call_args_list)
+    assert "South" in titoli
+
+
+def test_selezione_di_una_categoria_inesistente_ripiega_sul_grafico_intero(
+        sales_df: pd.DataFrame, st_finto: MagicMock):
+    # Le etichette lunghe vengono troncate con "…" nel grafico: il match esatto
+    # fallisce e si ripiega sul prefisso. Con una categoria del tutto assente non
+    # deve restare né un errore né una serie vuota.
+    st_finto.plotly_chart.return_value = SimpleNamespace(
+        selection=SimpleNamespace(points=[{"x": "Regione Inesistente"}])
+    )
+    ins = _insights(sales_df)
+    top_fig, trend_fig = _figure(sales_df, ins)
+    render_linked_charts(sales_df, ins, top_fig, trend_fig)
+
+    chiavi = [c.kwargs["key"] for c in st_finto.plotly_chart.call_args_list]
+    assert chiavi[-1] in ("report_trend", "report_trend_filtered")
