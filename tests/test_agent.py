@@ -38,10 +38,63 @@ def test_chart_intent_domanda_scalare_niente_grafico():
     assert wants is False
 
 
-def test_wrap_chart_avvolge_solo_i_dati():
+def test_wrap_chart_conserva_i_dati_oltre_alla_figura():
+    # Il risultato resta in `result`: se la figura non si può disegnare l'utente
+    # vede comunque i numeri, invece di un errore.
     a = _agent()
     wrapped = a._wrap_chart("df.groupby('R')['S'].sum()", wants=True, kind="bar")
-    assert wrapped.startswith("fig = to_chart(")
+    assert wrapped == "result = df.groupby('R')['S'].sum()\nfig = try_chart(result, kind='bar')"
+
+
+def test_wrap_chart_riusa_la_variabile_gia_assegnata():
+    # È la forma che il prompt stesso insegna (regola 6), quindi la più frequente.
+    # Il codice NON va inserito dentro una chiamata: `to_chart(result = df...,
+    # kind='bar')` è sintassi valida e fallisce a runtime con un messaggio
+    # incomprensibile, poi ritentato tre volte. Si aggiunge la riga della figura.
+    codice = "result = df.groupby('R')['S'].sum()"
+    assert _agent()._wrap_chart(codice, wants=True, kind="bar") == (
+        codice + "\nfig = try_chart(result, kind='bar')")
+
+
+def test_wrap_chart_riusa_lultima_variabile_di_codice_multiriga():
+    codice = "agg = df.groupby('R')['S'].sum()\nresult = agg.head(5)"
+    assert _agent()._wrap_chart(codice, wants=True, kind="bar") == (
+        codice + "\nfig = try_chart(result, kind='bar')")
+
+
+def test_wrap_chart_lascia_stare_il_codice_che_non_sa_gestire():
+    # Non termina con un'assegnazione a un nome semplice: meglio nessun grafico
+    # che codice rotto.
+    codice = "for i in range(3):\n    x = i"
+    assert _agent()._wrap_chart(codice, wants=True, kind="bar") == codice
+
+
+# --- Le due fonti di verità sul grafico devono restare allineate ---------------
+def test_le_parole_del_prompt_sono_tutte_riconosciute_dalleuristica():
+    """
+    La regola 4 del system prompt elenca le parole per cui il modello DEVE
+    disegnare; `_CHART_WORDS` decide se avvolgere il risultato quando il modello
+    non l'ha fatto. Se le due liste divergono, l'app promette un grafico che non
+    arriva: è successo con "mostrami", che il README propone come esempio.
+    """
+    import re
+
+    a = _agent()
+    prompt = a._get_system_prompt(pd.DataFrame({"Region": ["N"], "Sales": [1]}))
+    regola4 = prompt.split("\n4. ")[1].split("\n5. ")[0]
+    parole = re.findall(r'"([a-zà-ù]+)"', regola4.split("DEVI")[0])
+
+    assert parole, "regola 4 non trovata nel prompt: il test va aggiornato"
+    mancanti = [p for p in parole if p not in a._CHART_WORDS]
+    assert not mancanti, f"parole promesse dal prompt ma ignorate dall'euristica: {mancanti}"
+
+
+@pytest.mark.parametrize("domanda", ["Mostrami le vendite per regione",
+                                     "visualizza il fatturato",
+                                     "mostra le vendite per categoria"])
+def test_le_domande_proposte_allutente_chiedono_un_grafico(domanda):
+    # Sono le formulazioni che README e placeholder suggeriscono: devono funzionare.
+    assert _agent()._chart_intent(domanda)[0] is True
 
 
 def test_wrap_chart_non_tocca_codice_con_figura():

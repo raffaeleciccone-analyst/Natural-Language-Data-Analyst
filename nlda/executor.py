@@ -170,6 +170,24 @@ def to_chart(res, kind: str = "bar"):
     return apply_theme(fig)
 
 
+def try_chart(res, kind: str = "bar"):
+    """
+    Come `to_chart`, ma restituisce None invece di sollevare quando il risultato
+    non è graficabile.
+
+    Serve all'avvolgimento automatico: quando l'utente scrive "mostrami il totale
+    delle vendite" la risposta è uno scalare, e un numero non si disegna. Con
+    `to_chart` quella domanda diventerebbe un errore di esecuzione — e per giunta
+    ritentato — invece di una risposta corretta senza grafico. Chi chiama
+    `to_chart` di proposito continua a ricevere l'eccezione con la sua diagnosi.
+    """
+    try:
+        return to_chart(res, kind=kind)
+    except Exception as e:  # noqa: BLE001 — qualunque motivo: si mostrano i dati
+        log.info("Grafico non applicabile al risultato (%s): si mostrano solo i dati.", e)
+        return None
+
+
 def corr_heatmap(corr):
     """Heatmap di una matrice di correlazione: scala divergente (blu↔rosso) con
     midpoint neutro a 0, valori annotati. Range fisso [-1, 1]."""
@@ -479,7 +497,8 @@ def _run_code(code: str, df: pd.DataFrame) -> ExecutionResult:
 
     # Contesto isolato per l'esecuzione (builtin ridotti al minimo; niente 'st')
     safe_globals = {"__builtins__": SAFE_BUILTINS}
-    local_context = {"df": df, "pd": pd, "px": px, "go": go, "to_chart": to_chart}
+    local_context = {"df": df, "pd": pd, "px": px, "go": go,
+                     "to_chart": to_chart, "try_chart": try_chart}
 
     try:
         fig = None

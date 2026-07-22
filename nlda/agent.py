@@ -1,3 +1,5 @@
+import ast
+
 import pandas as pd
 
 from nlda.errors import ProviderError
@@ -54,10 +56,15 @@ class DataAgent:
     il layer UI non deve duplicare parole chiave o wrapping.
     """
 
-    # "mostrami"/"visualizza" erano troppo generiche (attivavano il grafico anche
-    # su richieste scalari). Teniamo solo parole realmente grafiche.
+    # Deve restare allineata alla regola 4 del system prompt: se il modello riceve
+    # l'istruzione di disegnare per una parola che qui manca, l'app promette un
+    # grafico e non lo produce (era il caso di "mostrami", proposta come esempio
+    # nel README e nel placeholder). "mostrami"/"visualizza" erano state tolte
+    # perché su una domanda scalare l'avvolgimento falliva: ora `try_chart`
+    # restituisce None invece di sollevare, quindi il motivo non sussiste più.
     _CHART_WORDS = ("grafico", "plot", "barre", "linee", "andamento", "istogramma",
-                    "trend", "distribuzione", "diagramma")
+                    "trend", "distribuzione", "diagramma", "mostrami", "mostra",
+                    "visualizza")
     _LINE_WORDS = ("andamento", "linee", "trend", "tempo", "temporale")
 
     def __init__(self, provider: "str | LLMProvider" = "ollama",
@@ -163,10 +170,63 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
         kind = "line" if any(w in q for w in self._LINE_WORDS) else "bar"
         return wants, kind
 
+    @staticmethod
+    def _is_single_expression(code: str) -> bool:
+        """True se il codice è una sola espressione, quindi inseribile in una chiamata."""
+        try:
+            tree = ast.parse(code, mode="exec")
+        except SyntaxError:
+            return False
+        return len(tree.body) == 1 and isinstance(tree.body[0], ast.Expr)
+
+    @staticmethod
+    def _final_result_name(code: str) -> str | None:
+        """Nome della variabile assegnata per ultima, se il codice termina con un'assegnazione."""
+        try:
+            tree = ast.parse(code, mode="exec")
+        except SyntaxError:
+            return None
+        if not tree.body:
+            return None
+        ultimo = tree.body[-1]
+        if isinstance(ultimo, ast.Assign) and len(ultimo.targets) == 1 \
+                and isinstance(ultimo.targets[0], ast.Name):
+            return ultimo.targets[0].id
+        return None
+
     def _wrap_chart(self, code: str, wants: bool, kind: str) -> str:
-        """Se serve un grafico ma il modello ha prodotto solo dati, li avvolge in to_chart()."""
-        if wants and "fig" not in code and "px." not in code and "st." not in code:
-            return f"fig = to_chart({code.strip().rstrip(';')}, kind='{kind}')"
+        """
+        Se serve un grafico ma il modello ha prodotto solo dati, aggiunge la figura.
+
+        Tre forme possibili del codice generato, e cosa se ne fa:
+
+        * una sola ESPRESSIONE (`df.groupby(...).sum()`): la si assegna a `result`
+          e le si affianca la figura;
+        * codice che termina con un'ASSEGNAZIONE (`result = df.groupby(...)`, la
+          forma che il prompt stesso insegna): si aggiunge solo la riga della
+          figura, riusando quella variabile. Inserire quel codice dentro una
+          chiamata lo trasformerebbe in un argomento keyword —
+          `to_chart(result = df..., kind='bar')` è sintassi valida e fallisce a
+          runtime con un messaggio incomprensibile;
+        * qualunque altra cosa: si lascia stare, meglio nessun grafico che codice
+          rotto.
+
+        In tutti i casi si usa `try_chart`, che restituisce None quando i dati non
+        sono graficabili: "mostrami il totale" resta così una risposta corretta
+        senza grafico, invece di diventare un errore ritentato tre volte. E il
+        risultato resta sempre in una variabile, quindi l'utente vede i numeri
+        anche quando la figura non si può disegnare.
+        """
+        if not wants or "fig" in code or "px." in code or "st." in code:
+            return code
+
+        pulito = code.strip().rstrip(";")
+        if self._is_single_expression(pulito):
+            return f"result = {pulito}\nfig = try_chart(result, kind='{kind}')"
+
+        nome = self._final_result_name(pulito)
+        if nome:
+            return f"{pulito}\nfig = try_chart({nome}, kind='{kind}')"
         return code
 
     def ask_code(self, user_question: str, df: pd.DataFrame) -> str:
