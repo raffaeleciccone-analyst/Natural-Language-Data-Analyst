@@ -117,7 +117,7 @@ jobs:
         run: |
           docker exec nlda-ci python -c "
           import pandas as pd
-          from nlda.executor import execute_pandas_code
+          from nlda.sandbox import execute_pandas_code
           from nlda.results import ExecutionSuccess, ExecutionFailure
           df = pd.DataFrame({'a': [1.0, 2.0]})
           ok = execute_pandas_code(\"df['a'].sum()\", df)
