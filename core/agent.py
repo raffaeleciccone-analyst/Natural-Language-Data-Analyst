@@ -1,5 +1,6 @@
 import pandas as pd
 
+from core.errors import ProviderError
 from core.log import get_logger
 from core.providers import LLMProvider, get_provider
 from core.utils import clean_code, column_kind
@@ -123,19 +124,30 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
 
     def _generate(self, system_prompt: str, user_prompt: str) -> str:
         """
-        Chiama il provider e restituisce il codice pulito. In caso di errore di
-        comunicazione restituisce un commento-sentinella: l'executor lo riconosce
-        (AST senza statement eseguibili) e lo trasforma in un errore leggibile.
+        Chiama il provider e restituisce il codice pulito.
+
+        Un guasto di comunicazione SOLLEVA `ProviderError` invece di restituire un
+        testo: prima tornava un commento-sentinella, che l'executor classificava
+        come errore di sintassi — cioè come un difetto del codice generato, quindi
+        ritentabile. Risultato: un provider irraggiungibile innescava altre tre
+        richieste di correzione, tutte destinate a fallire allo stesso modo.
+        Il provider ha già esaurito i propri tentativi (retry con backoff in
+        `LLMProvider.generate`): qui il guasto è definitivo.
         """
         try:
             raw = self.provider.generate(system_prompt, user_prompt)
         except Exception as e:
             log.error("Generazione codice fallita (%s): %s", self.provider.name, e)
-            return f"# Errore di comunicazione con il provider LLM ({self.provider.name}): {e}"
+            raise ProviderError(self.provider.name, e) from e
         return clean_code(raw or "")
 
     def _narrate(self, system_prompt: str, user_prompt: str, cosa: str) -> str:
         """Genera testo narrativo (non codice); in caso di errore ritorna un avviso in corsivo.
+
+        A differenza di `_generate` qui NON si solleva: la narrativa è un
+        complemento, non il risultato. Se il modello non risponde, l'utente vede
+        comunque i numeri calcolati da Pandas, con un avviso al posto del commento.
+
         La narrativa è testo puro: rimuove i backtick che alcuni modelli aggiungono a
         caso, perché in Markdown diventano frammenti monospace verdi senza senso."""
         try:

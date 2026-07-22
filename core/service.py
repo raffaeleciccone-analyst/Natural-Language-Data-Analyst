@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from core.agent import DataAgent
+from core.errors import ProviderError
 from core.executor import execute_pandas_code, summarize_result
 from core.log import get_logger
 from core.results import ExecutionFailure, ExecutionResult, ExecutionSuccess
@@ -43,17 +44,24 @@ class AnalysisService:
         sandbox verrebbe ribloccato identico, e ritentarlo sprecherebbe chiamate
         all'LLM senza alcuna possibilità di successo.
         """
-        code = self.agent.ask_code(question, df)
-        result = execute_pandas_code(code, df)
+        code = ""
+        try:
+            code = self.agent.ask_code(question, df)
+            result: ExecutionResult = execute_pandas_code(code, df)
 
-        tentativo = 0
-        while (isinstance(result, ExecutionFailure) and result.retryable
-               and tentativo < self.max_retries):
-            tentativo += 1
-            log.info("Codice fallito (%s): tentativo di correzione %d/%d",
-                     result.kind, tentativo, self.max_retries)
-            code = self.agent.fix_code(question, df, code, result.message)
-            result = execute_pandas_code(code, df)
+            tentativo = 0
+            while (isinstance(result, ExecutionFailure) and result.retryable
+                   and tentativo < self.max_retries):
+                tentativo += 1
+                log.info("Codice fallito (%s): tentativo di correzione %d/%d",
+                         result.kind, tentativo, self.max_retries)
+                code = self.agent.fix_code(question, df, code, result.message)
+                result = execute_pandas_code(code, df)
+        except ProviderError as e:
+            # Il modello è irraggiungibile: non c'è codice da correggere e nessun
+            # tentativo può riuscire. Si chiude il turno subito, con la causa giusta.
+            return Turn(question=question, code=code,
+                        result=ExecutionFailure("provider", f"Errore: {e}", code))
 
         explanation = None
         if explain and isinstance(result, ExecutionSuccess):

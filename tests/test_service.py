@@ -91,6 +91,47 @@ def test_i_tentativi_sono_limitati(sales_df: pd.DataFrame):
     assert len(provider.calls) == 3  # generazione + 2 correzioni, poi si smette
 
 
+# --- Provider irraggiungibile: nessun tentativo di correzione ------------------
+class _ProviderRotto(LLMProvider):
+    """Provider che fallisce sempre, come una rete giù o una chiave scaduta."""
+
+    def __init__(self):
+        super().__init__(model_name="rotto")
+        self.calls = 0
+
+    def _call(self, system_prompt: str, user_prompt: str) -> str:
+        self.calls += 1
+        raise ConnectionError("connessione rifiutata")
+
+
+def test_provider_irraggiungibile_non_innesca_correzioni(monkeypatch, sales_df: pd.DataFrame):
+    # Il provider ritenta già per conto suo (backoff su errori transitori): qui lo
+    # azzeriamo per contare solo i tentativi decisi dal servizio.
+    monkeypatch.setattr("core.providers.base.settings",
+                        Settings(max_retries=0, retry_backoff=0.0))
+    provider = _ProviderRotto()
+    service = AnalysisService(DataAgent(provider=provider), max_retries=3)
+
+    turn = service.answer("totale vendite", sales_df, explain=True)
+
+    assert isinstance(turn.result, ExecutionFailure)
+    assert turn.result.kind == "provider"
+    # Nessuna riformulazione del prompt risolve una rete giù: si chiude subito.
+    assert turn.result.retryable is False
+    assert provider.calls == 1
+    assert turn.explanation is None
+
+
+def test_il_guasto_del_provider_e_leggibile(monkeypatch, sales_df: pd.DataFrame):
+    monkeypatch.setattr("core.providers.base.settings",
+                        Settings(max_retries=0, retry_backoff=0.0))
+    service = AnalysisService(DataAgent(provider=_ProviderRotto()))
+    turn = service.answer("totale", sales_df, explain=False)
+
+    assert isinstance(turn.result, ExecutionFailure)
+    assert "connessione rifiutata" in turn.result.message
+
+
 # --- Spiegazione ---------------------------------------------------------------
 def test_spiegazione_generata_solo_se_richiesta(sales_df: pd.DataFrame):
     service, provider = _service(["df['Sales'].sum()", "Le vendite totali sono 840."])

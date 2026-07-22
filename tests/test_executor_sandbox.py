@@ -155,11 +155,12 @@ def test_errore_di_sintassi_e_ritentabile():
 
 
 def test_codice_senza_statement_e_un_fallimento():
-    # Il provider irraggiungibile restituisce un commento-sentinella: niente AST
-    # eseguibile, quindi un fallimento e non un successo vuoto.
-    fail = _parse_and_validate("# Errore di comunicazione con il provider LLM")
+    # Il modello risponde solo con un commento: niente AST eseguibile, quindi un
+    # fallimento e non un successo vuoto. È correggibile, quindi ritentabile.
+    fail = _parse_and_validate("# nessun calcolo necessario")
     assert isinstance(fail, ExecutionFailure)
     assert fail.kind == "syntax"
+    assert fail.retryable is True
 
 
 # --- Esecuzione end-to-end -----------------------------------------------------

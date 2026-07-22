@@ -446,8 +446,9 @@ def _parse_and_validate(code: str) -> "ast.Module | ExecutionFailure":
     except SyntaxError as e:
         return ExecutionFailure("syntax", f"Errore di sintassi nel codice generato: {e}", code)
 
-    # Nessuno statement eseguibile (es. il provider ha restituito solo un commento
-    # "# Errore di comunicazione..."): è un fallimento, non un successo.
+    # Nessuno statement eseguibile: il modello ha risposto solo con commenti o con
+    # un blocco vuoto. È un fallimento del codice generato (quindi correggibile con
+    # un nuovo tentativo), non un successo senza risultato.
     if not tree.body:
         msg = code.lstrip("# ").strip() or "il modello non ha prodotto codice eseguibile"
         return ExecutionFailure("syntax", f"Errore: {msg}", code)
