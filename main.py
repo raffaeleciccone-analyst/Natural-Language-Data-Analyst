@@ -336,13 +336,19 @@ def refresh_report_state(df: pd.DataFrame, source_label, sel_measure, sel_catego
     return report_sig, st.session_state.get("insights", {})
 
 
-def render_report(df: pd.DataFrame, insights: dict, sel_measure, unit: str) -> None:
-    """Report iniziale: sintesi AI, insight deterministici, tabelle e grafici."""
+def render_report(df: pd.DataFrame, insights: dict, sel_measure, unit: str):
+    """
+    Report iniziale: insight deterministici, tabelle e grafici.
+
+    Ritorna lo SPAZIO RISERVATO alla sintesi AI, che viene riempito più tardi
+    (vedi `fill_overview`). I numeri sono già pronti quando questa funzione gira:
+    farli aspettare la chiamata al modello significherebbe mostrare una pagina
+    vuota per decine di secondi con un modello locale.
+    """
     st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
     st.subheader("Report iniziale sui dati")
 
-    if st.session_state.get("overview_text"):
-        answer_card("Sintesi dei dati", st.session_state.overview_text)
+    slot_sintesi = st.empty()
 
     # Insight automatici (numeri calcolati in Pandas, non dedotti dall'AI).
     # Via answer_card: il testo è HTML-escaped, così un valore di cella ostile
@@ -365,6 +371,39 @@ def render_report(df: pd.DataFrame, insights: dict, sel_measure, unit: str) -> N
 
     with st.expander("Struttura delle colonne (tipi, mancanti, valori)"):
         st.dataframe(st.session_state.get("profile"), width="stretch", hide_index=True)
+
+    return slot_sintesi
+
+
+def fill_overview(slot, agent: DataAgent, insights: dict, unit: str,
+                  overview_sig: tuple, explain: bool) -> None:
+    """
+    Genera la sintesi AI e la scrive nello spazio riservato dal report.
+
+    Va chiamata per ULTIMA, dopo che tutto il resto della pagina è stato
+    disegnato: è l'unica parte che aspetta il modello, e con Ollama in locale
+    sono decine di secondi. Prima veniva generata in cima al flusso e bloccava
+    l'intera pagina — l'utente vedeva uno schermo vuoto mentre i numeri erano
+    già calcolati.
+
+    Su rerun successivi il testo è in cache e compare subito: si attende solo
+    quando cambia davvero qualcosa (dati, misura, provider, unità).
+    """
+    da_generare = st.session_state.get("overview_sig") != overview_sig
+    if da_generare:
+        st.session_state.overview_sig = overview_sig
+        if explain and insights.get("text"):
+            # Segnale immediato nello spazio riservato: la pagina è già leggibile,
+            # e qui si dice che manca solo questo pezzo.
+            slot.caption("L'AI sta preparando la sintesi dei dati…")
+            st.session_state.overview_text = agent.overview(with_unit(insights["text"], unit))
+        else:
+            st.session_state.overview_text = None
+
+    if st.session_state.get("overview_text"):
+        answer_card("Sintesi dei dati", st.session_state.overview_text, container=slot)
+    elif da_generare:
+        slot.empty()   # toglie l'avviso se la generazione non ha prodotto nulla
 
 
 def _render_distribution_and_correlations(insights: dict, sel_measure) -> None:
@@ -495,23 +534,22 @@ def main() -> None:
 
     report_sig, insights = refresh_report_state(df, source_label, sel_measure, sel_category)
 
-    # Narrativa AI: rigenerata anche al cambio di provider/modello/toggle/unità.
-    overview_sig = (report_sig, config.explain, config.provider, config.model_name, unit)
-    if st.session_state.get("overview_sig") != overview_sig:
-        st.session_state.overview_sig = overview_sig
-        if config.explain and insights.get("text"):
-            with st.spinner("L'AI sta preparando la sintesi dei dati..."):
-                st.session_state.overview_text = agent.overview(
-                    with_unit(insights["text"], unit))
-        else:
-            st.session_state.overview_text = None
-
-    render_report(df, insights, sel_measure, unit)
+    slot_sintesi = render_report(df, insights, sel_measure, unit)
     render_executive_report(
         agent, insights, limits,
         exec_sig=(report_sig, config.provider, config.model_name, unit), unit=unit,
     )
     render_chat(service, df, limits, explain=config.explain, unit=unit)
+
+    # PER ULTIMA, anche se compare in cima alla pagina: è l'unica parte che
+    # aspetta il modello. Generandola qui, l'utente ha già davanti KPI, tabelle,
+    # grafici e il box domanda mentre la sintesi arriva. La firma include
+    # provider e unità perché anche quelli cambiano il testo prodotto.
+    fill_overview(
+        slot_sintesi, agent, insights, unit,
+        overview_sig=(report_sig, config.explain, config.provider, config.model_name, unit),
+        explain=config.explain,
+    )
 
 
 if __name__ == "__main__":
