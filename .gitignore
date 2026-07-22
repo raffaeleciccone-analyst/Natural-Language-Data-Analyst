@@ -8,6 +8,16 @@ venv/
 # Ambiente / segreti
 .env
 
+# Strumenti locali di sviluppo (impostazioni per-macchina, non parte del progetto)
+.claude/
+.vscode/
+.idea/
+
+# Cache degli strumenti di qualita'
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
 # Streamlit
 .streamlit/secrets.toml
 
