@@ -4,6 +4,7 @@ import io
 import pandas as pd
 import pytest
 
+from nlda.config import Settings
 from nlda.loader import (
     _maybe_parse_dates,
     analyze,
@@ -170,3 +171,89 @@ def test_dataset_signature_non_solleva_su_colonne_non_hashabili():
     df = pd.DataFrame({"a": [[1, 2], [3]]})
     firma = dataset_signature(df, "x")
     assert firma[0] == "x" and firma[-1] is None
+
+
+# --- Limiti sul file caricato --------------------------------------------------
+def _csv_finto(righe: int, colonne: int = 2):
+    intestazione = ",".join(f"c{i}" for i in range(colonne))
+    corpo = "\n".join(",".join(str(i) for _ in range(colonne)) for i in range(righe))
+    buf = io.BytesIO(f"{intestazione}\n{corpo}\n".encode())
+    buf.name = "grande.csv"  # type: ignore[attr-defined]
+    return buf
+
+
+def test_troppe_righe_vengono_rifiutate(monkeypatch):
+    # Si RIFIUTA invece di campionare: un totale calcolato su un campione sarebbe
+    # un numero sbagliato presentato come giusto, e l'app promette il contrario.
+    monkeypatch.setattr("nlda.loader.settings", Settings(max_rows=10))
+    with pytest.raises(ValueError, match="righe"):
+        read_any(_csv_finto(righe=50))
+
+
+def test_troppe_colonne_vengono_rifiutate(monkeypatch):
+    monkeypatch.setattr("nlda.loader.settings", Settings(max_columns=3))
+    with pytest.raises(ValueError, match="colonne"):
+        read_any(_csv_finto(righe=5, colonne=10))
+
+
+def test_il_messaggio_dice_cosa_fare(monkeypatch):
+    monkeypatch.setattr("nlda.loader.settings", Settings(max_rows=10))
+    with pytest.raises(ValueError) as errore:
+        read_any(_csv_finto(righe=50))
+    assert "MAX_ROWS" in str(errore.value)      # come alzare il limite
+    assert "aggrega" in str(errore.value)       # e l'alternativa
+
+
+def test_un_file_nei_limiti_passa(monkeypatch):
+    monkeypatch.setattr("nlda.loader.settings", Settings(max_rows=100, max_columns=10))
+    assert len(read_any(_csv_finto(righe=50))) == 50
+
+
+# --- La firma è campionata: cosa distingue e cosa no --------------------------
+def test_la_firma_distingue_un_cambio_in_testa_e_in_coda():
+    a = pd.DataFrame({"x": range(1000), "y": ["v"] * 1000})
+    testa = a.copy()
+    testa.loc[0, "x"] = 99999
+    coda = a.copy()
+    coda.loc[999, "x"] = 99999
+    assert dataset_signature(a, "f") != dataset_signature(testa, "f")
+    assert dataset_signature(a, "f") != dataset_signature(coda, "f")
+
+
+def test_la_firma_distingue_un_cambio_di_TIPO():
+    # I dtype entrano nella firma proprio per stringere il campionamento: una
+    # colonna che cambia tipo è un dataset diverso anche a valori identici.
+    a = pd.DataFrame({"x": range(1000)})
+    b = a.copy()
+    b["x"] = b["x"].astype(float)
+    assert dataset_signature(a, "f") != dataset_signature(b, "f")
+
+
+def test_limite_noto_e_dichiarato_del_campionamento():
+    """
+    Il centro del dataset NON entra nella firma: è il prezzo dichiarato per
+    renderla O(1) su un percorso che gira a ogni interazione.
+
+    Il test esiste per fissare il compromesso, non per approvarlo: se un domani
+    si volesse una firma esatta, questo test diventa rosso e obbliga a decidere
+    consapevolmente invece di scoprirlo per caso.
+    """
+    a = pd.DataFrame({"x": range(5000)})
+    centro = a.copy()
+    centro.loc[2500, "x"] = 99999
+    assert dataset_signature(a, "f") == dataset_signature(centro, "f")
+
+
+def test_la_firma_e_indipendente_dalla_dimensione(sales_df: pd.DataFrame):
+    # Non una misura di tempo (fragile in CI) ma della proprietà che la causa:
+    # si hashano al più 400 righe, quante che ne abbia il dataset.
+    import nlda.loader as mod
+    grande = pd.concat([sales_df] * 2000, ignore_index=True)
+    chiamate = []
+    originale = pd.util.hash_pandas_object
+    mod.pd.util.hash_pandas_object = lambda obj, **kw: chiamate.append(len(obj)) or originale(obj, **kw)
+    try:
+        dataset_signature(grande, "f")
+    finally:
+        mod.pd.util.hash_pandas_object = originale
+    assert chiamate and chiamate[0] <= 2 * mod._RIGHE_CAMPIONE, chiamate

@@ -5,6 +5,7 @@ from typing import NamedTuple
 
 import pandas as pd
 
+from nlda.config import settings
 from nlda.log import get_logger
 from nlda.sanitize import sanitize
 from nlda.utils import column_kind, fmt_num
@@ -80,6 +81,30 @@ def _read_csv_resilient(f) -> pd.DataFrame:
         return pd.read_csv(f, sep=None, engine="python", encoding="latin-1")
 
 
+def _check_dimensioni(df: pd.DataFrame) -> None:
+    """
+    Rifiuta i file troppo grandi per essere analizzati in modo utilizzabile.
+
+    Si RIFIUTA invece di campionare: questa app promette che i numeri li calcola
+    Pandas sui dati caricati, e un totale calcolato su un campione sarebbe un
+    numero sbagliato presentato come giusto. Meglio un errore chiaro.
+
+    Le soglie stanno in `nlda.config` e sono di usabilità, non di memoria (vedi
+    lì il perché). Il cap di upload di Streamlit bounda già i CSV, ma non i
+    formati compressi: un .xlsx da 25 MB può contenere milioni di righe.
+    """
+    righe, colonne = df.shape
+    if righe > settings.max_rows:
+        raise ValueError(
+            f"Il file ha {righe:,} righe, oltre il limite di {settings.max_rows:,}. "
+            "Filtra o aggrega i dati prima di caricarli, oppure alza MAX_ROWS."
+            .replace(",", "."))
+    if colonne > settings.max_columns:
+        raise ValueError(
+            f"Il file ha {colonne} colonne, oltre il limite di {settings.max_columns}. "
+            "Tieni solo le colonne che ti servono, oppure alza MAX_COLUMNS.")
+
+
 def read_any(uploaded_file) -> pd.DataFrame:
     """
     Legge un file caricato dall'utente in un DataFrame, riconoscendo il formato
@@ -100,6 +125,9 @@ def read_any(uploaded_file) -> pd.DataFrame:
     else:
         df = _read_csv_resilient(uploaded_file)
 
+    # Il controllo va DOPO la lettura: la dimensione reale si conosce solo a file
+    # aperto, perché i formati compressi non la lasciano dedurre dai byte.
+    _check_dimensioni(df)
     return _clean_columns(df)
 
 
@@ -244,21 +272,43 @@ def default_unit(measure) -> str:
     return ""
 
 
+# Righe campionate in testa e in coda per la firma del contenuto. Vedi il perché
+# in `dataset_signature`: hashare tutto costava quanto il dataset, a ogni click.
+_RIGHE_CAMPIONE = 200
+
+
 def dataset_signature(df: pd.DataFrame, source_label) -> tuple:
     """
     Firma che identifica il CONTENUTO del dataset, non solo la sua provenienza.
 
     Serve a capire quando ricalcolare report e profilo: due file diversi con lo
     stesso nome devono dare firme diverse, e lo stesso file ricaricato deve dare
-    la stessa firma. Se l'hash non è calcolabile (tipi esotici) si degrada a
-    None: la firma resta valida su nome, forma e colonne.
+    la stessa firma.
+
+    Il contenuto è campionato invece che hashato per intero. Streamlit ri-esegue
+    lo script a OGNI interazione — ogni click, ogni tasto in un campo di testo —
+    e hashare l'intero DataFrame rendeva questa funzione l'unico costo
+    proporzionale ai dati sul percorso caldo: misurati 167 ms per interazione su
+    un milione di righe, contro meno di un millisecondo così.
+
+    Il compromesso, dichiarato: due file con stesso nome, stessa forma, stessi
+    tipi e prime e ultime 200 righe identiche ma centro diverso darebbero la
+    stessa firma. Su un upload reale non succede, e se succedesse la conseguenza
+    sarebbe un report non aggiornato — non un numero sbagliato. I dtype entrano
+    nella firma proprio per stringere il campionamento: un cambio di tipo di una
+    colonna la rende diversa anche a valori uguali.
     """
+    if len(df) > 2 * _RIGHE_CAMPIONE:
+        campione = pd.concat([df.head(_RIGHE_CAMPIONE), df.tail(_RIGHE_CAMPIONE)])
+    else:
+        campione = df
     try:
-        content_hash: int | None = int(pd.util.hash_pandas_object(df, index=False).sum())
+        content_hash: int | None = int(pd.util.hash_pandas_object(campione, index=False).sum())
     except Exception as e:  # noqa: BLE001 — colonne non hashabili: si degrada
         log.warning("Hash del contenuto non calcolabile: %s", e)
         content_hash = None
-    return (source_label, df.shape, tuple(df.columns), content_hash)
+    return (source_label, df.shape, tuple(df.columns),
+            tuple(str(t) for t in df.dtypes), content_hash)
 
 
 def best_category(df: pd.DataFrame):

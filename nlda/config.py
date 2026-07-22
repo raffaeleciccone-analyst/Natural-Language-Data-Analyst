@@ -51,6 +51,16 @@ class Settings:
     # pubblico (demo) va tenuto False per "fallire chiuso" invece di degradare.
     allow_inprocess_fallback: bool = True
 
+    # --- Limiti sul file caricato ---
+    # Non sono limiti di MEMORIA: misurato che 3 milioni di righe costano ~340 MB
+    # di picco, dentro i 2 GB del container. Sono limiti di USABILITÀ: oltre queste
+    # soglie ogni domanda richiede più di un secondo e il report iniziale diversi,
+    # e un'app che risponde così non è un'app che si vuole mostrare. Il cap di
+    # upload di Streamlit (25 MB) bounda già i CSV, ma non i formati compressi:
+    # un .xlsx da 25 MB può contenere milioni di righe.
+    max_rows: int = 2_000_000
+    max_columns: int = 500
+
     # --- Provider LLM ---
     request_timeout: float = 30.0         # timeout per singola chiamata all'API del modello
     max_retries: int = 1                  # tentativi extra oltre al primo, su errori transitori
@@ -73,6 +83,8 @@ class Settings:
             memory_limit_mb=_env_int("MEMORY_LIMIT_MB", cls.memory_limit_mb),
             allow_inprocess_fallback=_env_bool(
                 "ALLOW_INPROCESS_FALLBACK", cls.allow_inprocess_fallback),
+            max_rows=_env_int("MAX_ROWS", cls.max_rows),
+            max_columns=_env_int("MAX_COLUMNS", cls.max_columns),
             request_timeout=_env_float("LLM_REQUEST_TIMEOUT", cls.request_timeout),
             max_retries=_env_int("LLM_MAX_RETRIES", cls.max_retries),
             retry_backoff=_env_float("LLM_RETRY_BACKOFF", cls.retry_backoff),
