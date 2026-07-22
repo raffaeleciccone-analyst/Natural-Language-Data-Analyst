@@ -192,3 +192,34 @@ def test_execute_pandas_code_blocca_codice_pericoloso(sales_df: pd.DataFrame):
     assert isinstance(out, ExecutionFailure)
     assert out.kind == "security"
     assert "sicurezza" in out.message.lower()
+
+
+# --- try_chart: un risultato non graficabile non è un errore -------------------
+def test_try_chart_restituisce_none_su_uno_scalare():
+    from nlda.executor import try_chart
+    # "mostrami il totale" produce un numero: non si disegna, ma è una risposta valida.
+    assert try_chart(42) is None
+
+
+def test_try_chart_disegna_quando_puo(sales_df: pd.DataFrame):
+    from nlda.executor import try_chart
+    agg = sales_df.groupby("Region", as_index=False)["Sales"].sum()
+    assert try_chart(agg, kind="bar") is not None
+
+
+def test_scalare_avvolto_resta_un_successo_con_i_dati(sales_df: pd.DataFrame):
+    # Percorso completo dell'avvolgimento automatico su una domanda scalare:
+    # nessun grafico, ma il numero arriva all'utente.
+    res = _run_code("result = df['Sales'].sum()\nfig = try_chart(result, kind='bar')", sales_df)
+    assert isinstance(res, ExecutionSuccess)
+    assert res.fig is None
+    assert res.value == sales_df["Sales"].sum()
+
+
+def test_aggregato_avvolto_produce_dati_e_figura(sales_df: pd.DataFrame):
+    code = ("result = df.groupby('Region', as_index=False)['Sales'].sum()\n"
+            "fig = try_chart(result, kind='bar')")
+    res = _run_code(code, sales_df)
+    assert isinstance(res, ExecutionSuccess)
+    assert res.fig is not None
+    assert len(res.value) == 3
