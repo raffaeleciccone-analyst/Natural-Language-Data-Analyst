@@ -7,8 +7,11 @@ import pytest
 from nlda.loader import (
     _maybe_parse_dates,
     analyze,
+    dataset_signature,
+    default_unit,
     measure_columns,
     monthly_trend,
+    ordered_measures,
     read_any,
 )
 
@@ -114,3 +117,56 @@ def test_read_any_json_scalare_e_rifiutato():
 def test_read_any_json_malformato_solleva():
     with pytest.raises(ValueError):  # json.JSONDecodeError è una sottoclasse
         read_any(_upload(b'{non-json}', "rotto.json"))
+
+
+# --- Selettori del report: euristiche estratte da main.py ----------------------
+def test_ordered_measures_mette_davanti_le_misure_principali():
+    # Con molte colonne numeriche il default proposto all'utente deve essere
+    # quello che si aspetta, non la prima in ordine alfabetico o di colonna.
+    out = ordered_measures(["Quantity", "Discount", "Sales", "Profit"])
+    assert out[:2] == ["Sales", "Profit"]
+    assert set(out) == {"Quantity", "Discount", "Sales", "Profit"}
+
+
+def test_ordered_measures_conserva_lordine_delle_altre():
+    assert ordered_measures(["b", "a", "c"]) == ["b", "a", "c"]
+
+
+def test_ordered_measures_su_lista_vuota():
+    assert ordered_measures([]) == []
+
+
+@pytest.mark.parametrize("misura", ["Sales", "profit", "Importo totale", "Costo unitario"])
+def test_default_unit_riconosce_le_misure_economiche(misura):
+    assert default_unit(misura) == "$"
+
+
+@pytest.mark.parametrize("misura", ["Quantity", "Età", "punteggio", None, ""])
+def test_default_unit_non_inventa_unita(misura):
+    # Su misure non economiche nessuna unità è meglio di una sbagliata: comparirebbe
+    # accanto a ogni numero nei KPI e nelle risposte dell'AI.
+    assert default_unit(misura) == ""
+
+
+# --- Firma del dataset ---------------------------------------------------------
+def test_dataset_signature_stabile_sullo_stesso_contenuto(sales_df: pd.DataFrame):
+    assert dataset_signature(sales_df, "x") == dataset_signature(sales_df.copy(), "x")
+
+
+def test_dataset_signature_cambia_se_cambiano_i_valori(sales_df: pd.DataFrame):
+    # È il caso che conta: stesso nome file, stesse colonne, dati diversi. Senza
+    # l'hash del contenuto il report resterebbe quello del file precedente.
+    modificato = sales_df.copy()
+    modificato.loc[0, "Sales"] = 99999
+    assert dataset_signature(sales_df, "x") != dataset_signature(modificato, "x")
+
+
+def test_dataset_signature_cambia_con_la_sorgente(sales_df: pd.DataFrame):
+    assert dataset_signature(sales_df, "a") != dataset_signature(sales_df, "b")
+
+
+def test_dataset_signature_non_solleva_su_colonne_non_hashabili():
+    # Celle con liste dentro: l'hash non è calcolabile, la firma deve degradare.
+    df = pd.DataFrame({"a": [[1, 2], [3]]})
+    firma = dataset_signature(df, "x")
+    assert firma[0] == "x" and firma[-1] is None
