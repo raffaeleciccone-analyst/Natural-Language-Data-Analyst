@@ -237,7 +237,7 @@ st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 
 # --- Anteprima dati ---
 with st.expander("Anteprima dei dati (prime 10 righe)"):
-    st.dataframe(df.head(10), use_container_width=True)
+    st.dataframe(df.head(10), width="stretch")
 
 # --- Report iniziale sui dati ---
 def _try_fig(fn, *args, **kwargs):
@@ -312,7 +312,7 @@ if "numeric_stats" in insights:
     for _c in ["Somma", "Media", "Minimo", "Massimo"]:
         if _c in stats_disp.columns:
             stats_disp[_c] = stats_disp[_c].map(fmt_num)
-    st.dataframe(stats_disp, use_container_width=True, hide_index=True)
+    st.dataframe(stats_disp, width="stretch", hide_index=True)
 
 render_linked_charts(df, insights, st.session_state.get("top_fig"),
                      st.session_state.get("trend_fig"))
@@ -326,7 +326,7 @@ if dist_fig is not None or corr_fig is not None:
     if dist_fig is not None:
         with dc_cols[_di]:
             st.markdown(f"**Distribuzione di {sel_measure}**")
-            st.plotly_chart(apply_theme(dist_fig), use_container_width=True, key="report_dist")
+            st.plotly_chart(apply_theme(dist_fig), width="stretch", key="report_dist")
         _di += 1
     if corr_fig is not None:
         with dc_cols[_di]:
@@ -339,10 +339,10 @@ if dist_fig is not None or corr_fig is not None:
                            "La correlazione indica associazione, non causa.")
             else:
                 st.caption("Nessuna coppia con correlazione forte (|r| ≥ 0,6).")
-            st.plotly_chart(apply_theme(corr_fig), use_container_width=True, key="report_corr")
+            st.plotly_chart(apply_theme(corr_fig), width="stretch", key="report_corr")
 
 with st.expander("Struttura delle colonne (tipi, mancanti, valori)"):
-    st.dataframe(st.session_state.get("profile"), use_container_width=True, hide_index=True)
+    st.dataframe(st.session_state.get("profile"), width="stretch", hide_index=True)
 
 # --- Report esecutivo (l'AI narra gli insight GIÀ calcolati) ---
 st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
@@ -390,7 +390,7 @@ with st.form("ask_form", clear_on_submit=True):
         "domanda", label_visibility="collapsed",
         placeholder="Es. 'Qual è il mese con più vendite?' oppure 'Mostrami le vendite per regione'",
     )
-    submitted = c_btn.form_submit_button("Invia", use_container_width=True)
+    submitted = c_btn.form_submit_button("Invia", width="stretch")
 
 if submitted and user_q and user_q.strip():
     if demo_allows("domande"):

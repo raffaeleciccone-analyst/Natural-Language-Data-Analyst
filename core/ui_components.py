@@ -114,7 +114,7 @@ def render_linked_charts(df, insights, top_fig, trend_fig) -> None:
         cat, num, _ = insights["top"]
         with graf_cols[idx]:
             st.markdown(f"**Classifica: {num} per {cat}**")
-            event = st.plotly_chart(apply_theme(top_fig), use_container_width=True,
+            event = st.plotly_chart(apply_theme(top_fig), width="stretch",
                                     on_select="rerun", key="report_top")
             try:
                 pts = event.selection.points  # type: ignore[attr-defined]
@@ -140,10 +140,10 @@ def render_linked_charts(df, insights, top_fig, trend_fig) -> None:
             if sub is not None:
                 st.markdown(f"**Andamento di {num} — {cat}: {selected_cat}**")
                 st.plotly_chart(apply_theme(to_chart(sub, kind="line")),
-                                use_container_width=True, key="report_trend_filtered")
+                                width="stretch", key="report_trend_filtered")
             else:
                 st.markdown(f"**Andamento di {num} nel tempo**")
-                st.plotly_chart(apply_theme(trend_fig), use_container_width=True, key="report_trend")
+                st.plotly_chart(apply_theme(trend_fig), width="stretch", key="report_trend")
 
 
 def render_value(value, kp: str = "r") -> None:
@@ -154,9 +154,9 @@ def render_value(value, kp: str = "r") -> None:
         num_cols = list(value.select_dtypes("number").columns)
         styled = (value.style.format(subset=num_cols, **IT_NUM_FORMAT)
                   if num_cols else value)
-        st.dataframe(styled, use_container_width=True, hide_index=True, key=f"{kp}_df")
+        st.dataframe(styled, width="stretch", hide_index=True, key=f"{kp}_df")
     elif isinstance(value, pd.Series):
-        st.dataframe(value.rename("valore").to_frame(), use_container_width=True, key=f"{kp}_ser")
+        st.dataframe(value.rename("valore").to_frame(), width="stretch", key=f"{kp}_ser")
     elif isinstance(value, (int, float)):
         st.metric("Risultato", fmt_num(value))
     elif isinstance(value, str) and value != "Codice eseguito correttamente.":
@@ -176,7 +176,7 @@ def render_result(code: str, result: ExecutionResult,
         st.error(result.message)
     else:
         if result.fig is not None:
-            st.plotly_chart(apply_theme(result.fig), use_container_width=True, key=f"{kp}_fig")
+            st.plotly_chart(apply_theme(result.fig), width="stretch", key=f"{kp}_fig")
         render_value(result.value, kp)
 
     # 3. Codice generato (in fondo, collassato)
