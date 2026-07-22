@@ -16,7 +16,7 @@ from .openai_provider import OpenAIProvider
 # Modello di default suggerito per ciascun provider
 DEFAULT_MODELS = {
     "ollama": "qwen2.5:3b",
-    "anthropic": "claude-opus-4-8",
+    "anthropic": "claude-haiku-4-5",   # il modello economico: il compito e generare 5 righe di Pandas
     "openai": "gpt-4o-mini",
     "gemini": "gemini-2.0-flash",
     "groq": "llama-3.3-70b-versatile",

@@ -13,12 +13,15 @@ progetto, non per gli utenti finali.
    ```toml
    DEMO_MODE = "true"
    DEMO_MAX_QUESTIONS = "15"
+   DEMO_MAX_DAILY = "200"
    PROVIDER = "groq"
    MODEL = "llama-3.3-70b-versatile"
    GROQ_API_KEY = "gsk_..."
    ```
 4. **Deploy**. In modalità demo l'app usa la chiave dei secrets, nasconde i campi
-   sensibili e limita le domande per sessione.
+   sensibili e applica **due** limiti: uno per sessione e un tetto
+   giornaliero condiviso, che è quello che protegge davvero il credito
+   (il limite per sessione si azzera aprendo una scheda nuova).
 5. Copia il link pubblico ottenuto e inseriscilo in cima al `README.md`
    (riga commentata `▶️ **Prova la demo:** <URL>`).
 

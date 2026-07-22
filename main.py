@@ -16,6 +16,7 @@ import html
 import io
 import os
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -39,6 +40,7 @@ from nlda.loader import (
 )
 from nlda.log import get_logger
 from nlda.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers
+from nlda.results import ExecutionFailure
 from nlda.service import AnalysisService, Turn
 from nlda.ui_components import answer_card, build_kpis, readout, render_linked_charts, render_result
 from nlda.ui_theme import console_css
@@ -79,25 +81,73 @@ def _secret(key: str, default: str = "") -> str:
     return os.getenv(key, default)
 
 
+def _intero_da_secret(chiave: str, default: int) -> int:
+    """Legge un intero dai secrets; un valore malformato non deve togliere il tetto."""
+    try:
+        return int(_secret(chiave, str(default)) or default)
+    except ValueError:
+        log.warning("Secret %s non è un intero: uso il default %d", chiave, default)
+        return default
+
+
 def demo_limits() -> DemoLimits:
     """Quota della demo pubblica, attivata dai secrets del deploy."""
-    enabled = _secret("DEMO_MODE", "").strip().lower() in ("1", "true", "yes", "on")
-    try:
-        max_questions = int(_secret("DEMO_MAX_QUESTIONS", "15") or "15")
-    except ValueError:
-        max_questions = 15
-    return DemoLimits(enabled=enabled, max_questions=max_questions)
+    return DemoLimits(
+        enabled=_secret("DEMO_MODE", "").strip().lower() in ("1", "true", "yes", "on"),
+        max_questions=_intero_da_secret("DEMO_MAX_QUESTIONS", 15),
+        max_daily=_intero_da_secret("DEMO_MAX_DAILY", 200),
+    )
+
+
+@st.cache_resource
+def _consumo_giornaliero() -> dict:
+    """
+    Contatore CONDIVISO fra tutte le sessioni del server, azzerato ogni giorno.
+
+    `st.cache_resource` è una cache globale di processo: qui è esattamente ciò che
+    serve — al contrario dell'agente, che tenevamo fuori di proposito perché
+    contiene la API key. Un contatore non è un segreto.
+
+    Il limite per sessione da solo non protegge il credito: basta aprire una
+    scheda nuova per azzerarlo. Questo è il tetto di spesa vero.
+    """
+    return {"giorno": date.today(), "usate": 0}
 
 
 def demo_allows(limits: DemoLimits, kind: str) -> bool:
-    """True se resta budget (e incrementa il contatore); altrimenti mostra il limite."""
-    used = st.session_state.get("_demo_q", 0)
-    if not limits.has_budget(used):
+    """True se resta budget su entrambi i limiti; altrimenti avvisa e blocca."""
+    if not limits.enabled:
+        return True
+
+    consumo = _consumo_giornaliero()
+    if consumo["giorno"] != date.today():   # nuovo giorno, nuovo credito
+        consumo.update(giorno=date.today(), usate=0)
+
+    if limits.has_budget(st.session_state.get("_demo_q", 0), consumo["usate"]):
+        return True
+
+    if consumo["usate"] >= limits.max_daily:
+        st.warning("La demo ha esaurito il budget giornaliero condiviso. "
+                   "Riprova domani, oppure clona il repo per uso illimitato.")
+    else:
         st.warning(f"Hai raggiunto il limite della demo ({limits.max_questions} {kind}). "
                    "Clona il repo da GitHub per uso illimitato.")
-        return False
-    st.session_state["_demo_q"] = used + 1
-    return True
+    return False
+
+
+def demo_consume(limits: DemoLimits) -> None:
+    """
+    Registra una richiesta che ha davvero raggiunto il modello.
+
+    Si conta DOPO e non prima: se il provider è irraggiungibile non è stato speso
+    nulla, e addebitare quella richiesta significherebbe far pagare all'utente un
+    guasto nostro — per giunta su un tetto giornaliero condiviso, dove un
+    provider giù consumerebbe l'intero credito senza produrre una risposta.
+    """
+    if not limits.enabled:
+        return
+    st.session_state["_demo_q"] = st.session_state.get("_demo_q", 0) + 1
+    _consumo_giornaliero()["usate"] += 1
 
 
 # --- Caricamento del DataFrame (con cache) ------------------------------------
@@ -361,6 +411,10 @@ def render_executive_report(agent: DataAgent, insights: dict, limits: DemoLimits
                 st.session_state.exec_report = agent.executive_report(
                     with_unit(insights["text"], unit))
                 st.session_state.exec_report_sig = exec_sig
+            # La narrativa non solleva: se il modello è irraggiungibile restituisce
+            # un avviso in corsivo. In quel caso non è stato speso nulla.
+            if not str(st.session_state.exec_report).startswith("_(Impossibile"):
+                demo_consume(limits)
 
     if st.session_state.get("exec_report"):
         with st.container(border=True):
@@ -390,6 +444,10 @@ def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
     if submitted and user_q and user_q.strip() and demo_allows(limits, "domande"):
         with st.spinner("Analisi in corso..."):
             turn = service.answer(user_q.strip(), df, explain=explain, unit=unit)
+        # Un provider irraggiungibile non ha consumato token: addebitarlo
+        # significherebbe far pagare all'utente un guasto nostro.
+        if not (isinstance(turn.result, ExecutionFailure) and turn.result.kind == "provider"):
+            demo_consume(limits)
         st.session_state.messages.append(turn)
 
     # Lo storico è una lista di Turn: domanda e risposta stanno nello stesso
