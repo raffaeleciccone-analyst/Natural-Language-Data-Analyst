@@ -61,7 +61,7 @@ def main() -> None:
     real_stdout_fd = os.dup(1)
     os.dup2(2, 1)
 
-    from nlda.executor import _run_code, serialize_result
+    from nlda.sandbox.runner import _run_code, serialize_result
 
     result = _run_code(code, df)
     out = serialize_result(result)

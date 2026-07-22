@@ -38,6 +38,6 @@ def get_logger(name: str) -> logging.Logger:
     """Logger applicativo sotto il namespace 'nlda' (configurato al primo uso)."""
     _configure_once()
     # Il pacchetto si chiama già 'nlda': senza questo taglio un modulo come
-    # 'nlda.executor' diventerebbe 'nlda.nlda.executor'.
+    # 'nlda.charts' diventerebbe 'nlda.nlda.charts'.
     suffix = name.split("nlda.", 1)[-1]
     return logging.getLogger(f"nlda.{suffix}")

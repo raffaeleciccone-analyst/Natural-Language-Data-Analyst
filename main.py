@@ -23,8 +23,8 @@ import pandas as pd
 import streamlit as st
 
 from nlda.agent import DataAgent
+from nlda.charts import apply_theme, corr_heatmap, histogram, to_chart
 from nlda.demo import DemoLimits
-from nlda.executor import apply_theme, corr_heatmap, histogram, to_chart
 from nlda.loader import (
     SUPPORTED_EXTENSIONS,
     analyze,

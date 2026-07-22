@@ -11,13 +11,9 @@ import ast
 import pandas as pd
 import pytest
 
-from nlda.executor import (
-    _last_assigned_name,
-    _parse_and_validate,
-    _run_code,
-    execute_pandas_code,
-)
 from nlda.results import ExecutionFailure, ExecutionSuccess
+from nlda.sandbox.runner import _run_code, execute_pandas_code
+from nlda.sandbox.validator import _last_assigned_name, _parse_and_validate
 
 
 def _is_rejected(code: str) -> bool:
@@ -196,13 +192,13 @@ def test_execute_pandas_code_blocca_codice_pericoloso(sales_df: pd.DataFrame):
 
 # --- try_chart: un risultato non graficabile non è un errore -------------------
 def test_try_chart_restituisce_none_su_uno_scalare():
-    from nlda.executor import try_chart
+    from nlda.charts import try_chart
     # "mostrami il totale" produce un numero: non si disegna, ma è una risposta valida.
     assert try_chart(42) is None
 
 
 def test_try_chart_disegna_quando_puo(sales_df: pd.DataFrame):
-    from nlda.executor import try_chart
+    from nlda.charts import try_chart
     agg = sales_df.groupby("Region", as_index=False)["Sales"].sum()
     assert try_chart(agg, kind="bar") is not None
 

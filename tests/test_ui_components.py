@@ -204,7 +204,7 @@ def _insights(df: pd.DataFrame) -> dict:
 
 
 def _figure(df: pd.DataFrame, insights: dict):
-    from nlda.executor import to_chart
+    from nlda.charts import to_chart
 
     return (to_chart(insights["top"].data, kind="bar"),
             to_chart(insights["trend"].data, kind="line"))
