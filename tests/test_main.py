@@ -11,6 +11,7 @@ diverso in produzione.
 Streamlit è sostituito da un finto: qui si verifica la logica, non il rendering
 (che è coperto dallo smoke test manuale e dai test su `ui_components`).
 """
+from datetime import date, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -87,19 +88,77 @@ def test_demo_max_questions_malformato_usa_il_default(fake_st):
     assert main.demo_limits().max_questions == 15
 
 
-def test_fuori_dalla_demo_non_si_conta_nulla(fake_st):
+def test_demo_max_daily_malformato_usa_il_default(fake_st):
+    fake_st.secrets = {"DEMO_MODE": "true", "DEMO_MAX_DAILY": "tante"}
+    assert main.demo_limits().max_daily == 200
+
+
+@pytest.fixture
+def consumo(monkeypatch):
+    """
+    Sostituisce il contatore giornaliero condiviso con uno pulito.
+
+    In produzione vive in `st.cache_resource`, cioè una cache di processo: senza
+    questa sostituzione i test si passerebbero il conteggio a vicenda.
+    """
+    stato = {"giorno": date.today(), "usate": 0}
+    monkeypatch.setattr(main, "_consumo_giornaliero", lambda: stato)
+    return stato
+
+
+def test_fuori_dalla_demo_non_si_conta_nulla(fake_st, consumo):
     limiti = DemoLimits(enabled=False)
     assert main.demo_allows(limiti, "domande") is True
-    assert "_demo_q" not in fake_st.session_state or fake_st.session_state["_demo_q"] == 1
+    main.demo_consume(limiti)
+    assert consumo["usate"] == 0
+    assert "_demo_q" not in fake_st.session_state
 
 
-def test_la_quota_si_esaurisce_e_avvisa(fake_st):
+def test_il_controllo_non_consuma_da_solo(fake_st, consumo):
+    # È il punto della separazione: prima si contava al CONTROLLO, quindi una
+    # richiesta mai partita — provider irraggiungibile — consumava comunque quota.
     limiti = DemoLimits(enabled=True, max_questions=2)
     assert main.demo_allows(limiti, "domande") is True
     assert main.demo_allows(limiti, "domande") is True
-    assert main.demo_allows(limiti, "domande") is False   # esaurita
+    assert consumo["usate"] == 0
+    assert fake_st.session_state.get("_demo_q") is None
+
+
+def test_la_quota_di_sessione_si_esaurisce_e_avvisa(fake_st, consumo):
+    limiti = DemoLimits(enabled=True, max_questions=2)
+    for _ in range(2):
+        assert main.demo_allows(limiti, "domande") is True
+        main.demo_consume(limiti)
+
+    assert main.demo_allows(limiti, "domande") is False
     fake_st.warning.assert_called_once()
     assert "2" in fake_st.warning.call_args[0][0]
+
+
+def test_il_tetto_giornaliero_vale_su_tutte_le_sessioni(fake_st, consumo):
+    # Il limite per sessione da solo non protegge nulla: basta una scheda nuova.
+    # Qui si simula proprio quello — sessione azzerata, tetto giornaliero pieno.
+    limiti = DemoLimits(enabled=True, max_questions=15, max_daily=3)
+    consumo["usate"] = 3
+    fake_st.session_state.clear()
+
+    assert main.demo_allows(limiti, "domande") is False
+    assert "giornaliero" in fake_st.warning.call_args[0][0]
+
+
+def test_il_tetto_giornaliero_si_azzera_il_giorno_dopo(fake_st, consumo):
+    limiti = DemoLimits(enabled=True, max_daily=3)
+    consumo.update(giorno=date.today() - timedelta(days=1), usate=3)
+
+    assert main.demo_allows(limiti, "domande") is True
+    assert consumo["usate"] == 0 and consumo["giorno"] == date.today()
+
+
+def test_il_consumo_incrementa_entrambi_i_contatori(fake_st, consumo):
+    limiti = DemoLimits(enabled=True)
+    main.demo_consume(limiti)
+    assert fake_st.session_state["_demo_q"] == 1
+    assert consumo["usate"] == 1
 
 
 # --- Robustezza del report -----------------------------------------------------

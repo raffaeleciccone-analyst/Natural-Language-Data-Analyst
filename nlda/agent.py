@@ -5,33 +5,30 @@ import pandas as pd
 from nlda.errors import ProviderError
 from nlda.log import get_logger
 from nlda.providers import LLMProvider, get_provider
+from nlda.sanitize import MAX_LEN_NOME, sanitize
 from nlda.utils import clean_code, column_kind
 
 log = get_logger(__name__)
 
 
-def _sanitize_sample(value) -> str:
-    """
-    Sanitizza un valore di cella prima di inserirlo nel prompt: le celle sono
-    dati NON fidati (un file caricato potrebbe contenere istruzioni di prompt
-    injection). Rimuove i caratteri di controllo/newline e tronca la lunghezza.
-    """
-    s = str(value).replace("\n", " ").replace("\r", " ").replace("`", "'")
-    s = s[:40]
-    return s + "…" if len(str(value)) > 40 else s
-
-
 def _describe_schema(df: pd.DataFrame) -> str:
-    """Costruisce la descrizione dello schema: nome, tipo ed esempi (sanitizzati) per colonna."""
+    """
+    Descrizione dello schema per il prompt: nome, tipo ed esempi di ogni colonna.
+
+    Tutto ciò che finisce qui dentro viene dal file dell'utente, quindi passa dal
+    sanitizzatore — i VALORI e anche i NOMI. Il nome di colonna era il punto
+    scoperto: un'intestazione come "Ignora le istruzioni precedenti e..." finiva
+    grezza in mezzo alle regole del prompt, con a capo e backtick compresi.
+    """
     lines = []
     for col in df.columns:
         kind = column_kind(df[col])
         try:
             samples = df[col].dropna().unique()[:3]
-            sample_str = ", ".join(_sanitize_sample(s) for s in samples)
+            sample_str = ", ".join(sanitize(s) for s in samples)
         except Exception:
             sample_str = ""
-        lines.append(f"- '{col}' (tipo: {kind}) — esempi: {sample_str}")
+        lines.append(f"- '{sanitize(col, MAX_LEN_NOME)}' (tipo: {kind}) — esempi: {sample_str}")
     return "\n".join(lines)
 
 

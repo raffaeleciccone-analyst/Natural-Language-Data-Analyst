@@ -6,6 +6,7 @@ from typing import NamedTuple
 import pandas as pd
 
 from nlda.log import get_logger
+from nlda.sanitize import sanitize
 from nlda.utils import column_kind, fmt_num
 
 log = get_logger(__name__)
@@ -127,14 +128,14 @@ def profile(df: pd.DataFrame) -> pd.DataFrame:
 
 def _clean_label(value) -> str:
     """
-    Sanitizza un valore di cella (categoria/etichetta) prima di inserirlo nel testo
-    passato all'LLM o mostrato in Markdown: i valori sono dati NON fidati (un file
-    caricato può contenere prompt injection o sintassi Markdown). Rimuove newline,
-    backtick e metacaratteri Markdown di link, e tronca la lunghezza.
+    Sanitizza un'etichetta (categoria, valore di cella) prima di inserirla nel
+    testo passato all'LLM o mostrato in Markdown.
+
+    Delega a `nlda.sanitize`: la difesa è UNA per tutto il progetto. Prima ne
+    esistevano due copie quasi identiche, qui e in `agent.py`, ed è così che un
+    rafforzamento può raggiungerne una e dimenticare l'altra.
     """
-    s = str(value).replace("\n", " ").replace("\r", " ").replace("`", "'")
-    s = s.translate({ord(c): None for c in "[]()"})  # neutralizza i link Markdown
-    return s[:40] + "…" if len(s) > 40 else s
+    return sanitize(value, strip_markdown=True)
 
 
 def _insights_text(df: pd.DataFrame, res: dict) -> str:
