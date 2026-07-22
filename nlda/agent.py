@@ -79,17 +79,17 @@ class DataAgent:
         # Esempio di grafico costruito sulle colonne REALI del dataset caricato,
         # così il modello non viene spinto verso nomi di colonne inesistenti.
         if cat and num:
-            esempio = (
+            example = (
                 f"data = df.groupby({cat!r}, as_index=False)[{num!r}].sum(); "
                 f"fig = px.bar(data, x={cat!r}, y={num!r}, title={f'{num} per {cat}'!r})"
             )
         elif num:
-            esempio = (
+            example = (
                 f"data = df[{num!r}].describe().reset_index(); "
                 f"fig = px.bar(data, x='index', y={num!r})"
             )
         else:
-            esempio = "fig = px.bar(df.iloc[:, :2])"
+            example = "fig = px.bar(df.iloc[:, :2])"
 
         return f"""Sei un assistente esperto di Python, Pandas e Plotly. Il tuo unico compito è tradurre la richiesta dell'utente in codice Python eseguibile.
 Il DataFrame si chiama sempre e solo 'df'. Hai a disposizione Plotly Express già importato come 'px'.
@@ -103,23 +103,23 @@ REGOLE TASSATIVE:
 3. Scegli le colonne in base al tipo: aggrega/somma solo colonne numeriche; raggruppa per colonne di testo o data.
 4. Se la richiesta contiene parole come "mostrami", "grafico", "andamento", "visualizza", "plot", "barre", "linee", DEVI creare un grafico con Plotly Express: prepara prima i dati aggregati con groupby(..., as_index=False), poi assegna la figura alla variabile 'fig' usando 'px' con gli argomenti x e y. NON usare funzioni di Streamlit (niente st.*). Usa px.line per andamenti/serie temporali, px.bar per confronti tra categorie.
 5. Se l'utente NON chiede un grafico e la risposta è immediata, restituisci una singola espressione Pandas (es: df['<colonna_numerica>'].sum()).
-6. Per calcoli in PIÙ passaggi, esegui i passaggi e metti il RISULTATO FINALE in una variabile chiamata 'risultato' (può essere un numero, una stringa formattata o un DataFrame). NON usare MAI print(). Esempio:
+6. Per calcoli in PIÙ passaggi, esegui i passaggi e metti il RISULTATO FINALE in una variabile chiamata 'result' (può essere un numero, una stringa formattata o un DataFrame). NON usare MAI print(). Esempio:
    top = df.groupby('<cat>', as_index=False)['<num>'].sum().sort_values('<num>', ascending=False).head(5)
    perc = top['<num>'].sum() / df['<num>'].sum() * 100
-   risultato = f"I primi 5 valgono il {{perc:.1f}}% del totale"
-7. Per domande di RIPARTIZIONE o CLASSIFICA (es. "per prodotto", "top N", "quanto incide ognuno"), fornisci una risposta COMPLETA: metti in 'risultato' un DataFrame di dettaglio (con una colonna 'percentuale' sul totale, arrotondata a 1 decimale) E crea un grafico con la funzione to_chart(dati, kind='bar'), che rende leggibili anche i nomi lunghi. Esempio:
-   dett = df.groupby('<cat>', as_index=False)['<num>'].sum().sort_values('<num>', ascending=False)
-   dett['percentuale'] = (dett['<num>'] / dett['<num>'].sum() * 100).round(1)
-   risultato = dett
-   fig = to_chart(dett[['<cat>', '<num>']], kind='bar')
+   result = f"I primi 5 valgono il {{perc:.1f}}% del totale"
+7. Per domande di RIPARTIZIONE o CLASSIFICA (es. "per prodotto", "top N", "quanto incide ognuno"), fornisci una risposta COMPLETA: metti in 'result' un DataFrame di dettaglio (con una colonna 'percentuale' sul totale, arrotondata a 1 decimale) E crea un grafico con la funzione to_chart(dati, kind='bar'), che rende leggibili anche i nomi lunghi. Esempio:
+   detail = df.groupby('<cat>', as_index=False)['<num>'].sum().sort_values('<num>', ascending=False)
+   detail['percentuale'] = (detail['<num>'] / detail['<num>'].sum() * 100).round(1)
+   result = detail
+   fig = to_chart(detail[['<cat>', '<num>']], kind='bar')
 8. Per il "top N per gruppo" (es. "top 5 prodotti per regione") usa questo idioma:
    agg = df.groupby(['<gruppo>', '<elemento>'], as_index=False)['<num>'].sum()
-   risultato = agg.sort_values('<num>', ascending=False).groupby('<gruppo>', as_index=False).head(5)
+   result = agg.sort_values('<num>', ascending=False).groupby('<gruppo>', as_index=False).head(5)
    NON usare df.groupby(...).apply(...) seguito da reset_index(drop=True): perde le
    colonne di raggruppamento e causa errori.
 
 ESEMPIO DI GRAFICO (adattato a questo dataset):
-{esempio}
+{example}
 """
 
     def _generate(self, system_prompt: str, user_prompt: str) -> str:
@@ -141,7 +141,7 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
             raise ProviderError(self.provider.name, e) from e
         return clean_code(raw or "")
 
-    def _narrate(self, system_prompt: str, user_prompt: str, cosa: str) -> str:
+    def _narrate(self, system_prompt: str, user_prompt: str, description: str) -> str:
         """Genera testo narrativo (non codice); in caso di errore ritorna un avviso in corsivo.
 
         A differenza di `_generate` qui NON si solleva: la narrativa è un
@@ -153,8 +153,8 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
         try:
             return self.provider.generate(system_prompt, user_prompt).strip().replace("`", "")
         except Exception as e:
-            log.error("Generazione narrativa (%s) fallita: %s", cosa, e)
-            return f"_(Impossibile generare {cosa}: {e})_"
+            log.error("Generazione narrativa (%s) fallita: %s", description, e)
+            return f"_(Impossibile generare {description}: {e})_"
 
     def _chart_intent(self, question: str):
         """Deduce se la domanda richiede un grafico e di che tipo (linea vs barre)."""
@@ -173,8 +173,8 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
         """Traduce la domanda in codice Pandas (con eventuale grafico) pronto per la sandbox."""
         wants, kind = self._chart_intent(user_question)
         # Suggerisce l'aggregazione quando serve una figura (evita indici non plottabili)
-        domanda = user_question + (" (Raggruppa i dati usando as_index=False)" if wants else "")
-        code = self._generate(self._get_system_prompt(df), domanda)
+        question_text = user_question + (" (Raggruppa i dati usando as_index=False)" if wants else "")
+        code = self._generate(self._get_system_prompt(df), question_text)
         return self._wrap_chart(code, wants, kind)
 
     def fix_code(self, user_question: str, df: pd.DataFrame,

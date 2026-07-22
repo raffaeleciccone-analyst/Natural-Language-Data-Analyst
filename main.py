@@ -83,10 +83,10 @@ def demo_limits() -> DemoLimits:
     """Quota della demo pubblica, attivata dai secrets del deploy."""
     enabled = _secret("DEMO_MODE", "").strip().lower() in ("1", "true", "yes", "on")
     try:
-        massimo = int(_secret("DEMO_MAX_QUESTIONS", "15") or "15")
+        max_questions = int(_secret("DEMO_MAX_QUESTIONS", "15") or "15")
     except ValueError:
-        massimo = 15
-    return DemoLimits(enabled=enabled, max_questions=massimo)
+        max_questions = 15
+    return DemoLimits(enabled=enabled, max_questions=max_questions)
 
 
 def demo_allows(limits: DemoLimits, kind: str) -> bool:
@@ -232,8 +232,8 @@ def render_report_selectors(df: pd.DataFrame):
             st.caption("Nessuna colonna numerica: report a conteggi.")
 
         if cats:
-            preferita = best_category(df)
-            idx = cats.index(preferita) if preferita in cats else 0
+            preferred = best_category(df)
+            idx = cats.index(preferred) if preferred in cats else 0
             sel_category = st.selectbox("Categoria", cats, index=idx,
                                         help="La dimensione per classifiche e filtri.")
         else:
@@ -303,9 +303,9 @@ def render_report(df: pd.DataFrame, insights: dict, sel_measure, unit: str) -> N
     if "numeric_stats" in insights:
         st.markdown("**Statistiche delle colonne numeriche**")
         stats = insights["numeric_stats"].copy()
-        for colonna in ["Somma", "Media", "Minimo", "Massimo"]:
-            if colonna in stats.columns:
-                stats[colonna] = stats[colonna].map(fmt_num)
+        for column in ["Somma", "Media", "Minimo", "Massimo"]:
+            if column in stats.columns:
+                stats[column] = stats[column].map(fmt_num)
         st.dataframe(stats, width="stretch", hide_index=True)
 
     render_linked_charts(df, insights, st.session_state.get("top_fig"),
@@ -336,8 +336,8 @@ def _render_distribution_and_correlations(insights: dict, sel_measure) -> None:
             pairs = insights.get("corr_pairs") or []
             if pairs:
                 a, b, r = pairs[0]
-                verso = "positiva" if r > 0 else "negativa"
-                st.caption(f"Coppia più correlata: {a} e {b} (r = {fmt_num(r)}, {verso}). "
+                direction = "positiva" if r > 0 else "negativa"
+                st.caption(f"Coppia più correlata: {a} e {b} (r = {fmt_num(r)}, {direction}). "
                            "La correlazione indica associazione, non causa.")
             else:
                 st.caption("Nessuna coppia con correlazione forte (|r| ≥ 0,6).")

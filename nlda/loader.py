@@ -70,7 +70,7 @@ def _stringify_complex(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _read_csv_robusto(f) -> pd.DataFrame:
+def _read_csv_resilient(f) -> pd.DataFrame:
     """Legge un CSV rilevando il separatore e gestendo encoding non-UTF8."""
     try:
         return pd.read_csv(f, sep=None, engine="python")
@@ -97,7 +97,7 @@ def read_any(uploaded_file) -> pd.DataFrame:
             raise ValueError("Formato JSON non riconosciuto: attesa una lista di oggetti o un oggetto.")
         df = _stringify_complex(df)  # array/oggetti annidati -> stringa
     else:
-        df = _read_csv_robusto(uploaded_file)
+        df = _read_csv_resilient(uploaded_file)
 
     return _clean_columns(df)
 
@@ -111,16 +111,16 @@ def profile(df: pd.DataFrame) -> pd.DataFrame:
         miss = int(s.isna().sum())
         kind = column_kind(s)
         if kind == "numerica" and s.notna().any():
-            dettaglio = f"min {s.min():.2f} · media {s.mean():.2f} · max {s.max():.2f}"
+            detail = f"min {s.min():.2f} · media {s.mean():.2f} · max {s.max():.2f}"
         else:
-            valori = s.dropna().astype(str)
-            dettaglio = f"più frequente: {valori.mode().iat[0]}" if not valori.empty else "—"
+            values = s.dropna().astype(str)
+            detail = f"più frequente: {values.mode().iat[0]}" if not values.empty else "—"
         rows.append({
             "Colonna": col,
             "Tipo": kind,
             "Mancanti": f"{miss} ({miss / n * 100:.0f}%)" if n else "0",
             "Valori unici": int(s.nunique(dropna=True)),
-            "Dettaglio": dettaglio,
+            "Dettaglio": detail,
         })
     return pd.DataFrame(rows)
 
@@ -147,9 +147,9 @@ def _insights_text(df: pd.DataFrame, res: dict) -> str:
                          f"min {fmt_num(r['Minimo'])}, max {fmt_num(r['Massimo'])}")
     if "top" in res:
         cat, num, top = res["top"]
-        parti = ", ".join(f"{_clean_label(row[cat])}={fmt_num(row[num])}"
+        parts = ", ".join(f"{_clean_label(row[cat])}={fmt_num(row[num])}"
                           for _, row in top.head(5).iterrows())
-        lines.append(f"Classifica di {num} per {cat} (primi 5): {parti}.")
+        lines.append(f"Classifica di {num} per {cat} (primi 5): {parts}.")
     if "trend" in res:
         dcol, num, per = res["trend"]
         if not per.empty:
@@ -159,8 +159,8 @@ def _insights_text(df: pd.DataFrame, res: dict) -> str:
                          f"{best[dcol].date()}={fmt_num(best[num])}, peggiore "
                          f"{worst[dcol].date()}={fmt_num(worst[num])}.")
     if res.get("corr_pairs"):
-        parti = ", ".join(f"{a}–{b} (r={r:.2f})" for a, b, r in res["corr_pairs"][:3])
-        lines.append(f"Correlazioni più forti tra le misure: {parti}. "
+        parts = ", ".join(f"{a}–{b} (r={r:.2f})" for a, b, r in res["corr_pairs"][:3])
+        lines.append(f"Correlazioni più forti tra le misure: {parts}. "
                      "(Correlazione, non causa.)")
     if res.get("findings"):
         lines.append("Osservazioni automatiche (già calcolate, da NON ricalcolare):")
@@ -224,8 +224,8 @@ def ordered_measures(measures: list) -> list:
     originale per tutte le altre. Serve a scegliere un default sensato quando il
     dataset ha molte colonne numeriche.
     """
-    priorita = [c for c in _MEASURE_PRIORITY if c in measures]
-    return priorita + [c for c in measures if c not in priorita]
+    priority = [c for c in _MEASURE_PRIORITY if c in measures]
+    return priority + [c for c in measures if c not in priority]
 
 
 # Indizi di misura economica, in inglese e in italiano: se il nome della colonna
@@ -282,16 +282,16 @@ def _best_category(df: pd.DataFrame, cat_cols: list):
     Sceglie una colonna categoriale con cardinalità utile per un raggruppamento,
     preferendo dimensioni interessanti (geografiche, poi di business) in base al nome.
     """
-    coppie = [(c, df[c].nunique(dropna=True)) for c in cat_cols]
-    buone = [c for c, u in coppie if 2 <= u <= 30]
-    if not buone:
-        return min(coppie, key=lambda t: t[1])[0] if coppie else None
+    pairs = [(c, df[c].nunique(dropna=True)) for c in cat_cols]
+    usable = [c for c, u in pairs if 2 <= u <= 30]
+    if not usable:
+        return min(pairs, key=lambda t: t[1])[0] if pairs else None
     for pattern in _CAT_PRIORITY_GROUPS:
         rx = re.compile(pattern, re.I)
-        for c in buone:
+        for c in usable:
             if rx.search(str(c)):
                 return c
-    return buone[0]
+    return usable[0]
 
 
 def monthly_trend(df: pd.DataFrame, date_col: str, measure=None):
@@ -311,7 +311,7 @@ def monthly_trend(df: pd.DataFrame, date_col: str, measure=None):
     return per.rename(columns={"_periodo": date_col})
 
 
-def _correlations(df: pd.DataFrame, measures: list, soglia: float = 0.6):
+def _correlations(df: pd.DataFrame, measures: list, threshold: float = 0.6):
     """
     Matrice di correlazione (Pearson) tra le misure e coppie 'forti' (|r| >= soglia).
     Solo su misure reali (niente ID/anni) e dataset non minuscoli, dove la
@@ -326,15 +326,15 @@ def _correlations(df: pd.DataFrame, measures: list, soglia: float = 0.6):
     corr = corr.dropna(axis=0, how="all").dropna(axis=1, how="all")
     if corr.shape[1] < 2:
         return None, []
-    coppie = []
+    pairs = []
     cols = list(corr.columns)
     for i in range(len(cols)):
         for j in range(i + 1, len(cols)):
             r = corr.iloc[i, j]
-            if pd.notna(r) and abs(r) >= soglia:
-                coppie.append((cols[i], cols[j], round(float(r), 2)))
-    coppie.sort(key=lambda t: abs(t[2]), reverse=True)
-    return corr, coppie
+            if pd.notna(r) and abs(r) >= threshold:
+                pairs.append((cols[i], cols[j], round(float(r), 2)))
+    pairs.sort(key=lambda t: abs(t[2]), reverse=True)
+    return corr, pairs
 
 
 def _last_period_partial(df: pd.DataFrame, dcol: str, per: pd.DataFrame) -> bool:
@@ -377,15 +377,15 @@ def _findings(df: pd.DataFrame, res: dict, main_num) -> list:
             first, last, prev = col.iloc[0], col.iloc[-1], col.iloc[-2]
             # L'ultimo mese può essere ancora in corso (dati fino a metà mese): in tal
             # caso la variazione è gonfiata/sgonfiata e va segnalata come parziale.
-            nota = " (ultimo periodo parziale)" if _last_period_partial(df, dcol, per) else ""
+            note = " (ultimo periodo parziale)" if _last_period_partial(df, dcol, per) else ""
             if first:
                 g = (last - first) / abs(first) * 100
                 out.append(f"Dal primo all'ultimo periodo {num} è "
-                           f"{'in crescita' if g >= 0 else 'in calo'} del {fmt_num(abs(g))}%{nota}.")
+                           f"{'in crescita' if g >= 0 else 'in calo'} del {fmt_num(abs(g))}%{note}.")
             if prev:
                 g2 = (last - prev) / abs(prev) * 100
                 out.append(f"Nell'ultimo periodo {num} è {'salito' if g2 >= 0 else 'sceso'} "
-                           f"del {fmt_num(abs(g2))}% rispetto al precedente{nota}.")
+                           f"del {fmt_num(abs(g2))}% rispetto al precedente{note}.")
 
     s = df[main_num].dropna()
     if len(s) >= 20:
@@ -454,11 +454,11 @@ def analyze(df: pd.DataFrame, measure=None, category=None) -> dict:
         res["findings"] = findings
 
     # Correlazioni tra misure (indipendenti dalla modalità)
-    corr, coppie = _correlations(df, measures)
+    corr, pairs = _correlations(df, measures)
     if corr is not None:
         res["corr"] = corr
-    if coppie:
-        res["corr_pairs"] = coppie
+    if pairs:
+        res["corr_pairs"] = pairs
 
     res["measure"] = main_num
     res["category"] = cat

@@ -49,12 +49,12 @@ class AnalysisService:
             code = self.agent.ask_code(question, df)
             result: ExecutionResult = execute_pandas_code(code, df)
 
-            tentativo = 0
+            attempt = 0
             while (isinstance(result, ExecutionFailure) and result.retryable
-                   and tentativo < self.max_retries):
-                tentativo += 1
+                   and attempt < self.max_retries):
+                attempt += 1
                 log.info("Codice fallito (%s): tentativo di correzione %d/%d",
-                         result.kind, tentativo, self.max_retries)
+                         result.kind, attempt, self.max_retries)
                 code = self.agent.fix_code(question, df, code, result.message)
                 result = execute_pandas_code(code, df)
         except ProviderError as e:
@@ -65,11 +65,11 @@ class AnalysisService:
 
         explanation = None
         if explain and isinstance(result, ExecutionSuccess):
-            riepilogo = result.summary or summarize_result(result)
+            summary_text = result.summary or summarize_result(result)
             # L'unità di misura è nota solo alla UI: senza questo aggancio il
             # modello la inventerebbe (o la ometterebbe) nella spiegazione.
             if unit:
-                riepilogo = f"Unità di misura: '{unit}'.\n" + riepilogo
-            explanation = self.agent.explain(question, riepilogo)
+                summary_text = f"Unità di misura: '{unit}'.\n" + summary_text
+            explanation = self.agent.explain(question, summary_text)
 
         return Turn(question=question, code=code, result=result, explanation=explanation)
