@@ -1,19 +1,21 @@
 # Immagini del README
 
-Il README mostra due **anteprime del design** (SVG, generate a mano):
+Il README mostra due **anteprime del design**, non catture dell'app in esecuzione:
 
-- `preview-report.svg` — report iniziale, tema chiaro
-- `preview-dark.svg` — risposta + grafico, tema scuro
+- `preview-report.svg` — report iniziale sui dati
+- `preview-answer.svg` — risposta a una domanda, con grafico
 
-## Vuoi screenshot reali dell'app?
-Sono anteprime del design, non catture dell'app in esecuzione. Per sostituirle con
-screenshot veri:
+Sono SVG disegnati a mano: riproducono l'aspetto reale dell'interfaccia (stessa
+palette e stessa tipografia di `nlda/ui_theme.py`) ma restano una
+rappresentazione. La distinzione è dichiarata anche nel README principale.
 
-1. Avvia l'app: `streamlit run main.py`
-2. Carica un dataset (o usa quello di default) e fai una domanda con grafico;
-   per il tema scuro attiva il toggle "🌙 Tema scuro".
-3. Cattura la finestra del browser (finestra ~1280px) e salva le immagini qui,
-   poi aggiorna i link nel `README.md` (sezione **Anteprima**) ai nuovi file
-   (es. `docs/preview-report.png`).
+## Sostituirle con screenshot veri
 
-PNG o GIF vanno bene: GitHub li mostra inline nel README.
+1. Avvia l'app: `streamlit run main.py` — oppure `docker compose up`
+2. Carica un dataset (o usa quello di default) e fai una domanda che produca un
+   grafico
+3. Cattura la finestra del browser a ~1280px di larghezza, salva le immagini in
+   questa cartella e aggiorna i link nella sezione **Anteprima** del `README.md`
+
+PNG o GIF vanno bene: GitHub li mostra inline. Una GIF che riprende una domanda
+dall'inizio alla fine racconta il progetto meglio di qualsiasi immagine statica.

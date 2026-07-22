@@ -56,9 +56,10 @@ class Settings:
     max_retries: int = 1                  # tentativi extra oltre al primo, su errori transitori
     retry_backoff: float = 0.8            # secondi base per il backoff esponenziale
 
-    # --- Demo pubblica ---
-    demo_mode: bool = False
-    demo_max_questions: int = 15
+    # Nota: i limiti della demo pubblica NON stanno qui. Arrivano dai secrets di
+    # Streamlit, non dall'ambiente, e vivono in `nlda.demo.DemoLimits`: tenerne
+    # una copia anche qui significava avere due fonti di verità, di cui una mai
+    # letta da nessuno.
 
     # --- Logging ---
     log_level: str = "INFO"
@@ -75,8 +76,6 @@ class Settings:
             request_timeout=_env_float("LLM_REQUEST_TIMEOUT", cls.request_timeout),
             max_retries=_env_int("LLM_MAX_RETRIES", cls.max_retries),
             retry_backoff=_env_float("LLM_RETRY_BACKOFF", cls.retry_backoff),
-            demo_mode=_env_bool("DEMO_MODE", cls.demo_mode),
-            demo_max_questions=_env_int("DEMO_MAX_QUESTIONS", cls.demo_max_questions),
             log_level=os.getenv("LOG_LEVEL", cls.log_level).upper(),
         )
 
