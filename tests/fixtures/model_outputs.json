@@ -1,0 +1,78 @@
+{
+  "provider": "ollama",
+  "model": "qwen2.5:3b",
+  "cases": [
+    {
+      "question": "Qual è il totale delle vendite?",
+      "wants_chart": false,
+      "kind": "bar",
+      "raw_code": "result = df['Sales'].sum()"
+    },
+    {
+      "question": "Qual è la media delle vendite?",
+      "wants_chart": false,
+      "kind": "bar",
+      "raw_code": "result = df['Sales'].mean()"
+    },
+    {
+      "question": "Quali sono le vendite per regione?",
+      "wants_chart": false,
+      "kind": "bar",
+      "raw_code": "result = df.groupby(['Region'], as_index=False)['Sales'].sum()"
+    },
+    {
+      "question": "Mostrami le vendite per regione",
+      "wants_chart": true,
+      "kind": "bar",
+      "raw_code": "result = df.groupby('Region', as_index=False)['Sales'].sum()"
+    },
+    {
+      "question": "Mostrami il totale delle vendite",
+      "wants_chart": true,
+      "kind": "bar",
+      "raw_code": "result = df.groupby(['Order ID'], as_index=False)['Sales'].sum().sum()"
+    },
+    {
+      "question": "Qual è l'andamento delle vendite nel tempo?",
+      "wants_chart": true,
+      "kind": "line",
+      "raw_code": "result = df.groupby('Order Date', as_index=False)['Sales'].sum()"
+    },
+    {
+      "question": "Fammi un grafico a barre delle vendite per categoria",
+      "wants_chart": true,
+      "kind": "bar",
+      "raw_code": "result = df.groupby('Category', as_index=False)['Sales'].sum()\nfig = px.bar(result, x='Category', y='Sales', title='Vendite per Categoria')"
+    },
+    {
+      "question": "Quali sono i 5 prodotti più venduti?",
+      "wants_chart": false,
+      "kind": "bar",
+      "raw_code": "result = df.groupby(['Product Name'], as_index=False)['Sales'].sum().sort_values('Sales', ascending=False).head(5)"
+    },
+    {
+      "question": "Quanto incide ogni categoria sul totale delle vendite?",
+      "wants_chart": false,
+      "kind": "bar",
+      "raw_code": "result = (df.groupby('Category', as_index=False)['Sales'].sum() / df['Sales'].sum() * 100).round(1)"
+    },
+    {
+      "question": "Qual è il mese con più vendite?",
+      "wants_chart": false,
+      "kind": "bar",
+      "raw_code": "result = df.resample('M', on='Order Date')['Sales'].sum().sort_values(ascending=False).head(1)"
+    },
+    {
+      "question": "Quante righe hanno vendite superiori a 1000?",
+      "wants_chart": false,
+      "kind": "bar",
+      "raw_code": "result = df[df['Sales'] > 1000]['Sales'].count()"
+    },
+    {
+      "question": "Mostrami la distribuzione delle vendite",
+      "wants_chart": true,
+      "kind": "bar",
+      "raw_code": "result = df.groupby(['Segment'], as_index=False)['Sales'].sum()"
+    }
+  ]
+}
