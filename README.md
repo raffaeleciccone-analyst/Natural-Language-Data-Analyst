@@ -25,6 +25,10 @@ si limita a raccontarli.
 ![Report iniziale sui dati](docs/preview-report.svg)
 ![Risposta a una domanda](docs/preview-answer.svg)
 
+*Sono anteprime del design, non screenshot dell'app in esecuzione: riproducono
+palette e tipografia reali dell'interfaccia. Per provarla davvero c'è la
+[demo](https://natural-language-data-analyst.streamlit.app/).*
+
 ## Funzionalità
 
 - **Domande in linguaggio naturale** → codice Pandas generato dall'LLM →
