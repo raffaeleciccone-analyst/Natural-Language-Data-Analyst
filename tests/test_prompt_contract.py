@@ -26,9 +26,9 @@ import pandas as pd
 import pytest
 
 from nlda.agent import DataAgent
-from nlda.executor import SAFE_BUILTINS, _parse_and_validate
 from nlda.providers.base import LLMProvider
 from nlda.results import ExecutionFailure
+from nlda.sandbox.validator import SAFE_BUILTINS, _parse_and_validate
 
 GOLDEN = Path(__file__).parent / "fixtures" / "system_prompt.golden.txt"
 

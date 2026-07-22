@@ -11,7 +11,7 @@ import html
 import pandas as pd
 import streamlit as st
 
-from nlda.executor import apply_theme, to_chart
+from nlda.charts import apply_theme, to_chart
 from nlda.loader import monthly_trend
 from nlda.results import ExecutionFailure, ExecutionResult
 from nlda.utils import IT_NUM_FORMAT, fmt_num

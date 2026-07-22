@@ -37,7 +37,7 @@ def sandbox_in_process(monkeypatch):
     Esegue il codice in-process: qui si testa l'orchestrazione, non l'isolamento
     (coperto da test_executor_ipc). Evita di avviare un interprete per tentativo.
     """
-    monkeypatch.setattr("nlda.executor.settings", Settings(sandbox_subprocess=False))
+    monkeypatch.setattr("nlda.sandbox.runner.settings", Settings(sandbox_subprocess=False))
 
 
 def _service(responses, max_retries: int = 3) -> tuple[AnalysisService, FakeProvider]:

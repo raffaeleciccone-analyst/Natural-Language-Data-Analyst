@@ -12,9 +12,9 @@ import pandas as pd
 
 from nlda.agent import DataAgent
 from nlda.errors import ProviderError
-from nlda.executor import execute_pandas_code, summarize_result
 from nlda.log import get_logger
 from nlda.results import ExecutionFailure, ExecutionResult, ExecutionSuccess
+from nlda.sandbox.runner import execute_pandas_code, summarize_result
 
 log = get_logger(__name__)
 

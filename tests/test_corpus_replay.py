@@ -31,9 +31,10 @@ import pytest
 
 from nlda.agent import DataAgent
 from nlda.config import Settings
-from nlda.executor import _parse_and_validate, execute_pandas_code
 from nlda.loader import load_dataset
 from nlda.results import ExecutionFailure, ExecutionSuccess
+from nlda.sandbox.runner import execute_pandas_code
+from nlda.sandbox.validator import _parse_and_validate
 
 CORPUS = Path(__file__).parent / "fixtures" / "model_outputs.json"
 
@@ -62,7 +63,7 @@ def df() -> pd.DataFrame:
 @pytest.fixture(autouse=True)
 def sandbox_in_process(monkeypatch):
     """In-process: qui si testa la pipeline, non l'isolamento (già coperto altrove)."""
-    monkeypatch.setattr("nlda.executor.settings", Settings(sandbox_subprocess=False))
+    monkeypatch.setattr("nlda.sandbox.runner.settings", Settings(sandbox_subprocess=False))
 
 
 def _agent() -> DataAgent:
