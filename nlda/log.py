@@ -11,7 +11,7 @@ scattato il fallback in-process, quanto ha impiegato il provider LLM.
 """
 import logging
 
-from core.config import settings
+from nlda.config import settings
 
 _configured = False
 
@@ -37,6 +37,7 @@ def _configure_once() -> None:
 def get_logger(name: str) -> logging.Logger:
     """Logger applicativo sotto il namespace 'nlda' (configurato al primo uso)."""
     _configure_once()
-    # Normalizza 'core.executor' -> 'nlda.core.executor' senza doppioni.
+    # Il pacchetto si chiama già 'nlda': senza questo taglio un modulo come
+    # 'nlda.executor' diventerebbe 'nlda.nlda.executor'.
     suffix = name.split("nlda.", 1)[-1]
     return logging.getLogger(f"nlda.{suffix}")

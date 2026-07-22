@@ -1,7 +1,7 @@
 """Test delle utility condivise (formattazione numerica IT, pulizia codice, tipi colonna)."""
 import pandas as pd
 
-from core.utils import clean_code, column_kind, fmt_num
+from nlda.utils import clean_code, column_kind, fmt_num
 
 
 def test_clean_code_rimuove_fence_markdown():

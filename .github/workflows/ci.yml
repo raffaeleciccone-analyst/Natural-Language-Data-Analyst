@@ -31,7 +31,7 @@ jobs:
         run: ruff check .
 
       - name: Mypy (type-check)
-        run: mypy core main.py
+        run: mypy nlda main.py
 
       - name: Pytest
         run: pytest

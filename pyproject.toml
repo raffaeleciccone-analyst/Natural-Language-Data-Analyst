@@ -47,10 +47,11 @@ tools = ["pillow>=10.0", "scipy>=1.11"]
 [project.urls]
 Repository = "https://github.com/raffaeleciccone-analyst/Natural-Language-Data-Analyst"
 
-# Il pacchetto importabile è `core`; il resto del repo (app, test, dati) non fa
-# parte della distribuzione.
+# Il pacchetto importabile è `nlda`; il resto del repo (app, test, dati) non fa
+# parte della distribuzione. Il nome non è generico di proposito: una libreria
+# installata non deve occupare un namespace comune come `core`.
 [tool.hatch.build.targets.wheel]
-packages = ["core"]
+packages = ["nlda"]
 
 [tool.ruff]
 line-length = 110

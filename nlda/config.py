@@ -6,7 +6,7 @@ worker, provider e main. I valori hanno default sensati e sono sovrascrivibili
 da variabile d'ambiente (utile in deploy senza toccare il codice).
 
 Uso:
-    from core.config import settings
+    from nlda.config import settings
     settings.exec_timeout        # -> int
     settings.sandbox_subprocess  # -> bool
 

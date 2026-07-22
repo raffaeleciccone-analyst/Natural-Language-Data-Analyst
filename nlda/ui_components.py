@@ -11,10 +11,10 @@ import html
 import pandas as pd
 import streamlit as st
 
-from core.executor import apply_theme, to_chart
-from core.loader import monthly_trend
-from core.results import ExecutionFailure, ExecutionResult
-from core.utils import IT_NUM_FORMAT, fmt_num
+from nlda.executor import apply_theme, to_chart
+from nlda.loader import monthly_trend
+from nlda.results import ExecutionFailure, ExecutionResult
+from nlda.utils import IT_NUM_FORMAT, fmt_num
 
 
 def answer_card(label: str, text: str) -> None:

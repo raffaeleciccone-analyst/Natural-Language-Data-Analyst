@@ -2,7 +2,7 @@
 Factory dei provider LLM.
 
 Per aggiungere un nuovo provider (es. Google Gemini, Groq, Mistral):
-1. crea `core/providers/<nome>_provider.py` con una sottoclasse di LLMProvider
+1. crea `nlda/providers/<nome>_provider.py` con una sottoclasse di LLMProvider
 2. importala qui e aggiungi una riga in _PROVIDERS e DEFAULT_MODELS
 Nient'altro nel resto del codice deve cambiare.
 """

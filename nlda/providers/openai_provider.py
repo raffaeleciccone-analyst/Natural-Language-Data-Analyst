@@ -1,6 +1,6 @@
 from typing import Any
 
-from core.config import settings
+from nlda.config import settings
 
 from .base import LLMProvider
 

@@ -9,11 +9,11 @@ di chiamate, non solo sul risultato finale.
 import pandas as pd
 import pytest
 
-from core.agent import DataAgent
-from core.config import Settings
-from core.providers.base import LLMProvider
-from core.results import ExecutionFailure, ExecutionSuccess
-from core.service import AnalysisService
+from nlda.agent import DataAgent
+from nlda.config import Settings
+from nlda.providers.base import LLMProvider
+from nlda.results import ExecutionFailure, ExecutionSuccess
+from nlda.service import AnalysisService
 
 
 class FakeProvider(LLMProvider):
@@ -37,7 +37,7 @@ def sandbox_in_process(monkeypatch):
     Esegue il codice in-process: qui si testa l'orchestrazione, non l'isolamento
     (coperto da test_executor_ipc). Evita di avviare un interprete per tentativo.
     """
-    monkeypatch.setattr("core.executor.settings", Settings(sandbox_subprocess=False))
+    monkeypatch.setattr("nlda.executor.settings", Settings(sandbox_subprocess=False))
 
 
 def _service(responses, max_retries: int = 3) -> tuple[AnalysisService, FakeProvider]:
@@ -107,7 +107,7 @@ class _ProviderRotto(LLMProvider):
 def test_provider_irraggiungibile_non_innesca_correzioni(monkeypatch, sales_df: pd.DataFrame):
     # Il provider ritenta già per conto suo (backoff su errori transitori): qui lo
     # azzeriamo per contare solo i tentativi decisi dal servizio.
-    monkeypatch.setattr("core.providers.base.settings",
+    monkeypatch.setattr("nlda.providers.base.settings",
                         Settings(max_retries=0, retry_backoff=0.0))
     provider = _ProviderRotto()
     service = AnalysisService(DataAgent(provider=provider), max_retries=3)
@@ -123,7 +123,7 @@ def test_provider_irraggiungibile_non_innesca_correzioni(monkeypatch, sales_df: 
 
 
 def test_il_guasto_del_provider_e_leggibile(monkeypatch, sales_df: pd.DataFrame):
-    monkeypatch.setattr("core.providers.base.settings",
+    monkeypatch.setattr("nlda.providers.base.settings",
                         Settings(max_retries=0, retry_backoff=0.0))
     service = AnalysisService(DataAgent(provider=_ProviderRotto()))
     turn = service.answer("totale", sales_df, explain=False)

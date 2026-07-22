@@ -10,21 +10,21 @@ from typing import cast
 
 import pandas as pd
 
-from core.config import settings
-from core.log import get_logger
-from core.results import (
+from nlda.config import settings
+from nlda.log import get_logger
+from nlda.results import (
     FAILURE_KINDS,
     ExecutionFailure,
     ExecutionResult,
     ExecutionSuccess,
     FailureKind,
 )
-from core.utils import clean_code, fmt_num
+from nlda.utils import clean_code, fmt_num
 
 log = get_logger(__name__)
 
 # Esecuzione isolata in un sottoprocesso con timeout (chiude i DoS da loop/allocazioni
-# e aggiunge una barriera di processo). I parametri vivono in core.config; qui restano
+# e aggiunge una barriera di processo). I parametri vivono in nlda.config; qui restano
 # alias comodi per leggibilità e per i test.
 SANDBOX_SUBPROCESS = settings.sandbox_subprocess
 EXEC_TIMEOUT = settings.exec_timeout  # secondi
@@ -623,7 +623,7 @@ def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int) -> ExecutionRe
     # Andata (padre -> worker): pickle, sorgente fidata e dtype del DataFrame preservati.
     payload = pickle.dumps((code, df))
     proc = subprocess.run(
-        [sys.executable, "-m", "core._sandbox_worker"],
+        [sys.executable, "-m", "nlda._sandbox_worker"],
         input=payload, capture_output=True, cwd=root, env=env, timeout=timeout,
     )
     if proc.returncode != 0 or not proc.stdout:

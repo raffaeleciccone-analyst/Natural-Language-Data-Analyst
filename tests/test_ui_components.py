@@ -10,7 +10,7 @@ può non avere alcuna riga da mostrare.
 import pandas as pd
 import pytest
 
-from core.ui_components import build_kpis
+from nlda.ui_components import build_kpis
 
 
 @pytest.fixture

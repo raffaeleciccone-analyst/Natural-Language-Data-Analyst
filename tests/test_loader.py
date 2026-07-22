@@ -3,7 +3,7 @@ import io
 
 import pandas as pd
 
-from core.loader import (
+from nlda.loader import (
     _maybe_parse_dates,
     analyze,
     measure_columns,

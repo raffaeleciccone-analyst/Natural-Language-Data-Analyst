@@ -15,14 +15,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from core.executor import (
+from nlda.executor import (
     _decode_value,
     _deserialize_result,
     _encode_value,
     execute_pandas_code,
     serialize_result,
 )
-from core.results import ExecutionFailure, ExecutionSuccess
+from nlda.results import ExecutionFailure, ExecutionSuccess
 
 
 # --- Invariante di sicurezza ---------------------------------------------------
@@ -158,7 +158,7 @@ def _worker_morto(returncode: int, stderr: bytes):
 
 
 def test_worker_che_non_parte_non_e_ritentabile(monkeypatch, sales_df: pd.DataFrame):
-    monkeypatch.setattr("core.executor.subprocess.run",
+    monkeypatch.setattr("nlda.executor.subprocess.run",
                         _worker_morto(1, b"ModuleNotFoundError: No module named 'pandas'"))
     out = execute_pandas_code("df['Sales'].sum()", sales_df)
     assert isinstance(out, ExecutionFailure)
@@ -168,7 +168,7 @@ def test_worker_che_non_parte_non_e_ritentabile(monkeypatch, sales_df: pd.DataFr
 
 def test_worker_ucciso_dal_codice_e_ritentabile(monkeypatch, sales_df: pd.DataFrame):
     # Ucciso da un segnale (returncode negativo): tipico dell'OOM killer.
-    monkeypatch.setattr("core.executor.subprocess.run", _worker_morto(-9, b""))
+    monkeypatch.setattr("nlda.executor.subprocess.run", _worker_morto(-9, b""))
     out = execute_pandas_code("df['Sales'].sum()", sales_df)
     assert isinstance(out, ExecutionFailure)
     assert out.kind == "runtime"
@@ -176,7 +176,7 @@ def test_worker_ucciso_dal_codice_e_ritentabile(monkeypatch, sales_df: pd.DataFr
 
 
 def test_memory_error_e_ritentabile(monkeypatch, sales_df: pd.DataFrame):
-    monkeypatch.setattr("core.executor.subprocess.run",
+    monkeypatch.setattr("nlda.executor.subprocess.run",
                         _worker_morto(1, b"Traceback...\nMemoryError"))
     out = execute_pandas_code("df['Sales'].sum()", sales_df)
     assert isinstance(out, ExecutionFailure)

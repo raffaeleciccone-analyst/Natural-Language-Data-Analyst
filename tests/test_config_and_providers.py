@@ -1,9 +1,9 @@
 """Test della config (lettura da env) e del retry/backoff comune dei provider."""
 import pytest
 
-import core.providers.base as base_mod
-from core.config import Settings
-from core.providers.base import LLMProvider
+import nlda.providers.base as base_mod
+from nlda.config import Settings
+from nlda.providers.base import LLMProvider
 
 
 def test_settings_default():

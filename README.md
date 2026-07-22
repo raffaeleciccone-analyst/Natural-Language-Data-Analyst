@@ -104,16 +104,16 @@ e la categoria su cui basare KPI e classifiche.
 
 ```
 main.py               interfaccia Streamlit (report, KPI, grafici collegati, chat)
-core/loader.py        lettura multi-formato, profilo del dataset, analisi automatica
-core/agent.py         traduzione domanda → codice Pandas (adattata allo schema)
-core/executor.py      validazione AST, sandbox, esecuzione isolata, grafici Plotly
-core/ui_components.py  componenti di presentazione Streamlit (card, tabelle, grafici)
-core/service.py       orchestrazione del turno (domanda → codice → esito → spiegazione)
-core/results.py       esito tipizzato dell'esecuzione (successo / fallimento con causa)
-core/errors.py        eccezioni applicative
-core/providers/       astrazione multi-LLM (ollama, groq, anthropic, openai, gemini)
-core/config.py        configurazione centralizzata (timeout, sandbox, retry) da env
-core/log.py           logging applicativo
+nlda/loader.py        lettura multi-formato, profilo del dataset, analisi automatica
+nlda/agent.py         traduzione domanda → codice Pandas (adattata allo schema)
+nlda/executor.py      validazione AST, sandbox, esecuzione isolata, grafici Plotly
+nlda/ui_components.py  componenti di presentazione Streamlit (card, tabelle, grafici)
+nlda/service.py       orchestrazione del turno (domanda → codice → esito → spiegazione)
+nlda/results.py       esito tipizzato dell'esecuzione (successo / fallimento con causa)
+nlda/errors.py        eccezioni applicative
+nlda/providers/       astrazione multi-LLM (ollama, groq, anthropic, openai, gemini)
+nlda/config.py        configurazione centralizzata (timeout, sandbox, retry) da env
+nlda/log.py           logging applicativo
 scripts/              utilità accessorie (rigenerazione della favicon)
 tests/                suite pytest (con focus sulla sandbox di sicurezza)
 ```
@@ -161,7 +161,7 @@ dall'AI per la risposta testuale.
 pip install -e ".[all,dev]"
 pytest        # test (inclusi i test di sicurezza sul validatore AST)
 ruff check .  # lint
-mypy core main.py  # type-check
+mypy nlda main.py  # type-check
 ```
 
 Le dipendenze vivono in `pyproject.toml`. `requirements.txt` resta solo come
@@ -169,7 +169,7 @@ manifest di deploy: Streamlit Community Cloud installa esclusivamente da lì.
 
 Ogni push esegue lint, type-check e test in CI (GitHub Actions, `.github/workflows/ci.yml`).
 
-I parametri di runtime sono centralizzati in `core/config.py` e sovrascrivibili da
+I parametri di runtime sono centralizzati in `nlda/config.py` e sovrascrivibili da
 variabile d'ambiente, tra cui: `EXEC_TIMEOUT`, `MEMORY_LIMIT_MB`,
 `ALLOW_INPROCESS_FALLBACK`, `LLM_REQUEST_TIMEOUT`, `LLM_MAX_RETRIES`, `LOG_LEVEL`.
 

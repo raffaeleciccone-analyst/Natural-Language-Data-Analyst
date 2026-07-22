@@ -6,9 +6,9 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from core.agent import DataAgent
-from core.executor import apply_theme, corr_heatmap, histogram, to_chart
-from core.loader import (
+from nlda.agent import DataAgent
+from nlda.executor import apply_theme, corr_heatmap, histogram, to_chart
+from nlda.loader import (
     SUPPORTED_EXTENSIONS,
     analyze,
     best_category,
@@ -18,12 +18,12 @@ from core.loader import (
     profile,
     read_any,
 )
-from core.log import get_logger
-from core.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers
-from core.service import AnalysisService, Turn
-from core.ui_components import answer_card, build_kpis, readout, render_linked_charts, render_result
-from core.ui_theme import console_css
-from core.utils import fmt_num
+from nlda.log import get_logger
+from nlda.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers
+from nlda.service import AnalysisService, Turn
+from nlda.ui_components import answer_card, build_kpis, readout, render_linked_charts, render_result
+from nlda.ui_theme import console_css
+from nlda.utils import fmt_num
 
 log = get_logger(__name__)
 
@@ -119,7 +119,7 @@ with st.sidebar:
         help="Formati supportati: CSV, Excel (.xlsx/.xls), JSON.",
     )
 
-# --- Stile personalizzato "Console" (definito in core/ui_theme.py) ---
+# --- Stile personalizzato "Console" (definito in nlda/ui_theme.py) ---
 st.markdown(console_css(), unsafe_allow_html=True)
 
 

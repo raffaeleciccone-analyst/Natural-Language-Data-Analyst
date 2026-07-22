@@ -1,9 +1,9 @@
 import pandas as pd
 
-from core.errors import ProviderError
-from core.log import get_logger
-from core.providers import LLMProvider, get_provider
-from core.utils import clean_code, column_kind
+from nlda.errors import ProviderError
+from nlda.log import get_logger
+from nlda.providers import LLMProvider, get_provider
+from nlda.utils import clean_code, column_kind
 
 log = get_logger(__name__)
 

@@ -1,4 +1,4 @@
-"""Utility condivise tra i moduli core (evita duplicazioni)."""
+"""Utility condivise tra i moduli del pacchetto (evita duplicazioni)."""
 import re
 
 import pandas as pd

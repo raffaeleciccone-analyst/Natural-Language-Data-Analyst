@@ -10,11 +10,11 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from core.agent import DataAgent
-from core.errors import ProviderError
-from core.executor import execute_pandas_code, summarize_result
-from core.log import get_logger
-from core.results import ExecutionFailure, ExecutionResult, ExecutionSuccess
+from nlda.agent import DataAgent
+from nlda.errors import ProviderError
+from nlda.executor import execute_pandas_code, summarize_result
+from nlda.log import get_logger
+from nlda.results import ExecutionFailure, ExecutionResult, ExecutionSuccess
 
 log = get_logger(__name__)
 

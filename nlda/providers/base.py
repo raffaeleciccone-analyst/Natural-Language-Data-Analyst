@@ -2,8 +2,8 @@ import os
 import time
 from abc import ABC, abstractmethod
 
-from core.config import settings
-from core.log import get_logger
+from nlda.config import settings
+from nlda.log import get_logger
 
 log = get_logger(__name__)
 

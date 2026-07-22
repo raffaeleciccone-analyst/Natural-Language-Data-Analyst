@@ -1,5 +1,5 @@
 """
-Test dell'istogramma adattivo (core.executor.histogram).
+Test dell'istogramma adattivo (nlda.executor.histogram).
 
 Garantisce che la scelta della scala si adatti a QUALSIASI dataset caricato:
 scala logaritmica solo su dati positivi e fortemente asimmetrici, altrimenti
@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from core.executor import histogram
+from nlda.executor import histogram
 
 
 def _x_title(fig) -> str:

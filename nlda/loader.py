@@ -5,7 +5,7 @@ from typing import NamedTuple
 
 import pandas as pd
 
-from core.utils import column_kind, fmt_num
+from nlda.utils import column_kind, fmt_num
 
 # Estensioni file supportate per l'upload
 SUPPORTED_EXTENSIONS = ["csv", "xlsx", "xls", "json"]

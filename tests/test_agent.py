@@ -6,7 +6,7 @@ niente (l'import del client è lazy, dentro _call). Qui testiamo la logica pura.
 """
 import pandas as pd
 
-from core.agent import DataAgent, _describe_schema, _sanitize_sample
+from nlda.agent import DataAgent, _describe_schema, _sanitize_sample
 
 
 def _agent() -> DataAgent:

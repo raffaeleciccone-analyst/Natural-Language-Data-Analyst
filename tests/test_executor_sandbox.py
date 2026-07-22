@@ -11,13 +11,13 @@ import ast
 import pandas as pd
 import pytest
 
-from core.executor import (
+from nlda.executor import (
     _last_assigned_name,
     _parse_and_validate,
     _run_code,
     execute_pandas_code,
 )
-from core.results import ExecutionFailure, ExecutionSuccess
+from nlda.results import ExecutionFailure, ExecutionSuccess
 
 
 def _is_rejected(code: str) -> bool:
