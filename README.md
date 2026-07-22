@@ -124,6 +124,11 @@ dall'AI per la risposta testuale.
   rete) e costrutti di esecuzione dinamica (`eval`, `exec`, ...).
 - **Sottoprocesso isolato** con timeout: barriera di processo attorno al codice
   generato dall'LLM.
+- **Canale di ritorno non eseguibile**: il worker restituisce al processo padre
+  soltanto JSON (dati inerti), mai oggetti serializzati con `pickle`. Il padre non
+  ricostruisce quindi nulla di scelto dal processo che ha appena eseguito codice
+  non fidato: se un domani la sandbox venisse forzata, la barriera di processo
+  regge invece di cadere insieme a essa.
 - **Limite di memoria del worker** tramite `RLIMIT_AS`. *Limite noto:* è
   disponibile solo su POSIX (Linux/macOS); **su Windows il modulo `resource` non
   esiste, quindi il worker è contenuto dal solo timeout**, non da un cap di RAM.

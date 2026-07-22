@@ -1,4 +1,6 @@
 import ast
+import io
+import json
 import os
 import pickle
 import re
@@ -444,19 +446,72 @@ def _run_code(code: str, df: pd.DataFrame):
         return f"Errore di esecuzione sul codice generato: {e} \nCodice tentato: {code}"
 
 
-def serialize_result(result):
-    """Prepara il risultato per il trasferimento dal sottoprocesso (figura via JSON)."""
+# --- Canale di ritorno dal worker: SOLO dati, mai oggetti ----------------------
+# Il worker è il processo in cui gira il codice generato dall'LLM: va trattato come
+# potenzialmente compromesso. Deserializzare un pickle proveniente da lì darebbe
+# esecuzione di codice arbitrario NEL PROCESSO PADRE (pickle costruisce oggetti, non
+# li legge soltanto), vanificando proprio la barriera di processo che la sandbox
+# vuole erigere: i due livelli condividerebbero lo stesso destino.
+# Per questo il canale worker -> padre trasporta esclusivamente JSON. La direzione
+# opposta (padre -> worker) resta su pickle: lì la sorgente è fidata ed è l'unico
+# modo di trasferire un DataFrame conservandone i dtype.
+
+def _encode_value(value) -> dict:
+    """Riduce il valore prodotto dal codice generato a una struttura JSON-compatibile."""
+    if value is None:
+        return {"kind": "none"}
+    if isinstance(value, pd.DataFrame):
+        return {"kind": "frame", "data": value.to_json(orient="split", date_format="iso")}
+    if isinstance(value, pd.Series):
+        name = value.name if isinstance(value.name, str) else None
+        return {"kind": "series", "name": name,
+                "data": value.to_json(orient="split", date_format="iso")}
+    # Scalari numpy/pandas (np.int64, np.float64, ...): .item() li riporta al tipo
+    # Python nativo. Va tentato PRIMA dell'isinstance: np.float64 eredita da float,
+    # quindi passerebbe il controllo restando un oggetto numpy, e il payload
+    # dipenderebbe dalla tolleranza di json verso le sottoclassi invece che dal
+    # nostro contratto. I tipi nativi non hanno .item(), quindi non sono toccati.
+    item = getattr(value, "item", None)
+    if callable(item):
+        try:
+            value = item()
+        except Exception:  # noqa: BLE001 — array non scalari e simili: si degrada a testo
+            pass
+    if isinstance(value, (bool, int, float, str)):
+        return {"kind": "scalar", "data": value}
+    # Tutto il resto degrada a testo: meglio perdere il tipo che riaprire un canale
+    # capace di istanziare oggetti arbitrari nel processo padre.
+    return {"kind": "text", "data": str(value)}
+
+
+def _decode_value(payload):
+    """Ricostruisce il valore dal payload JSON. Non istanzia mai tipi arbitrari."""
+    if not isinstance(payload, dict):
+        return None
+    kind = payload.get("kind")
+    try:
+        if kind == "frame":
+            return pd.read_json(io.StringIO(payload["data"]), orient="split")
+        if kind == "series":
+            s = pd.read_json(io.StringIO(payload["data"]), orient="split", typ="series")
+            return s.rename(payload.get("name")) if payload.get("name") else s
+    except Exception as e:  # noqa: BLE001 — payload malformato: si degrada, non si rompe
+        log.warning("Payload tabellare non decodificabile dal sottoprocesso: %s", e)
+        return None
+    if kind in ("scalar", "text"):
+        return payload.get("data")
+    return None
+
+
+def serialize_result(result) -> dict:
+    """Prepara il risultato per il trasferimento dal sottoprocesso, in forma JSON."""
     if isinstance(result, str):  # stringa d'errore
         return {"kind": "err", "msg": result}
     fig = result.get("fig")
-    val = result.get("value")
-    if val is not None:
-        try:
-            pickle.dumps(val)
-        except Exception:
-            val = str(val)
-    return {"kind": "ok", "fig": fig.to_json() if fig is not None else None,
-            "value": val, "summary": result.get("summary")}
+    return {"kind": "ok",
+            "fig": fig.to_json() if fig is not None else None,
+            "value": _encode_value(result.get("value")),
+            "summary": result.get("summary")}
 
 
 def _deserialize_result(payload):
@@ -468,13 +523,15 @@ def _deserialize_result(payload):
     if payload.get("fig"):
         import plotly.io as pio
         fig = apply_theme(pio.from_json(payload["fig"]))
-    return {"fig": fig, "value": payload.get("value"), "summary": payload.get("summary")}
+    return {"fig": fig, "value": _decode_value(payload.get("value")),
+            "summary": payload.get("summary")}
 
 
 def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int):
     """Esegue il codice in un interprete separato con timeout. Solleva se non avviabile."""
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     env = dict(os.environ, PYTHONPATH=root + os.pathsep + os.environ.get("PYTHONPATH", ""))
+    # Andata (padre -> worker): pickle, sorgente fidata e dtype del DataFrame preservati.
     payload = pickle.dumps((code, df))
     proc = subprocess.run(
         [sys.executable, "-m", "core._sandbox_worker"],
@@ -484,7 +541,14 @@ def _run_in_subprocess(code: str, df: pd.DataFrame, timeout: int):
         err = (proc.stderr or b"").decode(errors="replace").strip()[-200:]
         return ("Errore: esecuzione terminata in modo anomalo "
                 f"(possibile esaurimento memoria). {err}".strip())
-    return _deserialize_result(pickle.loads(proc.stdout))
+    # Ritorno (worker -> padre): JSON. Un payload malformato produce un errore
+    # leggibile, MAI l'esecuzione di codice nel padre.
+    try:
+        data = json.loads(proc.stdout.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as e:
+        log.error("Payload non valido dal sottoprocesso: %s", e)
+        return "Errore: risultato non leggibile dall'ambiente di esecuzione isolato."
+    return _deserialize_result(data)
 
 
 def execute_pandas_code(code_string: str, df: pd.DataFrame):

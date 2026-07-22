@@ -1,11 +1,17 @@
 """
 Worker eseguito in un interprete separato: legge (code, df) picklati da stdin,
-esegue il codice nella sandbox e scrive il risultato picklato su stdout.
+esegue il codice nella sandbox e scrive il risultato come JSON su stdout.
+
+L'asimmetria dei formati è deliberata: in ingresso la sorgente è il genitore
+(fidata) e il pickle preserva i dtype del DataFrame; in uscita la sorgente è
+questo processo, che ha appena eseguito codice generato da un LLM, quindi può
+trasmettere solo dati inerti.
 
 Isolare l'esecuzione in un processo dedicato consente di imporre un timeout
 (dal genitore) e un limite di memoria, e aggiunge una barriera di processo attorno
 al codice generato dall'LLM. Non importa mai main.py (nessun effetto Streamlit).
 """
+import json
 import os
 import pickle
 import sys
@@ -57,7 +63,10 @@ def main() -> None:
     result = _run_code(code, df)
     out = serialize_result(result)
 
-    os.write(real_stdout_fd, pickle.dumps(out))
+    # Il risultato torna al genitore come JSON, mai come pickle: questo processo
+    # esegue codice generato dall'LLM e va considerato non fidato. Un pickle
+    # ostile scritto qui verrebbe eseguito dal genitore, annullando l'isolamento.
+    os.write(real_stdout_fd, json.dumps(out).encode("utf-8"))
 
 
 if __name__ == "__main__":
