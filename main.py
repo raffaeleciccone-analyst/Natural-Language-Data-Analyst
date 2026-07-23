@@ -92,7 +92,8 @@ def main() -> None:
         agent, insights, limits,
         exec_sig=(report_sig, config.provider, config.model_name, unit), unit=unit,
     )
-    render_chat(service, df, limits, explain=config.explain, unit=unit)
+    render_chat(service, df, limits, explain=config.explain, unit=unit,
+                dataset_label=source_label)
 
     # PER ULTIMA, anche se compare in cima alla pagina: è l'unica parte che
     # aspetta il modello. Generandola qui, l'utente ha già davanti KPI, tabelle,
