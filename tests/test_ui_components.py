@@ -268,3 +268,25 @@ def test_selezione_di_una_categoria_inesistente_ripiega_sul_grafico_intero(
 
     chiavi = [c.kwargs["key"] for c in st_finto.plotly_chart.call_args_list]
     assert chiavi[-1] in ("report_trend", "report_trend_filtered")
+
+
+# --- #34: la barra cliccata si identifica dal valore ESATTO in customdata --------
+def test_clicked_category_preferisce_customdata():
+    # Etichetta troncata sull'asse, valore intero in customdata: si usa quello.
+    punto = {"y": "Categoria molto lung…", "x": 42,
+             "customdata": ["Categoria molto lunga e per intero"]}
+    assert ui._clicked_category(punto) == "Categoria molto lunga e per intero"
+
+
+def test_clicked_category_customdata_scalare():
+    assert ui._clicked_category({"customdata": "Esatto", "x": 1}) == "Esatto"
+
+
+def test_clicked_category_fallback_su_x_stringa():
+    # Barre verticali con etichette corte: nessun customdata, la categoria è su x.
+    assert ui._clicked_category({"x": "Nord", "y": 100}) == "Nord"
+
+
+def test_clicked_category_fallback_su_y_se_x_non_e_stringa():
+    # Barre orizzontali: x è la misura numerica, la categoria è su y.
+    assert ui._clicked_category({"x": 100, "y": "Sud"}) == "Sud"

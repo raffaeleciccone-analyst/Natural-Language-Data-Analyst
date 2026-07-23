@@ -100,6 +100,22 @@ def build_kpis(df, sel_measure, sel_category, unit):
     return kpis
 
 
+def _clicked_category(point: dict):
+    """
+    Valore ESATTO della barra cliccata. Le etichette lunghe vengono troncate con '…'
+    sull'asse (vedi charts._make_bars_readable), ma il valore intero resta in
+    `customdata`: leggerlo da lì evita di ricostruirlo da un'etichetta accorciata.
+    Fallback su x/y quando customdata non c'è (etichette corte, non troncate): lì il
+    valore sull'asse è già quello completo. Per le barre orizzontali la categoria è
+    su y, per quelle verticali su x — si prende la prima che sia una stringa.
+    """
+    cd = point.get("customdata")
+    if cd:
+        return cd[0] if isinstance(cd, (list, tuple)) else cd
+    x = point.get("x")
+    return x if isinstance(x, str) else point.get("y")
+
+
 def render_linked_charts(df, insights, top_fig, trend_fig) -> None:
     """
     Classifica + andamento affiancati e COLLEGATI: cliccando una barra della
@@ -125,8 +141,7 @@ def render_linked_charts(df, insights, top_fig, trend_fig) -> None:
             try:
                 pts = event.selection.points  # type: ignore[attr-defined]
                 if pts:
-                    px_ = pts[0].get("x")
-                    selected_cat = px_ if isinstance(px_, str) else pts[0].get("y")
+                    selected_cat = _clicked_category(pts[0])
             except Exception:
                 selected_cat = None
         idx += 1
@@ -137,10 +152,10 @@ def render_linked_charts(df, insights, top_fig, trend_fig) -> None:
         with chart_cols[idx]:
             sub = None
             if selected_cat is not None and cat is not None:
-                key_val = str(selected_cat).rstrip("…")
+                # `selected_cat` è il valore ESATTO (da customdata quando l'etichetta
+                # era troncata), quindi il confronto è diretto: niente più rstrip('…')
+                # + startswith per indovinare da un'etichetta accorciata.
                 mask = df[cat].astype(str) == str(selected_cat)
-                if not mask.any():
-                    mask = df[cat].astype(str).str.startswith(key_val)
                 sub = monthly_trend(df[mask], dcol, insights.get("measure"))
 
             if sub is not None:
