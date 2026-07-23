@@ -400,12 +400,13 @@ def _cap_storico(turns: list[Turn]) -> list[Turn]:
     return turns[-_MAX_TURNI:]
 
 
-def _render_turn(turn: Turn, key_index: int) -> None:
+def _render_turn(turn: Turn, key_index: int, columns=None) -> None:
     """Un turno dello storico: la domanda dell'utente e la risposta dell'assistente."""
     with st.chat_message("user"):
         st.write(turn.question)
     with st.chat_message("assistant"):
-        render_result(turn.code, turn.result, turn.explanation, kp=f"h{key_index}")
+        render_result(turn.code, turn.result, turn.explanation,
+                      kp=f"h{key_index}", columns=columns)
 
 
 def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
@@ -454,12 +455,13 @@ def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
             file_name="conversazione.md", mime="text/markdown",
         )
 
+    colonne = list(df.columns)
     indici = list(reversed(range(len(turns))))  # dal più recente al più vecchio
     for i in indici[:_TURNI_IN_VISTA]:
-        _render_turn(turns[i], i)
+        _render_turn(turns[i], i, columns=colonne)
 
     vecchi = indici[_TURNI_IN_VISTA:]
     if vecchi:
         with st.expander(f"Conversazioni precedenti ({len(vecchi)})"):
             for i in vecchi:
-                _render_turn(turns[i], i)
+                _render_turn(turns[i], i, columns=colonne)

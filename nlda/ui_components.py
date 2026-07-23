@@ -12,6 +12,7 @@ import pandas as pd
 import streamlit as st
 
 from nlda.charts import apply_theme, to_chart
+from nlda.checks import columns_referenced, sanity_warnings
 from nlda.loader import monthly_trend
 from nlda.results import ExecutionFailure, ExecutionResult
 from nlda.utils import IT_NUM_FORMAT, fmt_num
@@ -185,8 +186,14 @@ def render_value(value, kp: str = "r") -> None:
 
 
 def render_result(code: str, result: ExecutionResult,
-                  explanation: "str | None" = None, kp: str = "r") -> None:
-    """Rende un turno completo: risposta testuale, risultato visuale, codice generato."""
+                  explanation: "str | None" = None, kp: str = "r", columns=None) -> None:
+    """
+    Rende un turno completo: risposta testuale, eventuali avvisi, risultato visuale
+    e codice generato con le colonne usate.
+
+    `columns` (le colonne del dataset) abilita la riga "Colonne usate": mostra su
+    cosa poggia la risposta, così l'utente può fidarsi o verificare.
+    """
     # 1. Risposta testuale (in un riquadro dedicato)
     if explanation:
         answer_card("Risposta", explanation)
@@ -196,10 +203,19 @@ def render_result(code: str, result: ExecutionResult,
     if isinstance(result, ExecutionFailure):
         st.error(result.message)
     else:
+        # Sanity check PRIMA dei dati: se il risultato è sospetto, l'avviso si vede
+        # accanto al numero, non nascosto in fondo.
+        for avviso in sanity_warnings(result.value):
+            st.warning(f"⚠️ {avviso}")
         if result.fig is not None:
             st.plotly_chart(apply_theme(result.fig), width="stretch", key=f"{kp}_fig")
         render_value(result.value, kp)
 
-    # 3. Codice generato (in fondo, collassato)
+    # 3. Codice generato (in fondo, collassato) + le colonne del dataset che tocca:
+    # la trasparenza che trasforma "fidati" in "verifica".
     with st.expander("Codice Pandas generato"):
         st.code(code, language="python")
+        if columns is not None:
+            usate = columns_referenced(code, columns)
+            if usate:
+                st.caption("Colonne usate: " + ", ".join(usate))
