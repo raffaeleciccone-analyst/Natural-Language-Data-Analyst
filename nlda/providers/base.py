@@ -7,6 +7,29 @@ from nlda.log import get_logger
 
 log = get_logger(__name__)
 
+# Codici HTTP che restano ritentabili anche essendo 4xx: 408 (timeout lato
+# server), 409 (conflitto transitorio), 425 (troppo presto), 429 (rate-limit).
+# Tutto il resto della fascia 4xx è un errore della richiesta stessa — chiave
+# sbagliata, modello inesistente, payload non valido — e ritentarlo identico
+# fallirebbe uguale, bruciando tempo e quota.
+_RETRYABLE_4XX = frozenset({408, 409, 425, 429})
+
+
+def _http_status(exc: Exception) -> int | None:
+    """
+    Estrae il codice HTTP da un'eccezione di un SDK **senza importarne nessuno**
+    (base.py resta libero da dipendenze: gli SDK si importano lazy in `_call`).
+    openai/anthropic/ollama espongono `.status_code`, google-genai `.code`;
+    alcuni lo tengono sotto `.response.status_code`. Se non c'è una risposta HTTP
+    (errore di rete, timeout) ritorna None.
+    """
+    for attr in ("status_code", "code", "status"):
+        val = getattr(exc, attr, None)
+        if isinstance(val, int):  # `.code`/`.status` a volte è una stringa: la si salta
+            return val
+    val = getattr(getattr(exc, "response", None), "status_code", None)
+    return val if isinstance(val, int) else None
+
 
 class LLMProvider(ABC):
     """
@@ -41,11 +64,29 @@ class LLMProvider(ABC):
                 return val
         return None
 
+    def _is_retryable(self, exc: Exception) -> bool:
+        """
+        True se ha senso ritentare `exc`. Il default è condiviso e si basa sul
+        codice HTTP quando c'è: un 4xx (401 chiave errata, 404 modello inesistente,
+        400 richiesta malformata) è colpa della richiesta stessa — un secondo
+        tentativo identico fallirebbe uguale — mentre 408/429, i 5xx e gli errori
+        di rete senza risposta HTTP sono transitori. Un provider può ridefinirlo
+        se il suo SDK segnala la ritentabilità in modo diverso.
+        """
+        status = _http_status(exc)
+        if status is None:
+            return True  # nessuna risposta HTTP: timeout o problema di rete, transitorio
+        if 400 <= status < 500:
+            return status in _RETRYABLE_4XX
+        return True  # 5xx e casi anomali: si concede il ritentativo
+
     def generate(self, system_prompt: str, user_prompt: str) -> str:
         """
         Chiama il modello con retry/backoff sugli errori transitori e ne misura la
         latenza. Delega la chiamata vera a `_call()`; rilancia l'ultima eccezione
         se tutti i tentativi falliscono (l'agente la trasforma in errore leggibile).
+        Un errore classificato come NON ritentabile da `_is_retryable` interrompe
+        subito il ciclo: inutile bruciare tentativi (e quota) su un 401 o un 404.
         """
         attempts = max(1, settings.max_retries + 1)
         last_exc: Exception | None = None
@@ -56,12 +97,15 @@ class LLMProvider(ABC):
                 log.info("%s/%s ok in %.2fs (tentativo %d/%d)",
                          self.name, self.model_name, time.monotonic() - t0, i, attempts)
                 return text
-            except Exception as e:  # noqa: BLE001 — vogliamo ritentare su qualunque errore transitorio
+            except Exception as e:  # noqa: BLE001 — la classificazione avviene in _is_retryable
                 last_exc = e
-                log.warning("%s/%s errore al tentativo %d/%d: %s",
+                if i >= attempts or not self._is_retryable(e):
+                    log.warning("%s/%s errore definitivo al tentativo %d/%d: %s",
+                                self.name, self.model_name, i, attempts, e)
+                    break
+                log.warning("%s/%s errore transitorio al tentativo %d/%d, ritento: %s",
                             self.name, self.model_name, i, attempts, e)
-                if i < attempts:
-                    time.sleep(settings.retry_backoff * (2 ** (i - 1)))
+                time.sleep(settings.retry_backoff * (2 ** (i - 1)))
         # Il ciclo esce solo dopo aver fallito ogni tentativo, quindi last_exc è
         # sempre valorizzata. Non si usa un assert: con `python -O` sparirebbe e
         # resterebbe un `raise None`, cioè un TypeError al posto dell'errore vero.

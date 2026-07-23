@@ -6,6 +6,8 @@ Per aggiungere un nuovo provider (es. Google Gemini, Groq, Mistral):
 2. importala qui e aggiungi una riga in _PROVIDERS e DEFAULT_MODELS
 Nient'altro nel resto del codice deve cambiare.
 """
+from collections.abc import Callable
+
 from .anthropic_provider import AnthropicProvider
 from .base import LLMProvider
 from .gemini_provider import GeminiProvider
@@ -22,8 +24,11 @@ DEFAULT_MODELS = {
     "groq": "llama-3.3-70b-versatile",
 }
 
-# Registro nome -> classe
-_PROVIDERS = {
+# Registro nome -> factory. Il tipo è Callable, non type[LLMProvider]: qui i valori
+# vengono solo CHIAMATI per costruire un provider, mai usati come classi. Così mypy
+# li vede come fabbriche concrete e non lamenta l'istanziazione di una classe astratta
+# (LLMProvider lo è) — niente più `type: ignore[abstract]` in get_provider.
+_PROVIDERS: dict[str, Callable[..., LLMProvider]] = {
     "ollama": OllamaProvider,
     "anthropic": AnthropicProvider,
     "openai": OpenAIProvider,
@@ -31,7 +36,9 @@ _PROVIDERS = {
     "groq": GroqProvider,
 }
 
-# Quali provider richiedono una API key (gli altri girano in locale)
+# Provider che richiedono una API key (gli altri girano in locale). NON serve più a
+# get_provider — che passa sempre api_key e lascia decidere a LLMProvider.__init__ —
+# ma alla UI, per mostrare il campo "API Key" solo dove ha senso (main.py).
 REQUIRES_API_KEY = {"anthropic", "openai", "gemini", "groq"}
 
 
@@ -50,8 +57,7 @@ def get_provider(name: str, model_name: str | None = None,
     cls = _PROVIDERS[key]
     model = model_name or DEFAULT_MODELS[key]
 
-    # cls è sempre una sottoclasse CONCRETA (mai LLMProvider astratta), ma mypy vede
-    # solo il supertipo type[LLMProvider] e non può saperlo: ignore mirato.
-    if key in REQUIRES_API_KEY:
-        return cls(model_name=model, temperature=temperature, api_key=api_key)  # type: ignore[abstract]
-    return cls(model_name=model, temperature=temperature)  # type: ignore[abstract]
+    # api_key=None è il caso normale dei provider locali (Ollama): LLMProvider.__init__
+    # lo accetta e, per i provider cloud, ripiega sulla variabile d'ambiente. Non serve
+    # più distinguere chi richiede la chiave: un'unica chiamata copre entrambi i casi.
+    return cls(model_name=model, temperature=temperature, api_key=api_key)
