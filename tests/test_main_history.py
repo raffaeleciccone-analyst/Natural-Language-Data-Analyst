@@ -82,6 +82,27 @@ def test_app_completa_si_disegna_senza_errori(monkeypatch):
     assert "Filtro" in testi and "Unisci un secondo dataset" in testi
 
 
+def test_streaming_di_una_risposta(monkeypatch):
+    # Sostituisce le chiamate al modello con finti deterministici e verifica che,
+    # inviando una domanda, la spiegazione si streammi nel turno (write_stream) e
+    # compaia, senza eccezioni. In-process per non avviare un sottoprocesso.
+    from nlda.config import Settings
+    monkeypatch.setattr("nlda.agent.DataAgent.overview", lambda self, *a, **k: "")
+    monkeypatch.setattr("nlda.agent.DataAgent.ask_code",
+                        lambda self, q, df: "result = df['Sales'].sum()")
+    monkeypatch.setattr("nlda.agent.DataAgent.explain_stream",
+                        lambda self, q, s: iter(["La risposta ", "è pronta."]))
+    monkeypatch.setattr("nlda.sandbox.runner.settings", Settings(sandbox_subprocess=False))
+
+    at = AppTest.from_file("main.py", default_timeout=60).run()
+    at.text_input(key="chat_q").set_value("qual è il totale?")
+    next(b for b in at.button if b.label == "Invia").click().run()
+
+    assert not at.exception, at.exception
+    testo = " ".join(m.value for m in at.markdown if m.value)
+    assert "La risposta è pronta." in testo
+
+
 def test_il_filtro_restringe_la_pagina(monkeypatch):
     # Seleziona una colonna categoriale e un valore, e verifica che il badge "filtro
     # attivo" compaia senza eccezioni: prova che il filtro alimenta davvero la pagina.
