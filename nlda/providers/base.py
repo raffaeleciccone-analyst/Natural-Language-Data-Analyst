@@ -50,6 +50,10 @@ class LLMProvider(ABC):
     # Nome della/e variabile/i d'ambiente con la API key (None = provider locale)
     ENV_VAR: "str | tuple[str, ...] | None" = None
 
+    # Token consumati dall'ultima `_call`, quando l'SDK li riporta (None altrimenti).
+    # Ogni sottoclasse lo valorizza dalla propria risposta; `generate` lo logga.
+    _last_tokens: int | None = None
+
     def __init__(self, model_name: str, temperature: float = 0.0,
                  api_key: str | None = None):
         self.model_name = model_name
@@ -93,18 +97,25 @@ class LLMProvider(ABC):
         for i in range(1, attempts + 1):
             t0 = time.monotonic()
             try:
+                self._last_tokens = None  # ogni _call lo rivalorizza, se l'SDK lo riporta
                 text = self._call(system_prompt, user_prompt)
-                log.info("%s/%s ok in %.2fs (tentativo %d/%d)",
-                         self.name, self.model_name, time.monotonic() - t0, i, attempts)
+                log.info("provider_call_ok", extra={
+                    "provider": self.name, "model": self.model_name,
+                    "latency_ms": round((time.monotonic() - t0) * 1000),
+                    "attempt": i, "attempts": attempts, "tokens": self._last_tokens,
+                })
                 return text
             except Exception as e:  # noqa: BLE001 — la classificazione avviene in _is_retryable
                 last_exc = e
-                if i >= attempts or not self._is_retryable(e):
-                    log.warning("%s/%s errore definitivo al tentativo %d/%d: %s",
-                                self.name, self.model_name, i, attempts, e)
+                definitivo = i >= attempts or not self._is_retryable(e)
+                log.warning("provider_call_error", extra={
+                    "provider": self.name, "model": self.model_name,
+                    "latency_ms": round((time.monotonic() - t0) * 1000),
+                    "attempt": i, "attempts": attempts,
+                    "retryable": not definitivo, "error": str(e),
+                })
+                if definitivo:
                     break
-                log.warning("%s/%s errore transitorio al tentativo %d/%d, ritento: %s",
-                            self.name, self.model_name, i, attempts, e)
                 time.sleep(settings.retry_backoff * (2 ** (i - 1)))
         # Il ciclo esce solo dopo aver fallito ogni tentativo, quindi last_exc è
         # sempre valorizzata. Non si usa un assert: con `python -O` sparirebbe e

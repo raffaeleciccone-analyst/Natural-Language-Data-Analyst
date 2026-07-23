@@ -133,6 +133,27 @@ def test_openai_contenuto_nullo_diventa_stringa_vuota(monkeypatch):
     assert _openai_provider(monkeypatch, {}, contenuto=None) == ""
 
 
+def test_openai_cattura_i_token_da_usage(monkeypatch):
+    # Metrica di osservabilità: total_tokens dell'SDK finisce in _last_tokens.
+    openai = pytest.importorskip("openai")
+    import nlda.providers.openai_provider as mod
+
+    def create(**kwargs):
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="x"))],
+            usage=SimpleNamespace(total_tokens=123),
+        )
+
+    def OpenAI(**kwargs):  # noqa: N802 — imita il nome della classe dell'SDK
+        return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+
+    monkeypatch.setattr(openai, "OpenAI", OpenAI)
+    monkeypatch.setattr(mod, "settings", Settings(request_timeout=TIMEOUT_FINTO))
+    provider = mod.OpenAIProvider(model_name="gpt-4o-mini", api_key="k")
+    provider._call("s", "u")
+    assert provider._last_tokens == 123
+
+
 def test_openai_senza_chiave_non_passa_api_key(monkeypatch):
     # Senza chiave esplicita né variabile d'ambiente il client deve risolversi da
     # solo: passare api_key=None sovrascriverebbe la risoluzione dell'SDK.
@@ -356,3 +377,15 @@ def test_ollama_chat_compatibile_con_la_firma_dellsdk(monkeypatch):
 def test_ollama_legge_il_contenuto_del_messaggio(monkeypatch):
     testo = _ollama_call(monkeypatch, {}, risposta={"message": {"content": "df['a'].mean()"}})
     assert testo == "df['a'].mean()"
+
+
+def test_ollama_somma_i_token_di_prompt_e_generazione(monkeypatch):
+    # Ollama riporta i due conteggi separati: la metrica è la loro somma.
+    from nlda.providers.ollama_provider import OllamaProvider
+
+    ollama = pytest.importorskip("ollama")
+    monkeypatch.setattr(ollama, "chat", lambda **kw: {
+        "message": {"content": "x"}, "prompt_eval_count": 30, "eval_count": 12})
+    provider = OllamaProvider(model_name="qwen2.5:3b")
+    provider._call("s", "u")
+    assert provider._last_tokens == 42
