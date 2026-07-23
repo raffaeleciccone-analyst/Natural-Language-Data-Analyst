@@ -7,6 +7,9 @@
 *Analista di dati AI-powered che interroghi in linguaggio naturale.*
 
 > ▶️ **Prova la demo: https://natural-language-data-analyst.streamlit.app/**
+>
+> 📄 **Perché questo progetto:** [VALUE.md](VALUE.md) · le decisioni in
+> [ARCHITECTURE.md](ARCHITECTURE.md) · la sicurezza in [THREAT_MODEL.md](THREAT_MODEL.md)
 
 Interroga i tuoi dati in **linguaggio naturale**. Fai una domanda — ad esempio
 *"Qual è il mese con più vendite?"* oppure *"Mostrami le vendite per regione"* —
