@@ -126,7 +126,8 @@ def main() -> None:
         )
     with col_chat, st.container(height=_COL_H, border=False):
         render_chat(service, df, limits, explain=config.explain, unit=unit,
-                    dataset_label=source_label)
+                    dataset_label=source_label,
+                    sel_measure=sel_measure, sel_category=sel_category)
 
     # PER ULTIMA, anche se compare in cima alla pagina: è l'unica parte che
     # aspetta il modello. Generandola qui, l'utente ha già davanti KPI, tabelle,
