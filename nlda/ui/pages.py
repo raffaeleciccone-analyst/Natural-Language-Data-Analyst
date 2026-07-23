@@ -438,13 +438,15 @@ def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
         st.session_state.messages = []
 
     with st.form("ask_form", clear_on_submit=True):
-        c_in, c_btn = st.columns([8, 1])
-        user_q = c_in.text_input(
+        # Input a tutta larghezza + bottone sotto: nella colonna stretta della chat
+        # un bottone affiancato diventava troppo stretto e "Invia" andava a capo lettera
+        # per lettera. In verticale regge qualsiasi larghezza di colonna.
+        user_q = st.text_input(
             "domanda", label_visibility="collapsed", key="chat_q",
             placeholder="Es. 'Qual è il mese con più vendite?' "
                         "oppure 'Mostrami le vendite per regione'",
         )
-        submitted = c_btn.form_submit_button("Invia", width="stretch")
+        submitted = st.form_submit_button("Invia", width="stretch")
 
     # Slot in cima (creato ORA, riempito DOPO): la risposta del turno appena chiesto
     # si streamma qui, sopra lo storico. Non serve rerun né si rischia il doppio

@@ -79,9 +79,9 @@ def console_css() -> str:
           }}
           .readout .r-k {{ font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.1em;
               text-transform: uppercase; color: {c['ink2']}; }}
-          .readout .r-v {{ font-family: var(--mono); font-weight: 600; font-size: 1.62rem;
-              letter-spacing: -0.02em; margin-top: 7px; line-height: 1.1;
-              font-variant-numeric: tabular-nums; color: {c['ink']}; }}
+          .readout .r-v {{ font-family: var(--mono); font-weight: 600; font-size: 1.45rem;
+              letter-spacing: -0.03em; margin-top: 7px; line-height: 1.15;
+              font-variant-numeric: tabular-nums; color: {c['ink']}; white-space: nowrap; }}
           .readout .r-v.sm {{ font-family: var(--display); font-size: 1.25rem; letter-spacing: 0;
               line-height: 1.2; margin-top: 10px;
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}

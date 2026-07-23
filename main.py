@@ -40,6 +40,11 @@ from nlda.utils import fmt_num
 # perché il path è relativo alla RADICE del repo, dove vive assets/.
 _FAVICON = Path(__file__).parent / "assets" / "favicon.png"
 
+# Altezza dei due contenitori affiancati (report | chat). st.container(height=...)
+# rende ciascuna colonna scrollabile per conto suo: le due metà non si trascinano
+# lo scroll a vicenda. È un valore fisso (Streamlit non espone l'altezza del viewport).
+_COL_H = 720
+
 
 def configure_page() -> None:
     """Deve essere la PRIMA chiamata Streamlit dello script."""
@@ -99,22 +104,26 @@ def main() -> None:
     else:
         st.caption(f"{source_label} — {fmt_num(len(df))} righe · {df.shape[1]} colonne")
 
-    render_kpis(df, sel_measure, sel_category, unit)
-
-    with st.expander("Anteprima dei dati (prime 10 righe)"):
-        st.dataframe(df.head(10), width="stretch")
+    render_kpis(df, sel_measure, sel_category, unit)   # a tutta larghezza, sopra le colonne
 
     report_sig, insights = refresh_report_state(df, data_sig, sel_measure, sel_category,
                                                 filter_key=filtro or ())
 
-    slot_sintesi = render_report(df, insights, sel_measure, unit)
-    render_period_comparison(df, sel_measure, unit)
-    render_executive_report(
-        agent, insights, limits,
-        exec_sig=(report_sig, config.provider, config.model_name, unit), unit=unit,
-    )
-    render_chat(service, df, limits, explain=config.explain, unit=unit,
-                dataset_label=source_label)
+    # Due colonne affiancate: analisi/report a sinistra, chat a destra. Ognuna in un
+    # contenitore ad altezza fissa che scrolla per conto suo.
+    col_report, col_chat = st.columns([1.55, 1], gap="large")
+    with col_report, st.container(height=_COL_H, border=False):
+        with st.expander("Anteprima dei dati (prime 10 righe)"):
+            st.dataframe(df.head(10), width="stretch")
+        slot_sintesi = render_report(df, insights, sel_measure, unit)
+        render_period_comparison(df, sel_measure, unit)
+        render_executive_report(
+            agent, insights, limits,
+            exec_sig=(report_sig, config.provider, config.model_name, unit), unit=unit,
+        )
+    with col_chat, st.container(height=_COL_H, border=False):
+        render_chat(service, df, limits, explain=config.explain, unit=unit,
+                    dataset_label=source_label)
 
     # PER ULTIMA, anche se compare in cima alla pagina: è l'unica parte che
     # aspetta il modello. Generandola qui, l'utente ha già davanti KPI, tabelle,
