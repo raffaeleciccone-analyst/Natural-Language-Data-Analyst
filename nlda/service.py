@@ -96,11 +96,23 @@ class AnalysisService:
         explanation = None
         if explain and isinstance(result, ExecutionSuccess):
             step("Scrivo la spiegazione…")
-            summary_text = result.summary or summarize_result(result)
-            # L'unità di misura è nota solo alla UI: senza questo aggancio il
-            # modello la inventerebbe (o la ometterebbe) nella spiegazione.
-            if unit:
-                summary_text = f"Unità di misura: '{unit}'.\n" + summary_text
-            explanation = self.agent.explain(question, summary_text)
+            explanation = self.agent.explain(question, self._explanation_summary(result, unit))
 
         return Turn(question=question, code=code, result=result, explanation=explanation)
+
+    def _explanation_summary(self, result: ExecutionSuccess, unit: str) -> str:
+        """Riepilogo del risultato dato al modello per la spiegazione. L'unità di
+        misura è nota solo alla UI: senza questo aggancio il modello la inventerebbe
+        (o la ometterebbe)."""
+        summary_text = result.summary or summarize_result(result)
+        if unit:
+            summary_text = f"Unità di misura: '{unit}'.\n" + summary_text
+        return summary_text
+
+    def stream_explanation(self, question: str, result: ExecutionSuccess, unit: str = ""):
+        """
+        Spiegazione a blocchi (effetto typewriter) per la UI, che la consuma con
+        `st.write_stream` e ne conserva il testo finale nel `Turn`. Resta un semplice
+        generatore: il servizio non conosce Streamlit.
+        """
+        return self.agent.explain_stream(question, self._explanation_summary(result, unit))

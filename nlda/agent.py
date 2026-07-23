@@ -270,18 +270,42 @@ class DataAgent:
         )
         return self._narrate(system_prompt, user_prompt, "la panoramica")
 
+    def _explain_prompts(self, user_question: str, result_summary: str) -> tuple[str, str]:
+        return prompts.load("explain"), (
+            f"Domanda dell'utente:\n{user_question}\n\n"
+            f"Risultato calcolato dai dati:\n{result_summary}\n\n"
+            "Scrivi la risposta discorsiva."
+        )
+
     def explain(self, user_question: str, result_summary: str) -> str:
         """
         Genera una risposta testuale in linguaggio naturale che interpreta il
         risultato calcolato per rispondere alla domanda dell'utente.
         """
-        system_prompt = prompts.load("explain")
-        user_prompt = (
-            f"Domanda dell'utente:\n{user_question}\n\n"
-            f"Risultato calcolato dai dati:\n{result_summary}\n\n"
-            "Scrivi la risposta discorsiva."
-        )
+        system_prompt, user_prompt = self._explain_prompts(user_question, result_summary)
         return self._narrate(system_prompt, user_prompt, "la spiegazione")
+
+    def explain_stream(self, user_question: str, result_summary: str):
+        """
+        Come `explain`, ma restituisce la spiegazione a blocchi (effetto typewriter).
+        Come `_narrate`, NON solleva: se il modello non risponde, cede un avviso in
+        corsivo — la narrativa è un complemento, i numeri di Pandas si vedono comunque.
+        A stream finito logga il costo (i token arrivano nell'ultimo blocco).
+        """
+        system_prompt, user_prompt = self._explain_prompts(user_question, result_summary)
+        try:
+            for blocco in self.provider.stream(system_prompt, user_prompt):
+                # I backtick spaiati diventano frammenti monospace: si tolgono per blocco.
+                yield blocco.replace("`", "")
+        except Exception as e:  # noqa: BLE001 — la narrativa è tollerante, non solleva
+            log.error("Streaming della spiegazione fallito: %s", e)
+            yield f"_(Impossibile generare la spiegazione: {e})_"
+            return
+        log.info("explanation_stream_ok", extra={
+            "provider": self.provider.name, "model": self.provider.model_name,
+            "tokens": self.provider._last_usage.total_tokens,
+            "cost_usd": self.provider.last_cost(),
+        })
 
     def executive_report(self, insights_summary: str) -> str:
         """

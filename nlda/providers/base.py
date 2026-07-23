@@ -1,6 +1,7 @@
 import os
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 
 from nlda.config import settings
 from nlda.log import get_logger
@@ -138,6 +139,23 @@ class LLMProvider(ABC):
     def _call(self, system_prompt: str, user_prompt: str) -> str:
         """Chiamata grezza all'API del provider. Implementata da ciascuna sottoclasse."""
         raise NotImplementedError
+
+    def stream(self, system_prompt: str, user_prompt: str) -> Iterator[str]:
+        """
+        Risposta a blocchi, per l'effetto "typewriter" in UI. Il default NON fa
+        streaming reale: restituisce l'intera risposta in un colpo, così chi consuma
+        (`st.write_stream`) funziona comunque. I provider con streaming SDK ridefiniscono.
+
+        A differenza di `generate()` NON ritenta e non logga la latenza: lo streaming
+        serve alla NARRATIVA (spiegazione, sintesi) — un complemento tollerante che
+        già non solleva — non al codice, che passa sempre da `generate()`.
+        """
+        self._last_usage = Usage()
+        yield self._call(system_prompt, user_prompt)
+
+    def last_cost(self) -> "float | None":
+        """Costo dell'ultima chiamata/stream: 0.0 se locale, None se non a listino."""
+        return 0.0 if self.LOCAL else estimate_cost_usd(self.model_name, self._last_usage)
 
     @property
     def name(self) -> str:

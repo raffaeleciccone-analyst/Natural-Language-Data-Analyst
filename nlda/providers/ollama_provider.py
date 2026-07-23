@@ -1,6 +1,16 @@
+from collections.abc import Iterator
+
 from nlda.pricing import Usage
 
 from .base import LLMProvider
+
+
+def _chunk_content(chunk: object) -> str:
+    """Testo di un chunk di streaming ollama (dict o oggetto tipizzato)."""
+    msg = chunk["message"] if isinstance(chunk, dict) else getattr(chunk, "message", None)
+    if isinstance(msg, dict):
+        return msg.get("content") or ""
+    return getattr(msg, "content", "") or ""
 
 
 def _int_field(response: object, key: str) -> int | None:
@@ -31,3 +41,25 @@ class OllamaProvider(LLMProvider):
         self._last_usage = Usage(_int_field(response, "prompt_eval_count"),
                                  _int_field(response, "eval_count"))
         return response["message"]["content"]
+
+    def stream(self, system_prompt: str, user_prompt: str) -> Iterator[str]:
+        import ollama  # import lazy
+
+        self._last_usage = Usage()
+        for chunk in ollama.chat(
+            model=self.model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            options={"temperature": self.temperature},
+            stream=True,
+        ):
+            # I conteggi arrivano nell'ultimo chunk (done=True): si aggiornano se ci sono.
+            prompt_tok = _int_field(chunk, "prompt_eval_count")
+            gen_tok = _int_field(chunk, "eval_count")
+            if prompt_tok is not None or gen_tok is not None:
+                self._last_usage = Usage(prompt_tok, gen_tok)
+            testo = _chunk_content(chunk)
+            if testo:
+                yield testo
