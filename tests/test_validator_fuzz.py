@@ -90,7 +90,10 @@ _ESPR_MISTE = _combinatore(
 
 
 # --- 1. L'invariante: nulla di accettato contiene una fuga ----------------------
-@settings(max_examples=400)
+# deadline=None: si misura la CORRETTEZZA, non la velocità. Senza, su una macchina
+# di CI carica un singolo parse può superare i 200ms di default di hypothesis e
+# far fallire il test in modo intermittente — il rosso che insegna a ignorare i rossi.
+@settings(max_examples=400, deadline=None)
 @given(_ESPR_MISTE)
 def test_nessun_codice_accettato_contiene_una_fuga(code: str):
     esito = _parse_and_validate(code)
@@ -102,6 +105,7 @@ def test_nessun_codice_accettato_contiene_una_fuga(code: str):
 
 
 # --- 2. Un frammento di fuga rende SEMPRE il codice respinto --------------------
+@settings(deadline=None)
 @given(sicuro=_FOGLIE_SICURE, pericoloso=_FOGLIE_PERICOLOSE,
        op=st.sampled_from(["+", "-", "*", "=="]))
 def test_un_frammento_pericoloso_viene_sempre_respinto(sicuro, pericoloso, op):
@@ -116,7 +120,7 @@ def test_un_frammento_pericoloso_viene_sempre_respinto(sicuro, pericoloso, op):
 # gli idiomi leciti come "non sicuri" (regressione che romperebbe l'app in
 # silenzio). Un errore di SINTASSI è ammesso: il generatore compone anche codice
 # non parsabile (es. '1.sum()'), e quello non è un giudizio di sicurezza.
-@settings(max_examples=200)
+@settings(max_examples=200, deadline=None)
 @given(_ESPR_SICURE)
 def test_le_composizioni_sicure_non_sono_mai_respinte_per_sicurezza(code: str):
     esito = _parse_and_validate(code)
