@@ -503,8 +503,14 @@ def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
         submitted = c_btn.form_submit_button("Invia", width="stretch")
 
     if submitted and user_q and user_q.strip() and demo_allows(limits, "domande"):
-        with st.spinner("Analisi in corso..."):
-            turn = service.answer(user_q.strip(), df, explain=explain, unit=unit)
+        # st.status invece di un unico spinner: la domanda passa per più fasi
+        # (codice → esecuzione → eventuali correzioni → spiegazione) e con un modello
+        # lento un solo "Analisi in corso..." lasciava l'utente al buio. on_step
+        # aggiorna l'etichetta man mano, senza portare Streamlit dentro il servizio.
+        with st.status("Analisi in corso…", expanded=False) as status:
+            turn = service.answer(user_q.strip(), df, explain=explain, unit=unit,
+                                  on_step=lambda msg: status.update(label=msg))
+            status.update(label="Analisi completata", state="complete")
         # Un provider irraggiungibile non ha consumato token: addebitarlo
         # significherebbe far pagare all'utente un guasto nostro.
         if not (isinstance(turn.result, ExecutionFailure) and turn.result.kind == "provider"):

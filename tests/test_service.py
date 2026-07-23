@@ -164,3 +164,35 @@ def test_l_unita_di_misura_arriva_al_modello(sales_df: pd.DataFrame):
 
     prompt_narrativa = provider.calls[1][1]
     assert "€" in prompt_narrativa
+
+
+# --- Feedback a step (on_step) -------------------------------------------------
+def test_on_step_riporta_le_fasi_in_ordine(sales_df: pd.DataFrame):
+    service, _ = _service(["df['Sales'].sum()", "Le vendite totali sono 840."])
+    fasi: list[str] = []
+    service.answer("totale vendite", sales_df, explain=True, on_step=fasi.append)
+
+    assert any("Genero il codice" in f for f in fasi)
+    assert any("Eseguo il codice" in f for f in fasi)
+    assert any("spiegazione" in f.lower() for f in fasi)
+    # L'ordine è quello del percorso: codice prima dell'esecuzione, spiegazione ultima.
+    assert fasi.index(next(f for f in fasi if "Genero" in f)) < \
+           fasi.index(next(f for f in fasi if "Eseguo" in f))
+
+
+def test_on_step_segnala_le_correzioni(sales_df: pd.DataFrame):
+    service, _ = _service([
+        "df['ColonnaInesistente'].sum()",   # fallisce: innesca una correzione
+        "df['Sales'].sum()",
+    ])
+    fasi: list[str] = []
+    service.answer("totale", sales_df, explain=False, on_step=fasi.append)
+
+    assert any("Correggo il codice" in f and "1/" in f for f in fasi)
+
+
+def test_on_step_e_opzionale(sales_df: pd.DataFrame):
+    # Senza on_step il turno funziona identico: il default è un no-op.
+    service, _ = _service(["df['Sales'].sum()"])
+    turn = service.answer("totale", sales_df, explain=False)
+    assert isinstance(turn.result, ExecutionSuccess)
