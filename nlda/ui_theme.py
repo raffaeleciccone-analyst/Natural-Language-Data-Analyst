@@ -1,6 +1,16 @@
 """
 Stile dell'interfaccia "Console" (tema chiaro). Tenuto fuori da main.py per non
 mescolare presentazione e logica: main.py inietta soltanto `console_css()`.
+
+⚠️ SCELTA CONSAPEVOLE — i selettori `[data-testid="st..."]` (stSidebar, stForm,
+stMetricValue, stChatMessage, ...) NON sono un'API pubblica di Streamlit: sono
+dettagli interni del suo DOM. A un aggiornamento di Streamlit possono cambiare o
+sparire, e allora la regola CSS smette di applicarsi in silenzio — il layout non
+si rompe, si limita a perdere lo stile mirato. Si accetta il rischio perché non
+esiste un modo ufficiale per stilare quei componenti; se un giorno il tema si
+"slega", il primo posto da controllare è se questi testid sono cambiati. La classe
+`.block-container` e le classi custom (`.readout`, `.answer-card`, `.scale`) non
+hanno questo problema: sono stabili o definite da noi.
 """
 
 # Palette dell'UI (tema chiaro)
