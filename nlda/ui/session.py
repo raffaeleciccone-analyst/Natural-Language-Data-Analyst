@@ -176,6 +176,28 @@ def load_dataframe(uploaded_file):
         return None, None
 
 
+def load_second_dataset(uploaded_file):
+    """Carica il secondo file per un join (con cache), o None se non caricato."""
+    if uploaded_file is None:
+        return None
+    return load_uploaded_cached(uploaded_file.name, uploaded_file.getvalue())
+
+
+def join_datasets(left: pd.DataFrame, right: pd.DataFrame,
+                  left_on: str, right_on: str, how: str = "inner") -> pd.DataFrame:
+    """
+    Unisce due DataFrame su una coppia di chiavi (merge di pandas). Le colonne del
+    secondo file che si chiamano come una del primo prendono il suffisso '_2', così
+    nessuna colonna viene sovrascritta in silenzio. Funzione pura.
+
+    Il risultato è UN solo DataFrame: il resto dell'app (sandbox, prompt, report)
+    non cambia — vede semplicemente più colonne. Il join è un preprocessing, non un
+    secondo canale da gestire ovunque.
+    """
+    return left.merge(right, left_on=left_on, right_on=right_on, how=how,
+                      suffixes=("", "_2"))
+
+
 def apply_filter(df: pd.DataFrame, spec):
     """
     Applica un filtro `(colonna, valori)` al DataFrame. Ritorna `(df_filtrato,

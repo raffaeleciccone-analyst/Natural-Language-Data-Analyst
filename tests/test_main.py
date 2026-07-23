@@ -240,3 +240,36 @@ def test_filtro_confronta_come_stringa():
     df = pd.DataFrame({"Anno": [2022, 2023, 2022], "Val": [1, 2, 3]})
     fuori, _ = session.apply_filter(df, ("Anno", ("2022",)))
     assert list(fuori["Val"]) == [1, 3]   # match anche se la colonna è numerica
+
+
+# --- Join tra due dataset (funzione pura) --------------------------------------
+def _vendite_e_clienti():
+    import pandas as pd
+    vendite = pd.DataFrame({"ClienteID": [1, 2, 1], "Importo": [100, 200, 50]})
+    clienti = pd.DataFrame({"ClienteID": [1, 2], "Regione": ["Nord", "Sud"]})
+    return vendite, clienti
+
+
+def test_join_inner_incrocia_sulle_chiavi():
+    vendite, clienti = _vendite_e_clienti()
+    out = session.join_datasets(vendite, clienti, "ClienteID", "ClienteID", how="inner")
+    assert list(out["Regione"]) == ["Nord", "Sud", "Nord"]
+    assert list(out["Importo"]) == [100, 200, 50]
+
+
+def test_join_left_tiene_tutte_le_righe_di_sinistra():
+    import pandas as pd
+    vendite = pd.DataFrame({"ClienteID": [1, 3], "Importo": [100, 70]})
+    clienti = pd.DataFrame({"ClienteID": [1], "Regione": ["Nord"]})
+    out = session.join_datasets(vendite, clienti, "ClienteID", "ClienteID", how="left")
+    assert len(out) == 2                       # anche il cliente 3 senza corrispondenza
+    assert pd.isna(out.loc[out["ClienteID"] == 3, "Regione"]).all()
+
+
+def test_join_colonne_omonime_prendono_il_suffisso():
+    import pandas as pd
+    a = pd.DataFrame({"k": [1], "val": [10]})
+    b = pd.DataFrame({"k": [1], "val": [99]})
+    out = session.join_datasets(a, b, "k", "k")
+    assert "val" in out.columns and "val_2" in out.columns   # niente sovrascrittura
+    assert out["val"].iloc[0] == 10 and out["val_2"].iloc[0] == 99

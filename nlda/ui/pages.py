@@ -33,6 +33,8 @@ from nlda.ui.session import (
     _try_fig,
     demo_allows,
     demo_consume,
+    join_datasets,
+    load_second_dataset,
 )
 from nlda.ui_components import answer_card, build_kpis, readout, render_linked_charts, render_result
 from nlda.utils import fmt_num, with_unit
@@ -79,6 +81,44 @@ def render_sidebar_config(limits: DemoLimits) -> SidebarConfig:
 
     return SidebarConfig(provider=provider, model_name=model_name, api_key=api_key,
                          explain=explain, uploaded_file=uploaded_file)
+
+
+def render_join(left: pd.DataFrame, left_label: str):
+    """
+    Join OPZIONALE con un secondo dataset, nella barra laterale. Ritorna
+    `(df, etichetta)`: il DataFrame unito, oppure l'originale se non c'è un secondo
+    file. Il join produce UN solo df, che alimenta la pipeline come sempre — sandbox,
+    prompt e report non sanno nemmeno che c'erano due file.
+    """
+    with st.sidebar:
+        st.divider()
+        st.subheader("Unisci un secondo dataset")
+        second = st.file_uploader("Secondo file (opzionale, per un join)",
+                                  type=SUPPORTED_EXTENSIONS, key="join_file")
+        if second is None:
+            return left, left_label
+        try:
+            right = load_second_dataset(second)
+        except Exception as e:  # noqa: BLE001 — file dell'utente: si mostra, non si esplode
+            st.error(f"Secondo file illeggibile: {e}")
+            return left, left_label
+
+        c1, c2 = st.columns(2)
+        left_on = c1.selectbox("Chiave nel primo file", list(left.columns), key="join_lk")
+        right_on = c2.selectbox("Chiave nel secondo", list(right.columns), key="join_rk")
+        how = st.selectbox(
+            "Tipo di join", ["inner", "left"], key="join_how",
+            help="inner: solo le righe con corrispondenza in entrambi; "
+                 "left: tutte le righe del primo file, con i campi del secondo dove combaciano.",
+        )
+        try:
+            merged = join_datasets(left, right, left_on, right_on, how=how)
+        except Exception as e:  # noqa: BLE001 — chiavi incompatibili: si spiega
+            st.error(f"Join non riuscito: {e}")
+            return left, left_label
+
+        st.caption(f"Unione riuscita: {len(merged)} righe · {merged.shape[1]} colonne.")
+        return merged, f"{left_label} ⨝ {second.name}"
 
 
 def render_report_selectors(df: pd.DataFrame):
