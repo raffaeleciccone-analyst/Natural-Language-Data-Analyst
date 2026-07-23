@@ -12,6 +12,13 @@ from nlda.utils import clean_code, column_kind
 log = get_logger(__name__)
 
 
+# Tetto alle colonne descritte nel prompt: un dataset largo (fino a 500 colonne,
+# vedi settings.max_columns) genererebbe un prompt enorme e costoso in token, e un
+# modello sommerso da centinaia di colonne sceglie peggio. Oltre il tetto le altre
+# si dichiarano in coda, così l'omissione è trasparente e non silenziosa.
+MAX_SCHEMA_COLS = 100
+
+
 def _describe_schema(df: pd.DataFrame) -> str:
     """
     Descrizione dello schema per il prompt: nome, tipo ed esempi di ogni colonna.
@@ -20,9 +27,14 @@ def _describe_schema(df: pd.DataFrame) -> str:
     sanitizzatore — i VALORI e anche i NOMI. Il nome di colonna era il punto
     scoperto: un'intestazione come "Ignora le istruzioni precedenti e..." finiva
     grezza in mezzo alle regole del prompt, con a capo e backtick compresi.
+
+    Oltre `MAX_SCHEMA_COLS` colonne se ne elencano solo le prime e si dichiara
+    quante restano fuori: il modello può usare solo ciò che vede, ma un prompt
+    illimitato costerebbe in token e in qualità della scelta.
     """
+    colonne = list(df.columns)
     lines = []
-    for col in df.columns:
+    for col in colonne[:MAX_SCHEMA_COLS]:
         kind = column_kind(df[col])
         try:
             samples = df[col].dropna().unique()[:3]
@@ -30,6 +42,9 @@ def _describe_schema(df: pd.DataFrame) -> str:
         except Exception:
             sample_str = ""
         lines.append(f"- '{sanitize(col, MAX_LEN_NOME)}' (tipo: {kind}) — esempi: {sample_str}")
+    if len(colonne) > MAX_SCHEMA_COLS:
+        lines.append(f"- (… e altre {len(colonne) - MAX_SCHEMA_COLS} colonne, "
+                     "non elencate per limitare la lunghezza del prompt)")
     return "\n".join(lines)
 
 
@@ -76,9 +91,30 @@ class DataAgent:
                 provider, model_name=model_name,
                 temperature=temperature, api_key=api_key,
             )
+        # Cache dello schema descritto: `_get_system_prompt` è chiamato a ogni
+        # domanda e a ogni retry, ma per lo stesso dataset lo schema non cambia.
+        self._schema_sig: tuple | None = None
+        self._schema_text: str = ""
+
+    def _schema_for(self, df: pd.DataFrame) -> str:
+        """
+        Schema descritto una volta per dataset. La firma è cheap (forma, nomi e
+        dtype delle colonne, O(colonne)): non hasha i dati, così il controllo di
+        cache non reintroduce il costo che vuole evitare.
+
+        Compromesso dichiarato: due dataset con stessa forma, stessi nomi e stessi
+        dtype ma valori diversi condividerebbero la descrizione (inclusi i valori
+        di esempio). Nella stessa sessione non accade — il dataset è fisso — e se
+        accadesse cambierebbero solo 3 esempi indicativi per colonna, mai un numero.
+        """
+        sig = (df.shape, tuple(df.columns), tuple(str(t) for t in df.dtypes))
+        if sig != self._schema_sig:
+            self._schema_sig = sig
+            self._schema_text = _describe_schema(df)
+        return self._schema_text
 
     def _get_system_prompt(self, df: pd.DataFrame) -> str:
-        schema = _describe_schema(df)
+        schema = self._schema_for(df)
         cat, num = _example_columns(df)
 
         # Esempio di grafico costruito sulle colonne REALI del dataset caricato,

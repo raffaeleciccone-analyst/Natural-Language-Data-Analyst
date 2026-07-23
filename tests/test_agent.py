@@ -7,8 +7,9 @@ niente (l'import del client è lazy, dentro _call). Qui testiamo la logica pura.
 import pandas as pd
 import pytest
 
+import nlda.agent as agent_mod
 import nlda.providers.base as base_mod
-from nlda.agent import DataAgent, _describe_schema
+from nlda.agent import MAX_SCHEMA_COLS, DataAgent, _describe_schema
 from nlda.config import Settings
 from nlda.errors import ProviderError
 from nlda.providers.base import LLMProvider
@@ -165,3 +166,43 @@ def test_narrativa_ripulita_dai_backtick():
     # monospace in mezzo alla frase.
     agente = DataAgent(provider=_ProviderFinto("  Le vendite valgono `1.000`.  "))
     assert agente.explain("quanto?", "1000") == "Le vendite valgono 1.000."
+
+
+# --- #29: schema costruito una volta e con un tetto sulle colonne ----------------
+def test_schema_costruito_una_volta_per_dataset(monkeypatch, sales_df):
+    # _get_system_prompt è chiamato a ogni domanda E a ogni retry: sullo stesso df
+    # lo schema non va ricalcolato (dropna().unique() per colonna costa).
+    chiamate = {"n": 0}
+    reale = agent_mod._describe_schema
+    monkeypatch.setattr(agent_mod, "_describe_schema",
+                        lambda df: (chiamate.__setitem__("n", chiamate["n"] + 1), reale(df))[1])
+    a = _agent()
+    a._get_system_prompt(sales_df)
+    a._get_system_prompt(sales_df)
+    assert chiamate["n"] == 1  # seconda volta: cache
+
+
+def test_schema_ricalcolato_se_cambia_il_dataset(monkeypatch, sales_df):
+    chiamate = {"n": 0}
+    reale = agent_mod._describe_schema
+    monkeypatch.setattr(agent_mod, "_describe_schema",
+                        lambda df: (chiamate.__setitem__("n", chiamate["n"] + 1), reale(df))[1])
+    a = _agent()
+    a._get_system_prompt(sales_df)
+    a._get_system_prompt(pd.DataFrame({"tutt'altro": [1, 2], "schema": ["x", "y"]}))
+    assert chiamate["n"] == 2  # colonne diverse: firma diversa, si ricalcola
+
+
+def test_schema_taglia_le_colonne_oltre_il_tetto():
+    largo = pd.DataFrame({f"c{i}": [1] for i in range(MAX_SCHEMA_COLS + 5)})
+    schema = _describe_schema(largo)
+    assert "'c0'" in schema
+    assert f"'c{MAX_SCHEMA_COLS}'" not in schema          # oltre il tetto: fuori
+    assert f"altre {5} colonne" in schema                 # omissione dichiarata
+
+
+def test_schema_sotto_il_tetto_elenca_tutto():
+    stretto = pd.DataFrame({"a": [1], "b": ["x"]})
+    schema = _describe_schema(stretto)
+    assert "'a'" in schema and "'b'" in schema
+    assert "colonne, non elencate" not in schema
