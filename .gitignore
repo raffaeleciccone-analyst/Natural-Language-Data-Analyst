@@ -17,6 +17,7 @@ venv/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+.hypothesis/   # database degli esempi di hypothesis (property test della sandbox)
 
 # Streamlit
 .streamlit/secrets.toml
