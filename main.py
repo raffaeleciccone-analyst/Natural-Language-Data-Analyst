@@ -104,7 +104,12 @@ def main() -> None:
     else:
         st.caption(f"{source_label} — {fmt_num(len(df))} righe · {df.shape[1]} colonne")
 
-    render_kpis(df, sel_measure, sel_category, unit)   # a tutta larghezza, sopra le colonne
+    # KPI e anteprima a TUTTA LARGHEZZA sopra le colonne: così, sotto, il report e la
+    # chat partono dalla stessa riga ("Report iniziale sui dati" allineato a "Fai una
+    # domanda"). L'anteprima dentro la colonna sinistra sfalsava i due titoli.
+    render_kpis(df, sel_measure, sel_category, unit)
+    with st.expander("Anteprima dei dati (prime 10 righe)"):
+        st.dataframe(df.head(10), width="stretch")
 
     report_sig, insights = refresh_report_state(df, data_sig, sel_measure, sel_category,
                                                 filter_key=filtro or ())
@@ -113,8 +118,6 @@ def main() -> None:
     # contenitore ad altezza fissa che scrolla per conto suo.
     col_report, col_chat = st.columns([1.55, 1], gap="large")
     with col_report, st.container(height=_COL_H, border=False):
-        with st.expander("Anteprima dei dati (prime 10 righe)"):
-            st.dataframe(df.head(10), width="stretch")
         slot_sintesi = render_report(df, insights, sel_measure, unit)
         render_period_comparison(df, sel_measure, unit)
         render_executive_report(
