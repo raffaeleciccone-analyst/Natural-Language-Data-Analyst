@@ -17,7 +17,6 @@ from nlda.loader import (
     analyze,
     best_category,
     category_columns,
-    dataset_signature,
     default_unit,
     measure_columns,
     ordered_measures,
@@ -112,6 +111,31 @@ def render_report_selectors(df: pd.DataFrame):
     return sel_measure, sel_category, unit or default_unit(sel_measure)
 
 
+def render_filter(df: pd.DataFrame):
+    """
+    Filtro PERSISTENTE per una colonna categoriale, nella barra laterale. Ritorna lo
+    spec `(colonna, valori)` — hashable, usato anche come chiave di ricalcolo — o None.
+
+    Resta attivo tra un turno e l'altro: il df filtrato che ne esce alimenta l'intera
+    pagina (report, KPI, confronto e chat), quindi "guardo solo il Nord" vale per tutto
+    finché non lo si toglie. Il service resta stateless: riceve semplicemente il df già
+    ristretto, non deve ricordare nulla.
+    """
+    cats = category_columns(df)
+    with st.sidebar:
+        st.divider()
+        st.subheader("Filtro")
+        if not cats:
+            st.caption("Nessuna colonna categoriale da filtrare.")
+            return None
+        col = st.selectbox("Filtra per colonna", ["(nessun filtro)", *cats], key="flt_col")
+        if col == "(nessun filtro)":
+            return None
+        valori = sorted(df[col].dropna().astype(str).unique().tolist())
+        scelti = st.multiselect("Tieni solo questi valori", valori, key="flt_vals")
+        return (col, tuple(scelti)) if scelti else None
+
+
 def render_kpis(df: pd.DataFrame, sel_measure, sel_category, unit: str) -> None:
     kpis = build_kpis(df, sel_measure, sel_category, unit)
     for col, (label, value, sub, tick, small) in zip(st.columns(len(kpis)), kpis, strict=False):
@@ -119,22 +143,23 @@ def render_kpis(df: pd.DataFrame, sel_measure, sel_category, unit: str) -> None:
     st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 
 
-def refresh_report_state(df: pd.DataFrame, source_label, sel_measure, sel_category):
+def refresh_report_state(df: pd.DataFrame, data_sig, sel_measure, sel_category, filter_key=()):
     """
     Ricalcola profilo, insight e figure solo quando serve davvero.
 
-    Le firme sono a granularità diversa di proposito: cambiare misura non deve
-    azzerare la conversazione, cambiare dataset sì.
+    Le firme sono a granularità diversa di proposito: `data_sig` identifica il FILE
+    (il df intero, calcolato a monte), quindi cambiare FILTRO non azzera la
+    conversazione — cambiare dataset sì. Il filtro entra invece in `report_sig`, così
+    report, profilo e figure si ricalcolano sul df FILTRATO quando il filtro cambia.
     """
-    data_sig = dataset_signature(df, source_label)
     if st.session_state.get("dataset_sig") != data_sig:
         st.session_state.dataset_sig = data_sig
         st.session_state.messages = []
-        st.session_state.profile = profile(df)
 
-    report_sig = (data_sig, sel_measure, sel_category)
+    report_sig = (data_sig, filter_key, sel_measure, sel_category)
     if st.session_state.get("report_sig") != report_sig:
         st.session_state.report_sig = report_sig
+        st.session_state.profile = profile(df)
         with st.spinner("Analisi del dataset in corso..."):
             insights = analyze(df, measure=sel_measure, category=sel_category)
             st.session_state.insights = insights

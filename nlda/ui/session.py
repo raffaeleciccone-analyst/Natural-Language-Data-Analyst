@@ -176,6 +176,24 @@ def load_dataframe(uploaded_file):
         return None, None
 
 
+def apply_filter(df: pd.DataFrame, spec):
+    """
+    Applica un filtro `(colonna, valori)` al DataFrame. Ritorna `(df_filtrato,
+    etichetta_leggibile)`. Funzione pura (nessuno Streamlit): `spec` None o vuoto
+    lascia il df invariato. Il confronto è su stringa, così vale anche per colonne
+    numeriche o miste senza sorprese sui tipi.
+    """
+    if not spec:
+        return df, ""
+    col, valori = spec
+    mask = df[col].astype(str).isin([str(v) for v in valori])
+    if len(valori) == 1:
+        etichetta = f"{col} = {valori[0]}"
+    else:
+        etichetta = f"{col} ∈ {{{', '.join(str(v) for v in valori)}}}"
+    return df[mask], etichetta
+
+
 def _try_fig(fn, *args, **kwargs):
     """Costruisce una figura, o None se qualcosa va storto (report robusto).
     L'errore viene loggato (non mostrato all'utente) per restare diagnosticabile."""

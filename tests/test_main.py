@@ -207,3 +207,36 @@ def test_dataset_di_default_mancante_non_solleva(fake_st, monkeypatch):
 
     monkeypatch.setattr(session, "load_default_cached", assente)
     assert session.load_dataframe(None) == (None, None)
+
+
+# --- Filtro persistente (funzione pura) ----------------------------------------
+def _df_regioni():
+    import pandas as pd
+    return pd.DataFrame({"Regione": ["Nord", "Sud", "Nord", "Est"], "Val": [1, 2, 3, 4]})
+
+
+def test_filtro_assente_lascia_il_df_invariato():
+    df = _df_regioni()
+    fuori, etichetta = session.apply_filter(df, None)
+    assert fuori is df and etichetta == ""
+
+
+def test_filtro_su_un_valore_restringe_e_etichetta():
+    df = _df_regioni()
+    fuori, etichetta = session.apply_filter(df, ("Regione", ("Nord",)))
+    assert list(fuori["Val"]) == [1, 3]
+    assert etichetta == "Regione = Nord"
+
+
+def test_filtro_su_piu_valori():
+    df = _df_regioni()
+    fuori, etichetta = session.apply_filter(df, ("Regione", ("Nord", "Est")))
+    assert list(fuori["Val"]) == [1, 3, 4]
+    assert "Nord" in etichetta and "Est" in etichetta
+
+
+def test_filtro_confronta_come_stringa():
+    import pandas as pd
+    df = pd.DataFrame({"Anno": [2022, 2023, 2022], "Val": [1, 2, 3]})
+    fuori, _ = session.apply_filter(df, ("Anno", ("2022",)))
+    assert list(fuori["Val"]) == [1, 3]   # match anche se la colonna è numerica
