@@ -273,6 +273,10 @@ evento, con `turn_id`, latenza, token e costo stimato, pronta per un aggregatore
 di log), `MAX_ROWS` e `MAX_COLUMNS` (limiti sul file caricato: sono soglie di
 usabilita', non di memoria — oltre, ogni domanda richiede piu' di un secondo).
 
+Con `LOG_FORMAT=json`, **`python scripts/analyze_logs.py <file>`** riepiloga i log
+(tasso di successo, costo, percentili di latenza, esiti per causa, token): chiudere
+il cerchio dell'osservabilità — non basta loggare, i log vanno letti.
+
 ## Deploy
 
 Per pubblicare l'app (inclusa la modalità demo con limite di domande) vedi
