@@ -429,8 +429,27 @@ def _render_turn_streaming(service: AnalysisService, question: str, turn: Turn,
     return replace(turn, explanation=testo)
 
 
+def _esempi_domande(sel_measure: str, sel_category: str) -> list[str]:
+    """
+    Domande d'esempio per l'empty-state della chat, costruite sulle colonne già
+    scelte per il report: così i suggerimenti sono sempre pertinenti al dataset
+    caricato, non frasi fisse buone solo per la demo. Ripiego su due domande
+    generiche quando il dataset non offre né misura né categoria.
+    """
+    esempi: list[str] = []
+    if sel_measure and sel_category:
+        esempi.append(f"Mostrami {sel_measure} per {sel_category}")
+        esempi.append(f"Quali sono i 5 {sel_category} con più {sel_measure}?")
+    if sel_measure:
+        esempi.append(f"Qual è il totale di {sel_measure}?")
+    elif sel_category:
+        esempi.append(f"Quante righe per ciascun {sel_category}?")
+    return esempi[:3] or ["Quante righe ha il dataset?", "Mostrami le prime 10 righe"]
+
+
 def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
-                explain: bool, unit: str, dataset_label: str = "") -> None:
+                explain: bool, unit: str, dataset_label: str = "",
+                sel_measure: str = "", sel_category: str = "") -> None:
     """Box domanda e storico della conversazione (turno più recente in alto)."""
     st.subheader("Fai una domanda ai tuoi dati")
 
@@ -475,18 +494,30 @@ def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
             for i in vecchi:
                 _render_turn(turns[i], i, columns=colonne)
 
-    if submitted and user_q and user_q.strip() and demo_allows(limits, "domande"):
+    # La domanda da analizzare arriva dal form OPPURE da un suggerimento cliccato.
+    question = user_q.strip() if (submitted and user_q and user_q.strip()) else None
+
+    # Empty-state: finché non c'è storico la colonna chat sarebbe quasi vuota. La
+    # riempiamo con domande d'esempio pertinenti al dataset — dicono subito che tipo
+    # di richiesta funziona, e cliccarne una equivale a scriverla e inviarla.
+    if not turns:
+        st.caption("Non sai da dove iniziare? Prova una di queste 👇")
+        for j, ex in enumerate(_esempi_domande(sel_measure, sel_category)):
+            if st.button(ex, key=f"esempio_{j}", width="stretch"):
+                question = ex
+
+    if question and demo_allows(limits, "domande"):
         with live:
             # Il codice si genera ed esegue "dietro" lo status (on_step aggiorna la
             # fase); la SPIEGAZIONE si streamma poi in chiaro. explain=False al service:
             # la narrativa non la fa lui, la streamma la UI.
             with st.status("Analisi in corso…", expanded=False) as status:
-                turn = service.answer(user_q.strip(), df, explain=False, unit=unit,
+                turn = service.answer(question, df, explain=False, unit=unit,
                                       on_step=lambda msg: status.update(label=msg))
                 status.update(label="Analisi completata", state="complete")
             # Un provider irraggiungibile non ha consumato token: addebitarlo
             # significherebbe far pagare all'utente un guasto nostro.
             if not (isinstance(turn.result, ExecutionFailure) and turn.result.kind == "provider"):
                 demo_consume(limits)
-            turn = _render_turn_streaming(service, user_q.strip(), turn, colonne, unit, explain)
+            turn = _render_turn_streaming(service, question, turn, colonne, unit, explain)
         st.session_state.messages = _cap_storico(turns + [turn])
