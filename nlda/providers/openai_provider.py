@@ -32,4 +32,7 @@ class OpenAIProvider(LLMProvider):
                 {"role": "user", "content": user_prompt},
             ],
         )
+        # Token consumati, per l'osservabilità (getattr difensivo: una risposta
+        # senza usage — o un finto nei test — lascia semplicemente None).
+        self._last_tokens = getattr(getattr(response, "usage", None), "total_tokens", None)
         return response.choices[0].message.content or ""

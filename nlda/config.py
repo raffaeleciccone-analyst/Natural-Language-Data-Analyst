@@ -73,6 +73,9 @@ class Settings:
 
     # --- Logging ---
     log_level: str = "INFO"
+    # "text" = una riga leggibile per lo sviluppo; "json" = una riga JSON per
+    # riga, pensata per l'ingestione in un aggregatore di log in produzione/demo.
+    log_format: str = "text"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -89,6 +92,7 @@ class Settings:
             max_retries=_env_int("LLM_MAX_RETRIES", cls.max_retries),
             retry_backoff=_env_float("LLM_RETRY_BACKOFF", cls.retry_backoff),
             log_level=os.getenv("LOG_LEVEL", cls.log_level).upper(),
+            log_format=os.getenv("LOG_FORMAT", cls.log_format).strip().lower(),
         )
 
 

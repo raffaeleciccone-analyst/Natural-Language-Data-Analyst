@@ -25,4 +25,7 @@ class GeminiProvider(LLMProvider):
                 temperature=self.temperature,
             ),
         )
+        # Token consumati, per l'osservabilità; None se il campo è assente.
+        self._last_tokens = getattr(
+            getattr(response, "usage_metadata", None), "total_token_count", None)
         return response.text or ""

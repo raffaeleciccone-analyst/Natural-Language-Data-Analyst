@@ -27,5 +27,12 @@ class AnthropicProvider(LLMProvider):
             timeout=settings.request_timeout,  # evita chiamate appese all'infinito
         )
 
+        # Token consumati (input + output), per l'osservabilità; None se assenti.
+        usage = getattr(message, "usage", None)
+        self._last_tokens = (
+            (getattr(usage, "input_tokens", 0) or 0) + (getattr(usage, "output_tokens", 0) or 0)
+            if usage is not None else None
+        )
+
         # message.content è una lista di blocchi: prendiamo solo il testo
         return "".join(block.text for block in message.content if block.type == "text")
