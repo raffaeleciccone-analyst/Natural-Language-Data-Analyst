@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 
 from nlda.config import settings
 from nlda.log import get_logger
+from nlda.pricing import Usage, estimate_cost_usd
 
 log = get_logger(__name__)
 
@@ -50,9 +51,14 @@ class LLMProvider(ABC):
     # Nome della/e variabile/i d'ambiente con la API key (None = provider locale)
     ENV_VAR: "str | tuple[str, ...] | None" = None
 
-    # Token consumati dall'ultima `_call`, quando l'SDK li riporta (None altrimenti).
-    # Ogni sottoclasse lo valorizza dalla propria risposta; `generate` lo logga.
-    _last_tokens: int | None = None
+    # True per i provider che girano sul TUO hardware (Ollama): il costo per token
+    # è 0, non "sconosciuto". I provider cloud lo lasciano False e passano dal listino.
+    LOCAL: bool = False
+
+    # Token dell'ultima `_call`, quando l'SDK li riporta. Ogni sottoclasse lo
+    # valorizza dalla propria risposta (input/output separati); `generate` lo logga
+    # e ne stima il costo.
+    _last_usage: Usage = Usage()
 
     def __init__(self, model_name: str, temperature: float = 0.0,
                  api_key: str | None = None):
@@ -97,12 +103,16 @@ class LLMProvider(ABC):
         for i in range(1, attempts + 1):
             t0 = time.monotonic()
             try:
-                self._last_tokens = None  # ogni _call lo rivalorizza, se l'SDK lo riporta
+                self._last_usage = Usage()  # ogni _call lo rivalorizza, se l'SDK lo riporta
                 text = self._call(system_prompt, user_prompt)
+                usage = self._last_usage
+                cost = 0.0 if self.LOCAL else estimate_cost_usd(self.model_name, usage)
                 log.info("provider_call_ok", extra={
                     "provider": self.name, "model": self.model_name,
                     "latency_ms": round((time.monotonic() - t0) * 1000),
-                    "attempt": i, "attempts": attempts, "tokens": self._last_tokens,
+                    "attempt": i, "attempts": attempts,
+                    "input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens,
+                    "tokens": usage.total_tokens, "cost_usd": cost,
                 })
                 return text
             except Exception as e:  # noqa: BLE001 — la classificazione avviene in _is_retryable

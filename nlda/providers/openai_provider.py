@@ -1,6 +1,7 @@
 from typing import Any
 
 from nlda.config import settings
+from nlda.pricing import Usage
 
 from .base import LLMProvider
 
@@ -32,7 +33,9 @@ class OpenAIProvider(LLMProvider):
                 {"role": "user", "content": user_prompt},
             ],
         )
-        # Token consumati, per l'osservabilità (getattr difensivo: una risposta
+        # Token consumati, input e output separati (getattr difensivo: una risposta
         # senza usage — o un finto nei test — lascia semplicemente None).
-        self._last_tokens = getattr(getattr(response, "usage", None), "total_tokens", None)
+        usage = getattr(response, "usage", None)
+        self._last_usage = Usage(getattr(usage, "prompt_tokens", None),
+                                 getattr(usage, "completion_tokens", None))
         return response.choices[0].message.content or ""

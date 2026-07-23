@@ -1,4 +1,5 @@
 from nlda.config import settings
+from nlda.pricing import Usage
 
 from .base import LLMProvider
 
@@ -25,7 +26,8 @@ class GeminiProvider(LLMProvider):
                 temperature=self.temperature,
             ),
         )
-        # Token consumati, per l'osservabilità; None se il campo è assente.
-        self._last_tokens = getattr(
-            getattr(response, "usage_metadata", None), "total_token_count", None)
+        # Token consumati, input e output separati; None se il campo è assente.
+        meta = getattr(response, "usage_metadata", None)
+        self._last_usage = Usage(getattr(meta, "prompt_token_count", None),
+                                 getattr(meta, "candidates_token_count", None))
         return response.text or ""

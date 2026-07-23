@@ -1,3 +1,5 @@
+from nlda.pricing import Usage
+
 from .base import LLMProvider
 
 
@@ -12,6 +14,8 @@ def _int_field(response: object, key: str) -> int | None:
 class OllamaProvider(LLMProvider):
     """Modelli locali serviti da Ollama (llama3, mistral, qwen2.5, ...)."""
 
+    LOCAL = True  # gira sul tuo hardware: costo per token 0, non "sconosciuto"
+
     def _call(self, system_prompt: str, user_prompt: str) -> str:
         import ollama  # import lazy: richiesto solo se usi questo provider
 
@@ -23,11 +27,7 @@ class OllamaProvider(LLMProvider):
             ],
             options={"temperature": self.temperature},
         )
-        # Token consumati (prompt + generazione), per l'osservabilità; None se assenti.
-        prompt_tok = _int_field(response, "prompt_eval_count")
-        gen_tok = _int_field(response, "eval_count")
-        self._last_tokens = (
-            (prompt_tok or 0) + (gen_tok or 0)
-            if prompt_tok is not None or gen_tok is not None else None
-        )
+        # Token consumati: prompt (input) e generazione (output) separati.
+        self._last_usage = Usage(_int_field(response, "prompt_eval_count"),
+                                 _int_field(response, "eval_count"))
         return response["message"]["content"]
