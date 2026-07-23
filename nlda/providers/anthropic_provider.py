@@ -1,4 +1,5 @@
 from nlda.config import settings
+from nlda.pricing import Usage
 
 from .base import LLMProvider
 
@@ -27,12 +28,10 @@ class AnthropicProvider(LLMProvider):
             timeout=settings.request_timeout,  # evita chiamate appese all'infinito
         )
 
-        # Token consumati (input + output), per l'osservabilità; None se assenti.
+        # Token consumati, input e output separati; None se assenti.
         usage = getattr(message, "usage", None)
-        self._last_tokens = (
-            (getattr(usage, "input_tokens", 0) or 0) + (getattr(usage, "output_tokens", 0) or 0)
-            if usage is not None else None
-        )
+        self._last_usage = Usage(getattr(usage, "input_tokens", None),
+                                 getattr(usage, "output_tokens", None))
 
         # message.content è una lista di blocchi: prendiamo solo il testo
         return "".join(block.text for block in message.content if block.type == "text")

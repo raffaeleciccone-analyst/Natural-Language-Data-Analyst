@@ -134,14 +134,14 @@ def test_openai_contenuto_nullo_diventa_stringa_vuota(monkeypatch):
 
 
 def test_openai_cattura_i_token_da_usage(monkeypatch):
-    # Metrica di osservabilità: total_tokens dell'SDK finisce in _last_tokens.
+    # Metrica di osservabilità: input e output dell'SDK, separati, in _last_usage.
     openai = pytest.importorskip("openai")
     import nlda.providers.openai_provider as mod
 
     def create(**kwargs):
         return SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content="x"))],
-            usage=SimpleNamespace(total_tokens=123),
+            usage=SimpleNamespace(prompt_tokens=100, completion_tokens=23),
         )
 
     def OpenAI(**kwargs):  # noqa: N802 — imita il nome della classe dell'SDK
@@ -151,7 +151,9 @@ def test_openai_cattura_i_token_da_usage(monkeypatch):
     monkeypatch.setattr(mod, "settings", Settings(request_timeout=TIMEOUT_FINTO))
     provider = mod.OpenAIProvider(model_name="gpt-4o-mini", api_key="k")
     provider._call("s", "u")
-    assert provider._last_tokens == 123
+    assert provider._last_usage.input_tokens == 100
+    assert provider._last_usage.output_tokens == 23
+    assert provider._last_usage.total_tokens == 123
 
 
 def test_openai_senza_chiave_non_passa_api_key(monkeypatch):
@@ -379,8 +381,8 @@ def test_ollama_legge_il_contenuto_del_messaggio(monkeypatch):
     assert testo == "df['a'].mean()"
 
 
-def test_ollama_somma_i_token_di_prompt_e_generazione(monkeypatch):
-    # Ollama riporta i due conteggi separati: la metrica è la loro somma.
+def test_ollama_cattura_i_token_di_prompt_e_generazione(monkeypatch):
+    # Ollama riporta i due conteggi separati: input=prompt, output=generazione.
     from nlda.providers.ollama_provider import OllamaProvider
 
     ollama = pytest.importorskip("ollama")
@@ -388,4 +390,6 @@ def test_ollama_somma_i_token_di_prompt_e_generazione(monkeypatch):
         "message": {"content": "x"}, "prompt_eval_count": 30, "eval_count": 12})
     provider = OllamaProvider(model_name="qwen2.5:3b")
     provider._call("s", "u")
-    assert provider._last_tokens == 42
+    assert provider._last_usage.input_tokens == 30
+    assert provider._last_usage.output_tokens == 12
+    assert provider._last_usage.total_tokens == 42

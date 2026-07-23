@@ -16,6 +16,7 @@ from nlda.log import (
     bind_context,
     new_turn_id,
 )
+from nlda.pricing import Usage
 from nlda.providers.base import LLMProvider
 
 
@@ -95,14 +96,15 @@ def test_new_turn_id_breve_e_univoco():
 
 # --- Integrazione: generate() emette le metriche correlate al turno --------------
 class _ProviderConToken(LLMProvider):
-    """Provider finto che risponde subito e dichiara un consumo di token."""
+    """Provider finto che risponde subito e dichiara un consumo di token.
+    model_name="gpt-4o-mini" così il costo passa dal listino (non è locale)."""
 
-    def __init__(self, tokens: int | None):
-        super().__init__(model_name="m")
-        self._tokens = tokens
+    def __init__(self, usage: Usage):
+        super().__init__(model_name="gpt-4o-mini")
+        self._usage = usage
 
     def _call(self, system_prompt: str, user_prompt: str) -> str:
-        self._last_tokens = self._tokens
+        self._last_usage = self._usage
         return "ok"
 
 
@@ -124,16 +126,47 @@ def test_generate_logga_metriche_e_turn_id(monkeypatch):
     logger, handler, righe = _cattura_json("nlda.providers.base")
     try:
         with bind_context(turn_id="turno1"):
-            assert _ProviderConToken(tokens=57).generate("s", "u") == "ok"
+            provider = _ProviderConToken(Usage(input_tokens=1000, output_tokens=500))
+            assert provider.generate("s", "u") == "ok"
     finally:
         logger.removeHandler(handler)
 
     ok = next(json.loads(r) for r in righe if json.loads(r)["event"] == "provider_call_ok")
     assert ok["provider"] == "_ProviderConToken"
-    assert ok["model"] == "m"
-    assert ok["tokens"] == 57
+    assert ok["model"] == "gpt-4o-mini"
+    assert ok["input_tokens"] == 1000 and ok["output_tokens"] == 500
+    assert ok["tokens"] == 1500
+    # gpt-4o-mini: (0.15, 0.60)/1M → 1000*0.15/1e6 + 500*0.60/1e6 = 0.00045
+    assert ok["cost_usd"] == pytest.approx(0.00045)
     assert ok["turn_id"] == "turno1"          # correlazione col turno
     assert isinstance(ok["latency_ms"], int)
+
+
+class _ProviderLocale(LLMProvider):
+    """Provider locale (come Ollama): consuma token ma non costa nulla."""
+
+    LOCAL = True
+
+    def __init__(self):
+        super().__init__(model_name="qwen2.5:3b")
+
+    def _call(self, system_prompt: str, user_prompt: str) -> str:
+        self._last_usage = Usage(input_tokens=800, output_tokens=200)
+        return "ok"
+
+
+def test_provider_locale_logga_costo_zero_non_none(monkeypatch):
+    # 0.0 è il costo REALE di un modello locale, diverso da None ("sconosciuto").
+    monkeypatch.setattr(base_mod, "settings", Settings(max_retries=0))
+    logger, handler, righe = _cattura_json("nlda.providers.base")
+    try:
+        _ProviderLocale().generate("s", "u")
+    finally:
+        logger.removeHandler(handler)
+
+    ok = next(json.loads(r) for r in righe if json.loads(r)["event"] == "provider_call_ok")
+    assert ok["cost_usd"] == 0.0
+    assert ok["tokens"] == 1000
 
 
 def test_generate_logga_errore_con_ritentabilita(monkeypatch):
