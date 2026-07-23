@@ -48,6 +48,16 @@ palette e tipografia reali dell'interfaccia. Per provarla davvero c'è la
   Recommendations, Risks, Next Steps) e **scaricabile in Markdown**.
 - **Grafici collegati (click-to-filter)**: nel report, cliccando una barra della
   classifica l'andamento temporale si filtra sulla categoria selezionata.
+- **Confronto tra periodi**: aggrega una misura per mese, trimestre o anno con la
+  **variazione percentuale** sul periodo precedente — dalla sezione dedicata o
+  chiedendolo in una domanda (lo stesso motore deterministico alimenta entrambi).
+- **Filtro persistente**: restringi l'intera analisi a un sottoinsieme (es. una
+  regione) da un controllo nella barra laterale; resta attivo tra le domande e
+  vale per report, KPI, confronto e chat.
+- **Join tra due dataset**: carica un secondo file e uniscilo al primo su una
+  coppia di chiavi; report e domande valgono poi sui dati uniti.
+- **Esporta la conversazione** in Markdown: ogni turno con domanda, risultato,
+  spiegazione e il **codice Pandas generato**.
 - **Risposta testuale** a ogni domanda: l'AI interpreta il risultato calcolato e
   risponde citando i numeri chiave.
 - **Unità di misura opzionale**: puoi indicarla dalla barra laterale; per le
@@ -126,7 +136,9 @@ All'avvio è già caricato un **dataset di esempio** (`data/sales.csv`, vendite
 Superstore). Per usare i tuoi dati, carica un file CSV, Excel o JSON dalla barra
 laterale: l'app rileva colonne, tipi e date automaticamente e adatta report,
 KPI e domande al nuovo schema. Dalla sezione "Report" puoi scegliere la misura
-e la categoria su cui basare KPI e classifiche.
+e la categoria su cui basare KPI e classifiche; da "Filtro" restringi tutta
+l'analisi a un sottoinsieme, e da "Unisci un secondo dataset" incroci due file
+su una coppia di chiavi.
 
 ## Architettura
 
@@ -224,6 +236,7 @@ suite verde. Qui la verifica è a strati, dal più deterministico al più incert
 |---|---|---|
 | **Golden dei prompt** | nessuna modifica accidentale al testo delle istruzioni | `tests/test_prompt_contract.py` |
 | **Contratti prompt ↔ runtime** | ciò che il prompt promette esiste, e il codice che insegna supera la nostra sandbox | idem |
+| **Property/fuzz sul validatore** | migliaia di espressioni generate: nessun codice *accettato* accede a `__`/import/I-O (hypothesis) | `tests/test_validator_fuzz.py` |
 | **Corpus rigiocato** | risposte reali registrate attraversano l'intera pipeline in modo deterministico | `tests/test_corpus_replay.py` |
 | **Smoke** | con un modello vero, ogni domanda produce un risultato valido | `scripts/smoke.py` |
 | **Eval** | le risposte sono *corrette*, non solo eseguibili | `scripts/eval.py` |
@@ -252,7 +265,9 @@ Ogni push esegue in CI (GitHub Actions, `.github/workflows/ci.yml`):
 I parametri di runtime sono centralizzati in `nlda/config.py` e sovrascrivibili da
 variabile d'ambiente, tra cui: `EXEC_TIMEOUT`, `MEMORY_LIMIT_MB`,
 `ALLOW_INPROCESS_FALLBACK`, `LLM_REQUEST_TIMEOUT`, `LLM_MAX_RETRIES`, `LOG_LEVEL`,
-`MAX_ROWS` e `MAX_COLUMNS` (limiti sul file caricato: sono soglie di
+`LOG_FORMAT` (`text` o `json`: il formato `json` emette una riga strutturata per
+evento, con `turn_id`, latenza, token e costo stimato, pronta per un aggregatore
+di log), `MAX_ROWS` e `MAX_COLUMNS` (limiti sul file caricato: sono soglie di
 usabilita', non di memoria — oltre, ogni domanda richiede piu' di un secondo).
 
 ## Deploy
