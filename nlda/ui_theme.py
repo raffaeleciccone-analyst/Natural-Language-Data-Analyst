@@ -17,7 +17,7 @@ hanno questo problema: sono stabili o definite da noi.
 PALETTE = dict(
     page="#eff1ee", surface="#ffffff", surface2="#f7f8f6",
     border="#e2e6e1", strong="#d3d8d1", ink="#16191c", ink2="#59626b",
-    muted="#8a929a", accent="#0e7c86", deep="#0a5960", tint="#e2f0f0",
+    muted="#6b7480", accent="#0e7c86", deep="#0a5960", tint="#e2f0f0",
 )
 
 
@@ -41,8 +41,10 @@ def console_css() -> str:
               background: {c['surface']}; border-right: 1px solid {c['border']};
           }}
           h1, h2, h3, h4 {{ font-family: var(--display); color: {c['ink']}; letter-spacing: -0.015em; }}
-          .app-subtitle {{ font-family: var(--mono); color: {c['ink2']} !important;
-              font-size: 0.82rem; margin-top: -0.6rem; letter-spacing: 0.02em; }}
+          /* Sottotitolo: prosa corrente in SANS (il mono resta solo sul nome-modello
+             in <code>). In mono con letter-spacing "urlava" quanto il titolo. */
+          .app-subtitle {{ font-family: var(--sans); color: {c['ink2']} !important;
+              font-size: 0.82rem; margin-top: -0.6rem; }}
           code, .app-subtitle code {{ font-family: var(--mono); color: {c['deep']}; }}
           [data-testid="stCaptionContainer"] {{ font-family: var(--mono); color: {c['muted']}; }}
 
@@ -51,17 +53,20 @@ def console_css() -> str:
               background: {c['surface']}; border: 1px solid {c['border']};
               border-radius: 14px; padding: 15px 18px 14px;
               box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 10px 26px -20px rgba(0,0,0,0.35);
-              height: 120px; overflow: hidden;
+              min-height: 120px;   /* min, non height fissa + overflow: un numero lungo
+                                      non deve più venire troncato ("2.297.200" mozzato) */
           }}
           .readout .r-k {{ font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em;
               text-transform: uppercase; color: {c['ink2']}; }}
-          .readout .r-v {{ font-family: var(--mono); font-weight: 600; font-size: 1.85rem;
-              letter-spacing: -0.02em; margin-top: 7px; line-height: 1;
+          .readout .r-v {{ font-family: var(--mono); font-weight: 600; font-size: 1.6rem;
+              letter-spacing: -0.02em; margin-top: 7px; line-height: 1.1;
               font-variant-numeric: tabular-nums; color: {c['ink']}; }}
           .readout .r-v.sm {{ font-size: 1.1rem; line-height: 1.2; margin-top: 12px;
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-          .readout .r-tick {{ height: 6px; margin-top: 12px; border-radius: 2px;
-              background: linear-gradient(90deg, var(--bar,{c['accent']}) 60%, {c['border']} 60%); }}
+          /* Riga di accento (colore per-card): decorazione ONESTA, non una finta
+             progress bar riempita a un 60% che non corrispondeva ad alcun dato. */
+          .readout .r-tick {{ height: 3px; margin-top: 12px; border-radius: 2px;
+              background: var(--bar, {c['accent']}); }}
           .readout .r-sub {{ font-family: var(--mono); font-size: 0.7rem; color: {c['muted']}; margin-top: 8px; }}
 
           /* Motivo a scala di misurazione */
@@ -81,7 +86,9 @@ def console_css() -> str:
           }}
           .answer-label::before {{ content:""; width:14px; height:2px; background:{c['accent']}; }}
           .answer-body {{ color: {c['ink']}; font-size: 1.0rem; line-height: 1.6; }}
-          .answer-body b {{ font-family: var(--mono); color: {c['deep']}; font-weight: 600; }}
+          /* Il grassetto della prosa NON va in mono: "West" in mono a metà frase
+             sembrava un errore. Resta l'enfasi (colore + peso), stesso font del testo. */
+          .answer-body b {{ color: {c['deep']}; font-weight: 600; }}
 
           /* Metriche native (fallback), tabelle, chat */
           div[data-testid="stMetricValue"] {{ font-family: var(--mono); color: {c['accent']}; font-weight: 600; }}
