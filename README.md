@@ -183,6 +183,9 @@ risposta testuale.
 
 ## Sicurezza
 
+> 🛡️ Per il **modello di minaccia completo** (superfici d'attacco, mitigazioni e
+> *rischi residui* dichiarati, confini di fiducia) vedi **[THREAT_MODEL.md](THREAT_MODEL.md)**.
+
 - **Whitelist di builtin** minimale nell'ambiente di esecuzione.
 - **Analisi statica AST in allowlist**: il validatore ammette solo la manciata di
   nodi che servono a un'espressione Pandas (assegnazioni, chiamate, operatori,
