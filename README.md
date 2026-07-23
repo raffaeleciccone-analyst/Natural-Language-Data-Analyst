@@ -130,22 +130,33 @@ e la categoria su cui basare KPI e classifiche.
 
 ## Architettura
 
+> 📐 Per **le decisioni di design e i loro trade-off** (perché allowlist e non
+> denylist, perché il canale di ritorno è solo JSON, perché l'esito è un tipo…),
+> vedi **[ARCHITECTURE.md](ARCHITECTURE.md)**. Qui sotto la mappa dei moduli.
+
 ```
-main.py                    interfaccia Streamlit (report, KPI, grafici collegati, chat)
+main.py                    entry-point Streamlit sottile: configura la pagina e chiama main()
+nlda/ui/pages.py           sezioni della pagina (sidebar, KPI, report, confronto, filtro, join, chat)
+nlda/ui/session.py         plumbing UI: secret, quota demo, cache, caricamento e join dei dati
 nlda/service.py            orchestrazione del turno (domanda → codice → esito → spiegazione)
 nlda/agent.py              traduzione domanda → codice Pandas (adattata allo schema)
+nlda/prompts/              i system prompt versionati (con golden a protezione)
 nlda/sandbox/validator.py  allowlist di nodi AST: decide se il codice è ammissibile
 nlda/sandbox/runner.py     esecuzione nel sottoprocesso e canale di ritorno JSON
+nlda/sandbox/pool.py       riserva calda di worker (toglie il costo d'avvio dal percorso critico)
 nlda/charts.py             figure Plotly e loro aspetto
+nlda/periods.py            confronto tra periodi (mese/trimestre/anno) con variazione %
+nlda/export.py             esportazione della conversazione in Markdown
 nlda/loader.py             lettura multi-formato, profilo del dataset, analisi automatica
 nlda/ui_components.py      componenti di presentazione Streamlit (card, tabelle, grafici)
 nlda/results.py            esito tipizzato dell'esecuzione (successo / fallimento con causa)
+nlda/pricing.py            stima del costo in USD di una chiamata (token → prezzo)
 nlda/sanitize.py           difesa dai dati non fidati che finiscono nel prompt
-nlda/errors.py             eccezioni applicative
+nlda/errors.py             gerarchia di eccezioni applicative
 nlda/demo.py               quota della demo pubblica
 nlda/providers/            astrazione multi-LLM (ollama, groq, anthropic, openai, gemini)
-nlda/config.py             configurazione centralizzata (timeout, sandbox, retry) da env
-nlda/log.py                logging applicativo
+nlda/config.py             configurazione centralizzata (timeout, sandbox, retry, log) da env
+nlda/log.py                logging strutturato JSON con correlation-id e costo
 scripts/                   favicon, registrazione del corpus, smoke ed eval
 tests/                     suite pytest (con focus sulla sandbox di sicurezza)
 ```
