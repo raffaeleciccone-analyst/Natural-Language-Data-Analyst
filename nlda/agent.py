@@ -2,6 +2,7 @@ import ast
 
 import pandas as pd
 
+from nlda import prompts
 from nlda.errors import ProviderError
 from nlda.log import get_logger
 from nlda.providers import LLMProvider, get_provider
@@ -95,36 +96,10 @@ class DataAgent:
         else:
             example = "fig = px.bar(df.iloc[:, :2])"
 
-        return f"""Sei un assistente esperto di Python, Pandas e Plotly. Il tuo unico compito è tradurre la richiesta dell'utente in codice Python eseguibile.
-Il DataFrame si chiama sempre e solo 'df'. Hai a disposizione Plotly Express già importato come 'px'.
-
-SCHEMA DEL DATASET (usa ESCLUSIVAMENTE queste colonne, con i nomi esatti):
-{schema}
-
-REGOLE TASSATIVE:
-1. Restituisci SOLO il codice Python puro. Nessun blocco markdown, nessuna introduzione o spiegazione.
-2. Usa unicamente le colonne elencate sopra, rispettandone il nome esatto (maiuscole/minuscole comprese). Non inventare colonne.
-3. Scegli le colonne in base al tipo: aggrega/somma solo colonne numeriche; raggruppa per colonne di testo o data.
-4. Se la richiesta contiene parole come "mostrami", "grafico", "andamento", "visualizza", "plot", "barre", "linee", DEVI creare un grafico con Plotly Express: prepara prima i dati aggregati con groupby(..., as_index=False), poi assegna la figura alla variabile 'fig' usando 'px' con gli argomenti x e y. NON usare funzioni di Streamlit (niente st.*). Usa px.line per andamenti/serie temporali, px.bar per confronti tra categorie.
-5. Se l'utente NON chiede un grafico e la risposta è immediata, restituisci una singola espressione Pandas (es: df['<colonna_numerica>'].sum()).
-6. Per calcoli in PIÙ passaggi, esegui i passaggi e metti il RISULTATO FINALE in una variabile chiamata 'result' (può essere un numero, una stringa formattata o un DataFrame). NON usare MAI print(). Esempio:
-   top = df.groupby('<cat>', as_index=False)['<num>'].sum().sort_values('<num>', ascending=False).head(5)
-   perc = top['<num>'].sum() / df['<num>'].sum() * 100
-   result = f"I primi 5 valgono il {{perc:.1f}}% del totale"
-7. Per domande di RIPARTIZIONE o CLASSIFICA (es. "per prodotto", "top N", "quanto incide ognuno"), fornisci una risposta COMPLETA: metti in 'result' un DataFrame di dettaglio (con una colonna 'percentuale' sul totale, arrotondata a 1 decimale) E crea un grafico con la funzione to_chart(dati, kind='bar'), che rende leggibili anche i nomi lunghi. Esempio:
-   detail = df.groupby('<cat>', as_index=False)['<num>'].sum().sort_values('<num>', ascending=False)
-   detail['percentuale'] = (detail['<num>'] / detail['<num>'].sum() * 100).round(1)
-   result = detail
-   fig = to_chart(detail[['<cat>', '<num>']], kind='bar')
-8. Per il "top N per gruppo" (es. "top 5 prodotti per regione") usa questo idioma:
-   agg = df.groupby(['<gruppo>', '<elemento>'], as_index=False)['<num>'].sum()
-   result = agg.sort_values('<num>', ascending=False).groupby('<gruppo>', as_index=False).head(5)
-   NON usare df.groupby(...).apply(...) seguito da reset_index(drop=True): perde le
-   colonne di raggruppamento e causa errori.
-
-ESEMPIO DI GRAFICO (adattato a questo dataset):
-{example}
-"""
+        # Il testo del prompt vive in prompts/code_generation.md (versionato, con
+        # golden a protezione). Qui restano solo i due dati che dipendono dal
+        # dataset: lo schema e l'esempio di grafico costruito sulle sue colonne.
+        return prompts.render("code_generation", schema=schema, example=example)
 
     def _generate(self, system_prompt: str, user_prompt: str) -> str:
         """
@@ -252,16 +227,7 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
 
     def overview(self, dataset_summary: str) -> str:
         """Genera una panoramica introduttiva del dataset in linguaggio naturale."""
-        system_prompt = (
-            "Sei un analista dati esperto. Ti viene fornito il profilo di un dataset. "
-            "Scrivi in italiano una panoramica introduttiva chiara e utile (4-6 frasi): "
-            "di cosa parlano i dati, quali sono le colonne principali e il loro significato, "
-            "e 2-3 spunti di analisi interessanti che l'utente potrebbe esplorare. "
-            "NON mostrare codice. Scrivi i numeri in modo leggibile, con separatore "
-            "delle migliaia (es. 2.261.537, non 2261536.78) e al massimo due decimali. "
-            "Se il testo indica ESPLICITAMENTE un'unità di misura, riportala accanto ai "
-            "numeri; altrimenti NON inventarne una (non scrivere 'unità', 'euro' o simili)."
-        )
+        system_prompt = prompts.load("overview")
         user_prompt = (
             f"Profilo del dataset:\n{dataset_summary}\n\n"
             "Scrivi la panoramica introduttiva."
@@ -273,16 +239,7 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
         Genera una risposta testuale in linguaggio naturale che interpreta il
         risultato calcolato per rispondere alla domanda dell'utente.
         """
-        system_prompt = (
-            "Sei un analista dati esperto. Rispondi SEMPRE in italiano, in modo "
-            "chiaro e conciso (massimo 3-4 frasi). Interpreta il risultato dei dati "
-            "per rispondere direttamente alla domanda dell'utente, citando i numeri "
-            "chiave. NON mostrare codice e NON descrivere il procedimento tecnico: "
-            "spiega solo cosa dicono i dati. Scrivi i numeri in modo leggibile, con "
-            "separatore delle migliaia (es. 2.261.537) e al massimo due decimali. "
-            "Se il testo indica ESPLICITAMENTE un'unità di misura, riportala accanto ai "
-            "numeri; altrimenti NON inventarne una (non scrivere 'unità', 'euro' o simili)."
-        )
+        system_prompt = prompts.load("explain")
         user_prompt = (
             f"Domanda dell'utente:\n{user_question}\n\n"
             f"Risultato calcolato dai dati:\n{result_summary}\n\n"
@@ -295,24 +252,7 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
         Genera un report esecutivo in markdown a partire dai NUMERI già calcolati.
         Il modello scrive solo la narrazione: non deve calcolare né inventare numeri.
         """
-        system_prompt = (
-            "Sei un analista dati senior. Ti vengono forniti insight GIÀ CALCOLATI su "
-            "un dataset. Scrivi in italiano un report esecutivo in Markdown con "
-            "ESATTAMENTE queste sezioni, nell'ordine, ciascuna come intestazione '## ':\n"
-            "## Executive Summary\n## Key Insights\n## Business Recommendations\n"
-            "## Possible Risks\n## Next Steps\n\n"
-            "REGOLE TASSATIVE:\n"
-            "- Usa SOLO i numeri presenti nell'input; non calcolarne di nuovi e non "
-            "inventarne. Se un dato non c'è, non citarlo.\n"
-            "- Executive Summary e Key Insights: affermativi, basati sui numeri.\n"
-            "- Business Recommendations e Possible Risks: formulali come IPOTESI basate "
-            "solo sui dati caricati (usa 'potrebbe', 'suggerisce'), mai come certezze; "
-            "ricorda che correlazione non è causa.\n"
-            "- Niente codice, niente tabelle grezze. Frasi brevi, elenchi puntati dove utile.\n"
-            "- NON usare MAI il backtick (`) né blocchi di codice: scrivi i numeri come "
-            "testo normale. Per enfasi usa al massimo il grassetto (**testo**). "
-            "Un numero come 669.519 va scritto così, mai come `669.519`."
-        )
+        system_prompt = prompts.load("executive_report")
         user_prompt = (
             f"Insight calcolati sul dataset:\n{insights_summary}\n\n"
             "Scrivi il report esecutivo in Markdown con le cinque sezioni richieste."
