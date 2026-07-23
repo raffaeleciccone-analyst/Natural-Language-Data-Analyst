@@ -12,6 +12,7 @@ nodi ammessi valgono poi regole mirate su attributi, nomi e chiavi.
 import ast
 import re
 
+from nlda.errors import NLDAError
 from nlda.log import get_logger
 from nlda.results import ExecutionFailure
 
@@ -57,8 +58,16 @@ _IO_PREFIX = re.compile(r'^(to|read|write)_')
 # e l'AST ispeziona comunque l'interno dei lambda passati, quindi non aprono escape.
 
 
-class UnsafeCodeError(Exception):
-    """Sollevata quando il codice generato contiene costruzioni non consentite."""
+class UnsafeCodeError(NLDAError):
+    """
+    Sollevata quando il codice generato contiene costruzioni non consentite.
+
+    Appartiene alla gerarchia `NLDAError` (è un guasto previsto, non un bug), anche
+    se nel percorso normale non affiora: `_parse_and_validate` la cattura subito e
+    la traduce in `ExecutionFailure("security")`. La parentela conta solo come rete
+    di sicurezza — se un giorno sfuggisse, un `except NLDAError` la riconoscerebbe
+    come rifiuto atteso invece di scambiarla per un errore di programmazione.
+    """
 # --- Allowlist dei nodi AST ----------------------------------------------------
 # Il default è NEGARE: tutto ciò che non compare qui viene rifiutato.
 #

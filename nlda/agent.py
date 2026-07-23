@@ -142,7 +142,9 @@ ESEMPIO DI GRAFICO (adattato a questo dataset):
             raw = self.provider.generate(system_prompt, user_prompt)
         except Exception as e:
             log.error("Generazione codice fallita (%s): %s", self.provider.name, e)
-            raise ProviderError(self.provider.name, e) from e
+            # classify() sceglie ProviderAuthError/ProviderTimeoutError quando può,
+            # così la UI mostra "controlla la API key" o "riprova" invece del testo SDK.
+            raise ProviderError.classify(self.provider.name, e) from e
         return clean_code(raw or "")
 
     def _narrate(self, system_prompt: str, user_prompt: str, description: str) -> str:
