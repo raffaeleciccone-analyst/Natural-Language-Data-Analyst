@@ -1,0 +1,344 @@
+"""
+Sezioni della pagina Streamlit: le funzioni `render_*` che disegnano la barra
+laterale, i KPI, il report e la chat. Solo LAYOUT — i numeri li calcola
+`nlda.loader`, il turno lo orchestra `nlda.service`, il plumbing (secret, quota,
+cache, caricamento) sta in `nlda.ui.session`. `main.py` chiama queste funzioni
+nell'ordine giusto.
+"""
+import pandas as pd
+import streamlit as st
+
+from nlda.agent import DataAgent
+from nlda.charts import apply_theme, corr_heatmap, histogram, to_chart
+from nlda.demo import DemoLimits
+from nlda.loader import (
+    SUPPORTED_EXTENSIONS,
+    analyze,
+    best_category,
+    category_columns,
+    dataset_signature,
+    default_unit,
+    measure_columns,
+    ordered_measures,
+    profile,
+)
+from nlda.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers
+from nlda.results import ExecutionFailure
+from nlda.service import AnalysisService, Turn
+from nlda.ui.session import (
+    _KEY_ENV,
+    SidebarConfig,
+    _secret,
+    _try_fig,
+    demo_allows,
+    demo_consume,
+)
+from nlda.ui_components import answer_card, build_kpis, readout, render_linked_charts, render_result
+from nlda.utils import fmt_num, with_unit
+
+
+def render_sidebar_config(limits: DemoLimits) -> SidebarConfig:
+    """Prima parte della barra laterale: modello e sorgente dati."""
+    with st.sidebar:
+        st.header("Configurazione")
+        explain = st.toggle("Spiegazione AI", value=True,
+                            help="Genera una risposta testuale che interpreta il risultato.")
+        st.divider()
+        st.subheader("Modello LLM")
+
+        if limits.enabled:
+            provider = _secret("PROVIDER", "groq").strip().lower()
+            model_name = _secret("MODEL", DEFAULT_MODELS.get(provider, ""))
+            api_key = _secret(_KEY_ENV.get(provider, ""), "")
+            st.success(f"Demo pubblica · **{provider}** · `{model_name}`")
+            st.caption(f"Limite: {limits.max_questions} domande per sessione. "
+                       "Clona il repo per uso illimitato e per usare Ollama in locale.")
+        else:
+            provider = st.selectbox(
+                "Provider", available_providers(),
+                help="Ollama gira in locale; Anthropic, OpenAI e Gemini richiedono una API key.",
+            )
+            model_name = st.text_input("Modello", value=DEFAULT_MODELS[provider])
+            api_key = ""
+            if provider in REQUIRES_API_KEY:
+                api_key = st.text_input(
+                    "API Key", type="password",
+                    help="Lascia vuoto per usare la variabile d'ambiente "
+                         "(ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY).",
+                )
+                if not api_key:  # ripiego su secret/env
+                    api_key = _secret(_KEY_ENV.get(provider, ""), "")
+
+        st.divider()
+        st.subheader("Dataset")
+        uploaded_file = st.file_uploader(
+            "Carica un file", type=SUPPORTED_EXTENSIONS,
+            help="Formati supportati: CSV, Excel (.xlsx/.xls), JSON.",
+        )
+
+    return SidebarConfig(provider=provider, model_name=model_name, api_key=api_key,
+                         explain=explain, uploaded_file=uploaded_file)
+
+
+def render_report_selectors(df: pd.DataFrame):
+    """Seconda parte della barra laterale: misura, categoria e unità di misura."""
+    measures = ordered_measures(measure_columns(df))
+    cats = category_columns(df)
+    with st.sidebar:
+        st.divider()
+        st.subheader("Report")
+        if measures:
+            sel_measure = st.selectbox("Misura", measures, index=0,
+                                       help="La colonna numerica su cui basare KPI e classifiche.")
+        else:
+            sel_measure = None
+            st.caption("Nessuna colonna numerica: report a conteggi.")
+
+        if cats:
+            preferred = best_category(df)
+            idx = cats.index(preferred) if preferred in cats else 0
+            sel_category = st.selectbox("Categoria", cats, index=idx,
+                                        help="La dimensione per classifiche e filtri.")
+        else:
+            sel_category = None
+
+        unit = st.text_input("Unità di misura (opzionale)", value="",
+                             placeholder="es. €, kg, %, unità",
+                             help="Mostrata accanto ai valori nei KPI e nelle risposte. "
+                                  "Per misure economiche senza unità si usa $ come "
+                                  "standard.").strip()
+    return sel_measure, sel_category, unit or default_unit(sel_measure)
+
+
+def render_kpis(df: pd.DataFrame, sel_measure, sel_category, unit: str) -> None:
+    kpis = build_kpis(df, sel_measure, sel_category, unit)
+    for col, (label, value, sub, tick, small) in zip(st.columns(len(kpis)), kpis, strict=False):
+        readout(col, label, value, sub=sub, tick=tick, small=small)
+    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+
+
+def refresh_report_state(df: pd.DataFrame, source_label, sel_measure, sel_category):
+    """
+    Ricalcola profilo, insight e figure solo quando serve davvero.
+
+    Le firme sono a granularità diversa di proposito: cambiare misura non deve
+    azzerare la conversazione, cambiare dataset sì.
+    """
+    data_sig = dataset_signature(df, source_label)
+    if st.session_state.get("dataset_sig") != data_sig:
+        st.session_state.dataset_sig = data_sig
+        st.session_state.messages = []
+        st.session_state.profile = profile(df)
+
+    report_sig = (data_sig, sel_measure, sel_category)
+    if st.session_state.get("report_sig") != report_sig:
+        st.session_state.report_sig = report_sig
+        with st.spinner("Analisi del dataset in corso..."):
+            insights = analyze(df, measure=sel_measure, category=sel_category)
+            st.session_state.insights = insights
+            st.session_state.top_fig = (
+                _try_fig(to_chart, insights["top"].data, kind="bar") if "top" in insights else None)
+            st.session_state.trend_fig = (
+                _try_fig(to_chart, insights["trend"].data, kind="line")
+                if "trend" in insights else None)
+            st.session_state.corr_fig = (
+                _try_fig(corr_heatmap, insights["corr"]) if "corr" in insights else None)
+            st.session_state.dist_fig = (
+                _try_fig(histogram, df, sel_measure) if sel_measure else None)
+
+    return report_sig, st.session_state.get("insights", {})
+
+
+def render_report(df: pd.DataFrame, insights: dict, sel_measure, unit: str):
+    """
+    Report iniziale: insight deterministici, tabelle e grafici.
+
+    Ritorna lo SPAZIO RISERVATO alla sintesi AI, che viene riempito più tardi
+    (vedi `fill_overview`). I numeri sono già pronti quando questa funzione gira:
+    farli aspettare la chiamata al modello significherebbe mostrare una pagina
+    vuota per decine di secondi con un modello locale.
+    """
+    st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
+    st.subheader("Report iniziale sui dati")
+
+    slot_sintesi = st.empty()
+
+    # Insight automatici (numeri calcolati in Pandas, non dedotti dall'AI).
+    # Via answer_card: il testo è HTML-escaped, così un valore di cella ostile
+    # non può iniettare Markdown/HTML nella pagina.
+    if insights.get("findings"):
+        answer_card("Insight automatici", "\n".join(f"• {f}" for f in insights["findings"]))
+
+    if "numeric_stats" in insights:
+        st.markdown("**Statistiche delle colonne numeriche**")
+        stats = insights["numeric_stats"].copy()
+        for column in ["Somma", "Media", "Minimo", "Massimo"]:
+            if column in stats.columns:
+                stats[column] = stats[column].map(fmt_num)
+        st.dataframe(stats, width="stretch", hide_index=True)
+
+    render_linked_charts(df, insights, st.session_state.get("top_fig"),
+                         st.session_state.get("trend_fig"))
+
+    _render_distribution_and_correlations(insights, sel_measure)
+
+    with st.expander("Struttura delle colonne (tipi, mancanti, valori)"):
+        st.dataframe(st.session_state.get("profile"), width="stretch", hide_index=True)
+
+    return slot_sintesi
+
+
+def fill_overview(slot, agent: DataAgent, insights: dict, unit: str,
+                  overview_sig: tuple, explain: bool) -> None:
+    """
+    Genera la sintesi AI e la scrive nello spazio riservato dal report.
+
+    Va chiamata per ULTIMA, dopo che tutto il resto della pagina è stato
+    disegnato: è l'unica parte che aspetta il modello, e con Ollama in locale
+    sono decine di secondi. Prima veniva generata in cima al flusso e bloccava
+    l'intera pagina — l'utente vedeva uno schermo vuoto mentre i numeri erano
+    già calcolati.
+
+    Su rerun successivi il testo è in cache e compare subito: si attende solo
+    quando cambia davvero qualcosa (dati, misura, provider, unità).
+    """
+    da_generare = st.session_state.get("overview_sig") != overview_sig
+    if da_generare:
+        st.session_state.overview_sig = overview_sig
+        if explain and insights.get("text"):
+            # Segnale immediato nello spazio riservato: la pagina è già leggibile,
+            # e qui si dice che manca solo questo pezzo.
+            slot.caption("L'AI sta preparando la sintesi dei dati…")
+            st.session_state.overview_text = agent.overview(with_unit(insights["text"], unit))
+        else:
+            st.session_state.overview_text = None
+
+    if st.session_state.get("overview_text"):
+        answer_card("Sintesi dei dati", st.session_state.overview_text, container=slot)
+    elif da_generare:
+        slot.empty()   # toglie l'avviso se la generazione non ha prodotto nulla
+
+
+def _render_distribution_and_correlations(insights: dict, sel_measure) -> None:
+    dist_fig = st.session_state.get("dist_fig")
+    corr_fig = st.session_state.get("corr_fig")
+    if dist_fig is None and corr_fig is None:
+        return
+
+    cols = st.columns(2 if (dist_fig is not None and corr_fig is not None) else 1)
+    idx = 0
+    if dist_fig is not None:
+        with cols[idx]:
+            st.markdown(f"**Distribuzione di {sel_measure}**")
+            st.plotly_chart(apply_theme(dist_fig), width="stretch", key="report_dist")
+        idx += 1
+    if corr_fig is not None:
+        with cols[idx]:
+            st.markdown("**Correlazioni tra le misure**")
+            pairs = insights.get("corr_pairs") or []
+            if pairs:
+                a, b, r = pairs[0]
+                direction = "positiva" if r > 0 else "negativa"
+                st.caption(f"Coppia più correlata: {a} e {b} (r = {fmt_num(r)}, {direction}). "
+                           "La correlazione indica associazione, non causa.")
+            else:
+                st.caption("Nessuna coppia con correlazione forte (|r| ≥ 0,6).")
+            st.plotly_chart(apply_theme(corr_fig), width="stretch", key="report_corr")
+
+
+def render_executive_report(agent: DataAgent, insights: dict, limits: DemoLimits,
+                            exec_sig: tuple, unit: str) -> None:
+    st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
+    st.subheader("Report esecutivo")
+    st.caption("Executive Summary, Key Insights, Recommendations, Risks e Next Steps, "
+               "basati sui numeri calcolati dai dati caricati.")
+
+    # Il report resta valido finché non cambiano dati, misura/categoria, provider o unità.
+    if st.session_state.get("exec_report") and st.session_state.get("exec_report_sig") != exec_sig:
+        st.session_state.exec_report = None
+
+    if st.button("Genera report esecutivo", disabled=not insights.get("text")):
+        if demo_allows(limits, "generazioni"):
+            with st.spinner("L'AI sta redigendo il report esecutivo..."):
+                st.session_state.exec_report = agent.executive_report(
+                    with_unit(insights["text"], unit))
+                st.session_state.exec_report_sig = exec_sig
+            # La narrativa non solleva: se il modello è irraggiungibile restituisce
+            # un avviso in corsivo. In quel caso non è stato speso nulla.
+            if not str(st.session_state.exec_report).startswith("_(Impossibile"):
+                demo_consume(limits)
+
+    if st.session_state.get("exec_report"):
+        with st.container(border=True):
+            st.markdown(st.session_state.exec_report)
+        st.download_button("Scarica il report (.md)", st.session_state.exec_report,
+                           file_name="report_esecutivo.md", mime="text/markdown")
+
+
+# Storico della conversazione. Vive in st.session_state e ogni turno può contenere
+# una figura Plotly (che pesa): senza tetto crescerebbe finché la sessione non si
+# ricarica, e Streamlit ridisegna TUTTA la cronologia a ogni rerun (ogni click).
+_MAX_TURNI = 20        # oltre questo, i turni più vecchi vengono scartati
+_TURNI_IN_VISTA = 3    # i più recenti restano aperti; il resto va in un expander
+
+
+def _cap_storico(turns: list[Turn]) -> list[Turn]:
+    """Tiene solo gli ultimi _MAX_TURNI turni, così memoria e costo di render
+    restano limitati indipendentemente da quanto a lungo dura la sessione."""
+    return turns[-_MAX_TURNI:]
+
+
+def _render_turn(turn: Turn, key_index: int) -> None:
+    """Un turno dello storico: la domanda dell'utente e la risposta dell'assistente."""
+    with st.chat_message("user"):
+        st.write(turn.question)
+    with st.chat_message("assistant"):
+        render_result(turn.code, turn.result, turn.explanation, kp=f"h{key_index}")
+
+
+def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
+                explain: bool, unit: str) -> None:
+    """Box domanda e storico della conversazione (turno più recente in alto)."""
+    st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
+    st.subheader("Fai una domanda ai tuoi dati")
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    with st.form("ask_form", clear_on_submit=True):
+        c_in, c_btn = st.columns([8, 1])
+        user_q = c_in.text_input(
+            "domanda", label_visibility="collapsed",
+            placeholder="Es. 'Qual è il mese con più vendite?' "
+                        "oppure 'Mostrami le vendite per regione'",
+        )
+        submitted = c_btn.form_submit_button("Invia", width="stretch")
+
+    if submitted and user_q and user_q.strip() and demo_allows(limits, "domande"):
+        # st.status invece di un unico spinner: la domanda passa per più fasi
+        # (codice → esecuzione → eventuali correzioni → spiegazione) e con un modello
+        # lento un solo "Analisi in corso..." lasciava l'utente al buio. on_step
+        # aggiorna l'etichetta man mano, senza portare Streamlit dentro il servizio.
+        with st.status("Analisi in corso…", expanded=False) as status:
+            turn = service.answer(user_q.strip(), df, explain=explain, unit=unit,
+                                  on_step=lambda msg: status.update(label=msg))
+            status.update(label="Analisi completata", state="complete")
+        # Un provider irraggiungibile non ha consumato token: addebitarlo
+        # significherebbe far pagare all'utente un guasto nostro.
+        if not (isinstance(turn.result, ExecutionFailure) and turn.result.kind == "provider"):
+            demo_consume(limits)
+        st.session_state.messages = _cap_storico(st.session_state.messages + [turn])
+
+    # Lo storico è una lista di Turn (domanda e risposta nello stesso oggetto). I più
+    # recenti in alto e aperti; i precedenti raccolti in un expander per non allungare
+    # la pagina all'infinito. L'indice nella lista fa da chiave stabile ai grafici.
+    turns: list[Turn] = st.session_state.messages
+    indici = list(reversed(range(len(turns))))  # dal più recente al più vecchio
+    for i in indici[:_TURNI_IN_VISTA]:
+        _render_turn(turns[i], i)
+
+    vecchi = indici[_TURNI_IN_VISTA:]
+    if vecchi:
+        with st.expander(f"Conversazioni precedenti ({len(vecchi)})"):
+            for i in vecchi:
+                _render_turn(turns[i], i)
