@@ -15,6 +15,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from nlda.loader import dataset_signature
 from nlda.sandbox.pool import riserva
 from nlda.service import AnalysisService
 from nlda.ui.pages import (
@@ -22,13 +23,14 @@ from nlda.ui.pages import (
     refresh_report_state,
     render_chat,
     render_executive_report,
+    render_filter,
     render_kpis,
     render_period_comparison,
     render_report,
     render_report_selectors,
     render_sidebar_config,
 )
-from nlda.ui.session import demo_limits, get_agent, load_dataframe
+from nlda.ui.session import apply_filter, demo_limits, get_agent, load_dataframe
 from nlda.ui_theme import console_css
 from nlda.utils import fmt_num
 
@@ -73,20 +75,32 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    df, source_label = load_dataframe(config.uploaded_file)
-    if df is None:
+    df_full, source_label = load_dataframe(config.uploaded_file)
+    if df_full is None:
         st.info("Carica un file CSV dalla barra laterale per iniziare.")
         st.stop()
 
-    st.caption(f"{source_label} — {fmt_num(len(df))} righe · {df.shape[1]} colonne")
+    sel_measure, sel_category, unit = render_report_selectors(df_full)
+    # Il filtro restringe l'INTERA pagina (report, KPI, confronto, chat) e resta
+    # attivo tra i turni. La firma del dataset si calcola sul df INTERO: cambiare
+    # filtro non azzera la conversazione, cambiare file sì.
+    filtro = render_filter(df_full)
+    df, filtro_label = apply_filter(df_full, filtro)
+    data_sig = dataset_signature(df_full, source_label)
 
-    sel_measure, sel_category, unit = render_report_selectors(df)
+    if filtro_label:
+        st.caption(f"{source_label} — 🔎 filtro attivo: {filtro_label} · "
+                   f"{fmt_num(len(df))} righe su {fmt_num(len(df_full))}")
+    else:
+        st.caption(f"{source_label} — {fmt_num(len(df))} righe · {df.shape[1]} colonne")
+
     render_kpis(df, sel_measure, sel_category, unit)
 
     with st.expander("Anteprima dei dati (prime 10 righe)"):
         st.dataframe(df.head(10), width="stretch")
 
-    report_sig, insights = refresh_report_state(df, source_label, sel_measure, sel_category)
+    report_sig, insights = refresh_report_state(df, data_sig, sel_measure, sel_category,
+                                                filter_key=filtro or ())
 
     slot_sintesi = render_report(df, insights, sel_measure, unit)
     render_period_comparison(df, sel_measure, unit)

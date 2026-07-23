@@ -78,3 +78,19 @@ def test_app_completa_si_disegna_senza_errori(monkeypatch):
     assert "Fai una domanda ai tuoi dati" in testi
     # Il dataset di default (Superstore) ha una colonna data: la sezione c'è.
     assert "Confronto tra periodi" in testi
+
+
+def test_il_filtro_restringe_la_pagina(monkeypatch):
+    # Seleziona una colonna categoriale e un valore, e verifica che il badge "filtro
+    # attivo" compaia senza eccezioni: prova che il filtro alimenta davvero la pagina.
+    monkeypatch.setattr("nlda.agent.DataAgent.overview", lambda self, *a, **k: "")
+    at = AppTest.from_file("main.py", default_timeout=60).run()
+
+    flt = at.selectbox(key="flt_col")
+    colonna = flt.options[1]                         # prima categoria reale (0 = "(nessun filtro)")
+    flt.set_value(colonna).run()
+    valori = at.multiselect(key="flt_vals").options
+    at.multiselect(key="flt_vals").set_value([valori[0]]).run()
+
+    assert not at.exception, at.exception
+    assert any("filtro attivo" in c.value.lower() for c in at.caption)
