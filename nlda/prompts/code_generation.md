@@ -24,6 +24,9 @@ REGOLE TASSATIVE:
    result = agg.sort_values('<num>', ascending=False).groupby('<gruppo>', as_index=False).head(5)
    NON usare df.groupby(...).apply(...) seguito da reset_index(drop=True): perde le
    colonne di raggruppamento e causa errori.
+9. Per confrontare una misura tra PERIODI (es. "vendite per trimestre", "confronta i mesi", "crescita anno su anno") usa la funzione compare_periods(df, '<colonna_data>', '<colonna_numerica>', freq='trimestre'): restituisce un DataFrame con le colonne 'periodo', la misura e 'variazione_%' rispetto al periodo precedente. freq può essere 'mese', 'trimestre' o 'anno'. Esempio:
+   result = compare_periods(df, '<data>', '<num>', freq='trimestre')
+   fig = to_chart(result[['periodo', '<num>']], kind='bar')
 
 ESEMPIO DI GRAFICO (adattato a questo dataset):
 $example

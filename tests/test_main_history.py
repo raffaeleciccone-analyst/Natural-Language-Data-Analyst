@@ -76,3 +76,5 @@ def test_app_completa_si_disegna_senza_errori(monkeypatch):
     testi = [s.value for s in at.subheader]
     assert "Report iniziale sui dati" in testi
     assert "Fai una domanda ai tuoi dati" in testi
+    # Il dataset di default (Superstore) ha una colonna data: la sezione c'è.
+    assert "Confronto tra periodi" in testi
