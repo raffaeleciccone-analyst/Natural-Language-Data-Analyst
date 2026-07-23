@@ -61,8 +61,9 @@ palette e tipografia reali dell'interfaccia. Per provarla davvero c'è la
   coppia di chiavi; report e domande valgono poi sui dati uniti.
 - **Esporta la conversazione** in Markdown: ogni turno con domanda, risultato,
   spiegazione e il **codice Pandas generato**.
-- **Risposta testuale** a ogni domanda: l'AI interpreta il risultato calcolato e
-  risponde citando i numeri chiave.
+- **Risposta testuale in streaming** a ogni domanda: l'AI interpreta il risultato
+  calcolato e risponde citando i numeri chiave, con l'effetto typewriter mentre
+  scrive (dove il provider lo supporta; altrimenti compare l'intera risposta).
 - **Unità di misura opzionale**: puoi indicarla dalla barra laterale; per le
   misure economiche senza unità indicata viene usato il dollaro come standard.
 - **Esecuzione sicura**: il codice generato è validato staticamente con una

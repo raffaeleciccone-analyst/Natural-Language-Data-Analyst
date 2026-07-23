@@ -5,6 +5,8 @@ laterale, i KPI, il report e la chat. Solo LAYOUT — i numeri li calcola
 cache, caricamento) sta in `nlda.ui.session`. `main.py` chiama queste funzioni
 nell'ordine giusto.
 """
+from dataclasses import replace
+
 import pandas as pd
 import streamlit as st
 
@@ -24,7 +26,7 @@ from nlda.loader import (
 )
 from nlda.periods import compare_periods
 from nlda.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers
-from nlda.results import ExecutionFailure
+from nlda.results import ExecutionFailure, ExecutionSuccess
 from nlda.service import AnalysisService, Turn
 from nlda.ui.session import (
     _KEY_ENV,
@@ -409,6 +411,26 @@ def _render_turn(turn: Turn, key_index: int, columns=None) -> None:
                       kp=f"h{key_index}", columns=columns)
 
 
+def _render_turn_streaming(service: AnalysisService, question: str, turn: Turn,
+                           columns, unit: str, explain: bool) -> Turn:
+    """
+    Rende il turno appena chiesto con la spiegazione in STREAMING (effetto typewriter)
+    e restituisce il turno completato col testo finale, da conservare nello storico.
+
+    La spiegazione si streamma qui; il resto (avvisi, grafico, dati, codice) passa da
+    `render_result` con `explanation=None`, così l'ordine è lo stesso dello storico.
+    """
+    with st.chat_message("user"):
+        st.write(question)
+    with st.chat_message("assistant"):
+        testo = None
+        if explain and isinstance(turn.result, ExecutionSuccess):
+            reso = st.write_stream(service.stream_explanation(question, turn.result, unit))
+            testo = (str(reso).strip() or None)
+        render_result(turn.code, turn.result, explanation=None, kp="live", columns=columns)
+    return replace(turn, explanation=testo)
+
+
 def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
                 explain: bool, unit: str, dataset_label: str = "") -> None:
     """Box domanda e storico della conversazione (turno più recente in alto)."""
@@ -421,30 +443,17 @@ def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
     with st.form("ask_form", clear_on_submit=True):
         c_in, c_btn = st.columns([8, 1])
         user_q = c_in.text_input(
-            "domanda", label_visibility="collapsed",
+            "domanda", label_visibility="collapsed", key="chat_q",
             placeholder="Es. 'Qual è il mese con più vendite?' "
                         "oppure 'Mostrami le vendite per regione'",
         )
         submitted = c_btn.form_submit_button("Invia", width="stretch")
 
-    if submitted and user_q and user_q.strip() and demo_allows(limits, "domande"):
-        # st.status invece di un unico spinner: la domanda passa per più fasi
-        # (codice → esecuzione → eventuali correzioni → spiegazione) e con un modello
-        # lento un solo "Analisi in corso..." lasciava l'utente al buio. on_step
-        # aggiorna l'etichetta man mano, senza portare Streamlit dentro il servizio.
-        with st.status("Analisi in corso…", expanded=False) as status:
-            turn = service.answer(user_q.strip(), df, explain=explain, unit=unit,
-                                  on_step=lambda msg: status.update(label=msg))
-            status.update(label="Analisi completata", state="complete")
-        # Un provider irraggiungibile non ha consumato token: addebitarlo
-        # significherebbe far pagare all'utente un guasto nostro.
-        if not (isinstance(turn.result, ExecutionFailure) and turn.result.kind == "provider"):
-            demo_consume(limits)
-        st.session_state.messages = _cap_storico(st.session_state.messages + [turn])
+    # Slot in cima (creato ORA, riempito DOPO): la risposta del turno appena chiesto
+    # si streamma qui, sopra lo storico. Non serve rerun né si rischia il doppio
+    # render, perché lo storico si legge PRIMA di aggiungere il nuovo turno.
+    live = st.container()
 
-    # Lo storico è una lista di Turn (domanda e risposta nello stesso oggetto). I più
-    # recenti in alto e aperti; i precedenti raccolti in un expander per non allungare
-    # la pagina all'infinito. L'indice nella lista fa da chiave stabile ai grafici.
     turns: list[Turn] = st.session_state.messages
 
     # Esporta l'intera conversazione (numeri, spiegazioni e codice) in Markdown.
@@ -455,13 +464,30 @@ def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
             file_name="conversazione.md", mime="text/markdown",
         )
 
+    # Storico: i più recenti in alto e aperti; i precedenti in un expander. L'indice
+    # nella lista fa da chiave stabile ai grafici.
     colonne = list(df.columns)
     indici = list(reversed(range(len(turns))))  # dal più recente al più vecchio
     for i in indici[:_TURNI_IN_VISTA]:
         _render_turn(turns[i], i, columns=colonne)
-
     vecchi = indici[_TURNI_IN_VISTA:]
     if vecchi:
         with st.expander(f"Conversazioni precedenti ({len(vecchi)})"):
             for i in vecchi:
                 _render_turn(turns[i], i, columns=colonne)
+
+    if submitted and user_q and user_q.strip() and demo_allows(limits, "domande"):
+        with live:
+            # Il codice si genera ed esegue "dietro" lo status (on_step aggiorna la
+            # fase); la SPIEGAZIONE si streamma poi in chiaro. explain=False al service:
+            # la narrativa non la fa lui, la streamma la UI.
+            with st.status("Analisi in corso…", expanded=False) as status:
+                turn = service.answer(user_q.strip(), df, explain=False, unit=unit,
+                                      on_step=lambda msg: status.update(label=msg))
+                status.update(label="Analisi completata", state="complete")
+            # Un provider irraggiungibile non ha consumato token: addebitarlo
+            # significherebbe far pagare all'utente un guasto nostro.
+            if not (isinstance(turn.result, ExecutionFailure) and turn.result.kind == "provider"):
+                demo_consume(limits)
+            turn = _render_turn_streaming(service, user_q.strip(), turn, colonne, unit, explain)
+        st.session_state.messages = _cap_storico(turns + [turn])
