@@ -32,9 +32,17 @@ CATEGORICAL_LIGHT = [
     "#1baf7a", "#eb6834", "#4a3aa7", "#e34948",
 ]
 
-# Colori di superficie/inchiostro dei grafici (coerenti con l'UI "Console")
-_THEME = dict(surface="#ffffff", ink="#16191c", secondary="#59626b",
-              grid="#e2e6e1", axis="#d3d8d1", colorway=CATEGORICAL_LIGHT)
+# Colori di superficie/inchiostro dei grafici (coerenti con l'UI "strumento": toni
+# freddi, accento teal in testa alla colorway così le barre a serie singola sono teal;
+# la palette categorica validata resta per i grafici multi-serie).
+_THEME = dict(surface="#ffffff", ink="#1b1f24", secondary="#586471",
+              grid="#e4e8ec", axis="#d5dbe1",
+              colorway=["#0d8a7d", *CATEGORICAL_LIGHT])
+
+# Colore delle serie SINGOLE (barre/linea/istogramma). Va passato alla CREAZIONE
+# della figura: Plotly Express cuoce nella traccia il proprio colore di default e
+# non rispetta layout.colorway impostato dopo — quindi si forza qui.
+_BAR = _THEME["colorway"][0]
 
 # Tipografia dei grafici (allineata all'UI: Plex Sans + Plex Mono per i numeri)
 _FONT_SANS = "'IBM Plex Sans', system-ui, -apple-system, sans-serif"
@@ -127,7 +135,8 @@ def to_chart(res, kind: str = "bar"):
     x, y = data.columns[0], data.columns[1]
 
     if kind == "line":
-        return apply_theme(px.line(data, x=x, y=y, markers=True))
+        return apply_theme(px.line(data, x=x, y=y, markers=True,
+                                   color_discrete_sequence=[_BAR]))
 
     # Barre: ordina e limita; se le etichette sono lunghe o numerose usa l'orizzontale
     # (nomi leggibili sull'asse y) invece di etichette ruotate e illeggibili.
@@ -141,9 +150,9 @@ def to_chart(res, kind: str = "bar"):
     long_labels = bool(len(labels)) and labels.str.len().max() > 16
     if long_labels or len(data) > 12:
         data = data.head(15).sort_values(y, ascending=True)  # orizzontale: max in alto
-        fig = px.bar(data, x=y, y=x, orientation="h")
+        fig = px.bar(data, x=y, y=x, orientation="h", color_discrete_sequence=[_BAR])
     else:
-        fig = px.bar(data, x=x, y=y)
+        fig = px.bar(data, x=x, y=y, color_discrete_sequence=[_BAR])
     return apply_theme(fig)
 
 
@@ -212,7 +221,7 @@ def histogram(df, col, nbins: int = 40):
     if use_log:
         import numpy as np
         log_vals = np.log10(values)
-        fig = px.histogram(x=log_vals, nbins=nbins)
+        fig = px.histogram(x=log_vals, nbins=nbins, color_discrete_sequence=[_BAR])
         # Etichette dell'asse alle potenze di 10, ma scritte in scala originale
         # (1, 10, 100, 1.000…): l'utente legge i valori veri, non gli esponenti.
         lo, hi = int(np.floor(log_vals.min())), int(np.ceil(log_vals.max()))
@@ -226,7 +235,7 @@ def histogram(df, col, nbins: int = 40):
     n_out = int((values > p_high).sum())
     skewed = n_out > 0 and p_high > float(values.min())
     shown = values[values <= p_high] if skewed else values
-    fig = px.histogram(shown, nbins=nbins)
+    fig = px.histogram(shown, nbins=nbins, color_discrete_sequence=[_BAR])
     fig.update_layout(bargap=0.05, yaxis_title="record",
                       xaxis_title=str(col), showlegend=False)
     if skewed:

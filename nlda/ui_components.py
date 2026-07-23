@@ -36,7 +36,7 @@ def answer_card(label: str, text: str, container=None) -> None:
 
 
 def readout(col, label: str, value: str, sub: str = "",
-            tick: str = "#0e7c86", small: bool = False) -> None:
+            tick: str = "#0d8a7d", small: bool = False) -> None:
     """Card KPI in stile 'console': valore monospazio + tacca colorata."""
     # Il sotto-valore è SEMPRE presente (vuoto = spazio riservato) così le card
     # hanno tutte la stessa altezza.
@@ -61,7 +61,7 @@ def _leader_kpi(label: str, ranking: pd.Series, fmt_sub):
     """
     if ranking.empty:
         return None
-    return (label, str(ranking.index[0]), fmt_sub(ranking.iloc[0]), "#008300", True)
+    return (label, str(ranking.index[0]), fmt_sub(ranking.iloc[0]), "#c8d0d8", True)
 
 
 def build_kpis(df, sel_measure, sel_category, unit):
@@ -74,14 +74,14 @@ def build_kpis(df, sel_measure, sel_category, unit):
     def wu(v):  # accosta l'unità di misura, se indicata
         return f"{fmt_num(v)} {unit}".strip() if unit else fmt_num(v)
 
-    record_kpi = ("Record", fmt_num(len(df)), "", "#008300", False)
+    record_kpi = ("Record", fmt_num(len(df)), "", "#c8d0d8", False)
 
     kpis = []
     if sel_measure:
         s = df[sel_measure]
-        kpis.append((f"Totale {sel_measure}", wu(s.sum()), "", "#0e7c86", False))
-        kpis.append((f"Media {sel_measure}", wu(s.mean()), "", "#eda100", False))
-        kpis.append((f"Massimo {sel_measure}", wu(s.max()), "", "#2a78d6", False))
+        kpis.append((f"Totale {sel_measure}", wu(s.sum()), "", "#0d8a7d", False))
+        kpis.append((f"Media {sel_measure}", wu(s.mean()), "", "#c8d0d8", False))
+        kpis.append((f"Massimo {sel_measure}", wu(s.max()), "", "#c8d0d8", False))
         leader = None
         if sel_category:
             ranking = df.groupby(sel_category)[sel_measure].sum().sort_values(ascending=False)
@@ -90,14 +90,14 @@ def build_kpis(df, sel_measure, sel_category, unit):
         kpis.append(leader or record_kpi)
     elif sel_category:  # nessuna misura: KPI a conteggi
         vc = df[sel_category].value_counts()
-        kpis.append(("Record", fmt_num(len(df)), "", "#2a78d6", False))
-        kpis.append((f"{sel_category} distinte", fmt_num(df[sel_category].nunique()), "", "#eda100", False))
+        kpis.append(("Record", fmt_num(len(df)), "", "#c8d0d8", False))
+        kpis.append((f"{sel_category} distinte", fmt_num(df[sel_category].nunique()), "", "#c8d0d8", False))
         leader = _leader_kpi(f"Top {sel_category}", vc, lambda v: f"{fmt_num(v)} record")
         if leader is not None:
             kpis.append(leader)
     else:
-        kpis.append(("Record", fmt_num(len(df)), "", "#2a78d6", False))
-        kpis.append(("Colonne", str(df.shape[1]), "", "#008300", False))
+        kpis.append(("Record", fmt_num(len(df)), "", "#c8d0d8", False))
+        kpis.append(("Colonne", str(df.shape[1]), "", "#c8d0d8", False))
     return kpis
 
 
