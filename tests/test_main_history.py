@@ -78,6 +78,8 @@ def test_app_completa_si_disegna_senza_errori(monkeypatch):
     assert "Fai una domanda ai tuoi dati" in testi
     # Il dataset di default (Superstore) ha una colonna data: la sezione c'è.
     assert "Confronto tra periodi" in testi
+    # Le sezioni di sidebar per filtro e join sono presenti (render_filter/render_join).
+    assert "Filtro" in testi and "Unisci un secondo dataset" in testi
 
 
 def test_il_filtro_restringe_la_pagina(monkeypatch):

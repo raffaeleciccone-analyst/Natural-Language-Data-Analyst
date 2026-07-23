@@ -24,6 +24,7 @@ from nlda.ui.pages import (
     render_chat,
     render_executive_report,
     render_filter,
+    render_join,
     render_kpis,
     render_period_comparison,
     render_report,
@@ -79,6 +80,10 @@ def main() -> None:
     if df_full is None:
         st.info("Carica un file CSV dalla barra laterale per iniziare.")
         st.stop()
+
+    # Join opzionale con un secondo file: se presente, da qui in poi df_full è il df
+    # UNITO. È un preprocessing — il resto della pipeline resta a un solo DataFrame.
+    df_full, source_label = render_join(df_full, source_label)
 
     sel_measure, sel_category, unit = render_report_selectors(df_full)
     # Il filtro restringe l'INTERA pagina (report, KPI, confronto, chat) e resta
