@@ -317,7 +317,6 @@ def _render_distribution_and_correlations(insights: dict, sel_measure) -> None:
 
 def render_executive_report(agent: DataAgent, insights: dict, limits: DemoLimits,
                             exec_sig: tuple, unit: str) -> None:
-    st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
     st.subheader("Report esecutivo")
     st.caption("Executive Summary, Key Insights, Recommendations, Risks e Next Steps, "
                "basati sui numeri calcolati dai dati caricati.")
@@ -358,7 +357,6 @@ def render_period_comparison(df: pd.DataFrame, sel_measure, unit: str = "") -> N
     if not date_cols or not measures:
         return
 
-    st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
     st.subheader("Confronto tra periodi")
     with st.expander("Confronta una misura nel tempo, con la variazione percentuale"):
         c1, c2, c3 = st.columns(3)
@@ -434,7 +432,6 @@ def _render_turn_streaming(service: AnalysisService, question: str, turn: Turn,
 def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
                 explain: bool, unit: str, dataset_label: str = "") -> None:
     """Box domanda e storico della conversazione (turno più recente in alto)."""
-    st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
     st.subheader("Fai una domanda ai tuoi dati")
 
     if "messages" not in st.session_state:
