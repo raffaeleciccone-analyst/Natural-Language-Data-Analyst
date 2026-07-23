@@ -463,6 +463,27 @@ def render_executive_report(agent: DataAgent, insights: dict, limits: DemoLimits
                            file_name="report_esecutivo.md", mime="text/markdown")
 
 
+# Storico della conversazione. Vive in st.session_state e ogni turno può contenere
+# una figura Plotly (che pesa): senza tetto crescerebbe finché la sessione non si
+# ricarica, e Streamlit ridisegna TUTTA la cronologia a ogni rerun (ogni click).
+_MAX_TURNI = 20        # oltre questo, i turni più vecchi vengono scartati
+_TURNI_IN_VISTA = 3    # i più recenti restano aperti; il resto va in un expander
+
+
+def _cap_storico(turns: list[Turn]) -> list[Turn]:
+    """Tiene solo gli ultimi _MAX_TURNI turni, così memoria e costo di render
+    restano limitati indipendentemente da quanto a lungo dura la sessione."""
+    return turns[-_MAX_TURNI:]
+
+
+def _render_turn(turn: Turn, key_index: int) -> None:
+    """Un turno dello storico: la domanda dell'utente e la risposta dell'assistente."""
+    with st.chat_message("user"):
+        st.write(turn.question)
+    with st.chat_message("assistant"):
+        render_result(turn.code, turn.result, turn.explanation, kp=f"h{key_index}")
+
+
 def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
                 explain: bool, unit: str) -> None:
     """Box domanda e storico della conversazione (turno più recente in alto)."""
@@ -488,16 +509,21 @@ def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
         # significherebbe far pagare all'utente un guasto nostro.
         if not (isinstance(turn.result, ExecutionFailure) and turn.result.kind == "provider"):
             demo_consume(limits)
-        st.session_state.messages.append(turn)
+        st.session_state.messages = _cap_storico(st.session_state.messages + [turn])
 
-    # Lo storico è una lista di Turn: domanda e risposta stanno nello stesso
-    # oggetto, quindi non serve ricostruire le coppie scorrendo messaggi alternati.
+    # Lo storico è una lista di Turn (domanda e risposta nello stesso oggetto). I più
+    # recenti in alto e aperti; i precedenti raccolti in un expander per non allungare
+    # la pagina all'infinito. L'indice nella lista fa da chiave stabile ai grafici.
     turns: list[Turn] = st.session_state.messages
-    for i, turn in reversed(list(enumerate(turns))):
-        with st.chat_message("user"):
-            st.write(turn.question)
-        with st.chat_message("assistant"):
-            render_result(turn.code, turn.result, turn.explanation, kp=f"h{i}")
+    indici = list(reversed(range(len(turns))))  # dal più recente al più vecchio
+    for i in indici[:_TURNI_IN_VISTA]:
+        _render_turn(turns[i], i)
+
+    vecchi = indici[_TURNI_IN_VISTA:]
+    if vecchi:
+        with st.expander(f"Conversazioni precedenti ({len(vecchi)})"):
+            for i in vecchi:
+                _render_turn(turns[i], i)
 
 
 def main() -> None:
