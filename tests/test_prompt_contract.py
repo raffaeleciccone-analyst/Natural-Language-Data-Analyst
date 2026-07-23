@@ -40,7 +40,8 @@ GOLDEN = Path(__file__).parent / "fixtures" / "system_prompt.golden.txt"
 _SEPARATORE = "\n\n" + "=" * 78 + "\n### PROMPT: {}\n" + "=" * 78 + "\n\n"
 
 # Nomi che l'executor mette a disposizione del codice generato (vedi `_run_code`).
-AMBIENTE_DI_ESECUZIONE = {"df", "pd", "px", "go", "to_chart", "try_chart"} | set(SAFE_BUILTINS)
+AMBIENTE_DI_ESECUZIONE = ({"df", "pd", "px", "go", "to_chart", "try_chart", "compare_periods"}
+                          | set(SAFE_BUILTINS))
 
 # Variabili da cui l'executor raccoglie il risultato finale.
 NOMI_DEL_RISULTATO = {"result", "risultato", "fig"}
@@ -171,7 +172,7 @@ def test_i_nomi_promessi_esistono_nellambiente_di_esecuzione(prompt: str):
     e otterrà un NameError — un errore che nessuna correzione può risolvere,
     perché il nome non esiste da nessuna parte.
     """
-    citati = set(re.findall(r"\b(df|pd|px|go|to_chart|try_chart|st)\b", prompt))
+    citati = set(re.findall(r"\b(df|pd|px|go|to_chart|try_chart|compare_periods|st)\b", prompt))
     citati.discard("st")  # citato solo per VIETARLO ("niente st.*")
     mancanti = citati - AMBIENTE_DI_ESECUZIONE
     assert not mancanti, f"il prompt promette nomi che non esistono a runtime: {mancanti}"

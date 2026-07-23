@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from nlda.agent import DataAgent
-from nlda.charts import apply_theme, corr_heatmap, histogram, to_chart
+from nlda.charts import apply_theme, corr_heatmap, histogram, px, to_chart
 from nlda.demo import DemoLimits
 from nlda.export import conversation_to_markdown
 from nlda.loader import (
@@ -23,6 +23,7 @@ from nlda.loader import (
     ordered_measures,
     profile,
 )
+from nlda.periods import compare_periods
 from nlda.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers
 from nlda.results import ExecutionFailure
 from nlda.service import AnalysisService, Turn
@@ -274,6 +275,51 @@ def render_executive_report(agent: DataAgent, insights: dict, limits: DemoLimits
             st.markdown(st.session_state.exec_report)
         st.download_button("Scarica il report (.md)", st.session_state.exec_report,
                            file_name="report_esecutivo.md", mime="text/markdown")
+
+
+_FREQ_LABELS = {"Trimestre": "trimestre", "Mese": "mese", "Anno": "anno"}
+
+
+def render_period_comparison(df: pd.DataFrame, sel_measure, unit: str = "") -> None:
+    """
+    Confronto di una misura tra periodi (mese/trimestre/anno), deterministico:
+    stessi numeri che il modello otterrebbe via `compare_periods`, ma senza LLM.
+    Compare solo se il dataset ha almeno una colonna data e una misura numerica.
+    """
+    date_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c])]
+    measures = ordered_measures(measure_columns(df))
+    if not date_cols or not measures:
+        return
+
+    st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
+    st.subheader("Confronto tra periodi")
+    with st.expander("Confronta una misura nel tempo, con la variazione percentuale"):
+        c1, c2, c3 = st.columns(3)
+        date_col = c1.selectbox("Colonna data", date_cols, key="cmp_date")
+        idx = measures.index(sel_measure) if sel_measure in measures else 0
+        measure = c2.selectbox("Misura", measures, index=idx, key="cmp_measure")
+        freq_label = c3.selectbox("Periodo", list(_FREQ_LABELS), key="cmp_freq")
+
+        try:
+            comp = compare_periods(df, date_col, measure, freq=_FREQ_LABELS[freq_label])
+        except Exception as e:  # noqa: BLE001 — dati dell'utente: si spiega, non si esplode
+            st.caption(f"Confronto non disponibile: {e}")
+            return
+
+        # Tabella leggibile: numeri formattati e variazione con segno (— sul primo).
+        display = comp.copy()
+        display[measure] = display[measure].map(fmt_num)
+        display["variazione_%"] = display["variazione_%"].map(
+            lambda v: "—" if pd.isna(v) else f"{v:+.1f}%")
+        etichetta = measure + (f" ({unit})" if unit else "")
+        display = display.rename(columns={measure: etichetta, "variazione_%": "Variazione",
+                                          "periodo": "Periodo"})
+        st.dataframe(display, width="stretch", hide_index=True)
+
+        # Barre in ordine CRONOLOGICO: px.bar non riordina, mentre to_chart ordina
+        # per valore — perderebbe la sequenza temporale, che è il punto del confronto.
+        st.plotly_chart(apply_theme(px.bar(comp, x="periodo", y=measure)),
+                        width="stretch", key="cmp_chart")
 
 
 # Storico della conversazione. Vive in st.session_state e ogni turno può contenere

@@ -23,6 +23,7 @@ import pandas as pd
 from nlda.charts import apply_theme, go, is_plotly_figure, px, to_chart, try_chart
 from nlda.config import settings
 from nlda.log import get_logger
+from nlda.periods import compare_periods
 from nlda.results import (
     FAILURE_KINDS,
     ExecutionFailure,
@@ -98,7 +99,8 @@ def _run_code(code: str, df: pd.DataFrame) -> ExecutionResult:
     # Contesto isolato per l'esecuzione (builtin ridotti al minimo; niente 'st')
     safe_globals = {"__builtins__": SAFE_BUILTINS}
     local_context = {"df": df, "pd": pd, "px": px, "go": go,
-                     "to_chart": to_chart, "try_chart": try_chart}
+                     "to_chart": to_chart, "try_chart": try_chart,
+                     "compare_periods": compare_periods}
 
     try:
         fig = None

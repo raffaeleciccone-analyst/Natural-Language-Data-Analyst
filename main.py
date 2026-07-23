@@ -23,6 +23,7 @@ from nlda.ui.pages import (
     render_chat,
     render_executive_report,
     render_kpis,
+    render_period_comparison,
     render_report,
     render_report_selectors,
     render_sidebar_config,
@@ -88,6 +89,7 @@ def main() -> None:
     report_sig, insights = refresh_report_state(df, source_label, sel_measure, sel_category)
 
     slot_sintesi = render_report(df, insights, sel_measure, unit)
+    render_period_comparison(df, sel_measure, unit)
     render_executive_report(
         agent, insights, limits,
         exec_sig=(report_sig, config.provider, config.model_name, unit), unit=unit,
