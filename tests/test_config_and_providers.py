@@ -138,3 +138,61 @@ def test_retry_esaurito_rilancia(monkeypatch):
     with pytest.raises(RuntimeError):
         p.generate("sys", "user")
     assert p.calls == 2  # 1 iniziale + 1 retry
+
+
+# --- Ritentabilità: un 4xx non transitorio non deve bruciare i tentativi ---------
+class _HTTPError(Exception):
+    """Eccezione che imita quelle degli SDK: espone un codice HTTP."""
+
+    def __init__(self, status_code: int):
+        super().__init__(f"HTTP {status_code}")
+        self.status_code = status_code
+
+
+class _StatusProvider(LLMProvider):
+    """Fallisce SEMPRE con un dato codice HTTP; conta le chiamate."""
+
+    def __init__(self, status_code: int):
+        super().__init__(model_name="fake")
+        self._status_code = status_code
+        self.calls = 0
+
+    def _call(self, system_prompt: str, user_prompt: str) -> str:
+        self.calls += 1
+        raise _HTTPError(self._status_code)
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 422])
+def test_errore_client_non_viene_ritentato(monkeypatch, status):
+    # Chiave errata, modello inesistente, richiesta malformata: ritentare identico
+    # fallirebbe uguale sprecando quota. Una sola chiamata, poi rilancia.
+    monkeypatch.setattr(base_mod, "settings", Settings(max_retries=3, retry_backoff=0.0))
+    monkeypatch.setattr(base_mod.time, "sleep", lambda _s: None)
+
+    p = _StatusProvider(status_code=status)
+    with pytest.raises(_HTTPError):
+        p.generate("sys", "user")
+    assert p.calls == 1  # nessun retry
+
+
+@pytest.mark.parametrize("status", [408, 429, 500, 503])
+def test_errore_transitorio_viene_ritentato(monkeypatch, status):
+    # Rate-limit, timeout server e 5xx sono transitori: si esauriscono i tentativi.
+    monkeypatch.setattr(base_mod, "settings", Settings(max_retries=2, retry_backoff=0.0))
+    monkeypatch.setattr(base_mod.time, "sleep", lambda _s: None)
+
+    p = _StatusProvider(status_code=status)
+    with pytest.raises(_HTTPError):
+        p.generate("sys", "user")
+    assert p.calls == 3  # 1 iniziale + 2 retry
+
+
+def test_errore_senza_codice_http_resta_ritentabile(monkeypatch):
+    # Un errore di rete/timeout non porta risposta HTTP: va trattato come transitorio.
+    monkeypatch.setattr(base_mod, "settings", Settings(max_retries=1, retry_backoff=0.0))
+    monkeypatch.setattr(base_mod.time, "sleep", lambda _s: None)
+
+    p = _FlakyProvider(fails=5)  # RuntimeError: nessuno status_code
+    with pytest.raises(RuntimeError):
+        p.generate("sys", "user")
+    assert p.calls == 2  # ritentato come prima
