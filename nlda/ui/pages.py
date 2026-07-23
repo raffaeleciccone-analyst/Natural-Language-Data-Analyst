@@ -11,6 +11,7 @@ import streamlit as st
 from nlda.agent import DataAgent
 from nlda.charts import apply_theme, corr_heatmap, histogram, to_chart
 from nlda.demo import DemoLimits
+from nlda.export import conversation_to_markdown
 from nlda.loader import (
     SUPPORTED_EXTENSIONS,
     analyze,
@@ -297,7 +298,7 @@ def _render_turn(turn: Turn, key_index: int) -> None:
 
 
 def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
-                explain: bool, unit: str) -> None:
+                explain: bool, unit: str, dataset_label: str = "") -> None:
     """Box domanda e storico della conversazione (turno più recente in alto)."""
     st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
     st.subheader("Fai una domanda ai tuoi dati")
@@ -333,6 +334,15 @@ def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
     # recenti in alto e aperti; i precedenti raccolti in un expander per non allungare
     # la pagina all'infinito. L'indice nella lista fa da chiave stabile ai grafici.
     turns: list[Turn] = st.session_state.messages
+
+    # Esporta l'intera conversazione (numeri, spiegazioni e codice) in Markdown.
+    if turns:
+        st.download_button(
+            "⬇ Scarica la conversazione (.md)",
+            data=conversation_to_markdown(turns, dataset_label=dataset_label),
+            file_name="conversazione.md", mime="text/markdown",
+        )
+
     indici = list(reversed(range(len(turns))))  # dal più recente al più vecchio
     for i in indici[:_TURNI_IN_VISTA]:
         _render_turn(turns[i], i)
