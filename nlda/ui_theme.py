@@ -1,6 +1,7 @@
 """
-Stile dell'interfaccia "Console" (tema chiaro). Tenuto fuori da main.py per non
-mescolare presentazione e logica: main.py inietta soltanto `console_css()`.
+Stile dell'interfaccia — tema "strumento di misura": rail (sidebar) scuro,
+workspace freddo, un solo accento teal usato con parsimonia. Tenuto fuori da
+main.py per non mescolare presentazione e logica: main.py inietta `console_css()`.
 
 ⚠️ SCELTA CONSAPEVOLE — i selettori `[data-testid="st..."]` (stSidebar, stForm,
 stMetricValue, stChatMessage, ...) NON sono un'API pubblica di Streamlit: sono
@@ -8,16 +9,18 @@ dettagli interni del suo DOM. A un aggiornamento di Streamlit possono cambiare o
 sparire, e allora la regola CSS smette di applicarsi in silenzio — il layout non
 si rompe, si limita a perdere lo stile mirato. Si accetta il rischio perché non
 esiste un modo ufficiale per stilare quei componenti; se un giorno il tema si
-"slega", il primo posto da controllare è se questi testid sono cambiati. La classe
-`.block-container` e le classi custom (`.readout`, `.answer-card`, `.scale`) non
-hanno questo problema: sono stabili o definite da noi.
+"slega", il primo posto da controllare è se questi testid sono cambiati. Le classi
+custom (`.readout`, `.answer-card`, `.scale`) sono definite da noi e stabili.
 """
 
-# Palette dell'UI (tema chiaro)
+# Palette dell'UI. Chiavi "storiche" (page, surface, accent...) + le tinte del rail.
 PALETTE = dict(
-    page="#eff1ee", surface="#ffffff", surface2="#f7f8f6",
-    border="#e2e6e1", strong="#d3d8d1", ink="#16191c", ink2="#59626b",
-    muted="#6b7480", accent="#0e7c86", deep="#0a5960", tint="#e2f0f0",
+    page="#f2f4f6", surface="#ffffff", surface2="#f7f9fb",
+    border="#e4e8ec", strong="#d5dbe1", ink="#1b1f24", ink2="#586471",
+    muted="#8b97a3", accent="#0d8a7d", deep="#0a6b61", tint="#e3f0ee",
+    bar="#c8d0d8",
+    rail="#191d23", rail2="#20262e", rail_ink="#d6dde4",
+    rail_soft="#8a95a1", rail_line="#2b323b",
 )
 
 
@@ -36,83 +39,101 @@ def console_css() -> str:
           .stApp, .stApp p, .stApp label, .stApp li, .stMarkdown {{
               font-family: var(--sans); color: {c['ink']};
           }}
-          .block-container {{ padding-top: 2rem; max-width: 1150px; }}
-          section[data-testid="stSidebar"] {{
-              background: {c['surface']}; border-right: 1px solid {c['border']};
-          }}
-          h1, h2, h3, h4 {{ font-family: var(--display); color: {c['ink']}; letter-spacing: -0.015em; }}
-          /* Sottotitolo: prosa corrente in SANS (il mono resta solo sul nome-modello
-             in <code>). In mono con letter-spacing "urlava" quanto il titolo. */
+          .block-container {{ padding-top: 1.6rem; max-width: 1280px; }}
+          h1, h2, h3, h4 {{ font-family: var(--display); color: {c['ink']}; letter-spacing: -0.01em; }}
+          h2, h3 {{ font-size: 1.05rem; text-transform: uppercase; letter-spacing: 0.02em; }}
           .app-subtitle {{ font-family: var(--sans); color: {c['ink2']} !important;
-              font-size: 0.82rem; margin-top: -0.6rem; }}
+              font-size: 0.86rem; margin-top: -0.4rem; }}
           code, .app-subtitle code {{ font-family: var(--mono); color: {c['deep']}; }}
           [data-testid="stCaptionContainer"] {{ font-family: var(--mono); color: {c['muted']}; }}
 
-          /* Readout KPI (firma "console") */
+          /* ===== RAIL (sidebar scura, non la barra grigia di default) ===== */
+          section[data-testid="stSidebar"] {{
+              background: {c['rail']}; border-right: 1px solid {c['rail_line']};
+          }}
+          section[data-testid="stSidebar"] .stMarkdown,
+          section[data-testid="stSidebar"] p,
+          section[data-testid="stSidebar"] label,
+          section[data-testid="stSidebar"] li,
+          section[data-testid="stSidebar"] span {{ color: {c['rail_ink']}; }}
+          section[data-testid="stSidebar"] h1,
+          section[data-testid="stSidebar"] h2,
+          section[data-testid="stSidebar"] h3 {{ color: #ffffff; }}
+          section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ color: {c['rail_soft']}; }}
+          /* Campi (select, input, uploader) scuri dentro il rail */
+          section[data-testid="stSidebar"] [data-baseweb="select"] > div,
+          section[data-testid="stSidebar"] [data-testid="stTextInput"] input,
+          section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {{
+              background: {c['rail2']}; border-color: {c['rail_line']}; color: {c['rail_ink']};
+          }}
+          section[data-testid="stSidebar"] [data-baseweb="select"] svg {{ fill: {c['rail_soft']}; }}
+          section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {{
+              font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.12em;
+              text-transform: uppercase; color: {c['rail_soft']}; }}
+
+          /* ===== KPI readout ===== */
           .readout {{
               background: {c['surface']}; border: 1px solid {c['border']};
-              border-radius: 14px; padding: 15px 18px 14px;
-              box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 10px 26px -20px rgba(0,0,0,0.35);
-              min-height: 120px;   /* min, non height fissa + overflow: un numero lungo
-                                      non deve più venire troncato ("2.297.200" mozzato) */
+              border-radius: 12px; padding: 14px 16px 13px; min-height: 116px;
+              box-shadow: 0 1px 2px rgba(20,30,40,0.04);
           }}
-          .readout .r-k {{ font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em;
+          .readout .r-k {{ font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.1em;
               text-transform: uppercase; color: {c['ink2']}; }}
-          .readout .r-v {{ font-family: var(--mono); font-weight: 600; font-size: 1.6rem;
+          .readout .r-v {{ font-family: var(--mono); font-weight: 600; font-size: 1.62rem;
               letter-spacing: -0.02em; margin-top: 7px; line-height: 1.1;
               font-variant-numeric: tabular-nums; color: {c['ink']}; }}
-          .readout .r-v.sm {{ font-size: 1.1rem; line-height: 1.2; margin-top: 12px;
+          .readout .r-v.sm {{ font-family: var(--display); font-size: 1.25rem; letter-spacing: 0;
+              line-height: 1.2; margin-top: 10px;
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-          /* Riga di accento (colore per-card): decorazione ONESTA, non una finta
-             progress bar riempita a un 60% che non corrispondeva ad alcun dato. */
-          .readout .r-tick {{ height: 3px; margin-top: 12px; border-radius: 2px;
-              background: var(--bar, {c['accent']}); }}
-          .readout .r-sub {{ font-family: var(--mono); font-size: 0.7rem; color: {c['muted']}; margin-top: 8px; }}
+          .readout .r-tick {{ height: 3px; margin-top: 11px; border-radius: 2px;
+              background: var(--bar, {c['accent']}); width: 34px; }}
+          .readout .r-sub {{ font-family: var(--mono); font-size: 0.7rem; color: {c['muted']}; margin-top: 9px; }}
 
-          /* Motivo a scala di misurazione */
-          .scale {{ height: 10px; margin: 8px 0 2px;
-              background-image: repeating-linear-gradient(90deg, {c['strong']} 0 1px, transparent 1px 9px); }}
+          /* Motivo "scala di misura" — la firma, sottile */
+          .scale {{ height: 8px; margin: 10px 0 2px;
+              background-image: repeating-linear-gradient(90deg, {c['strong']} 0 1px, transparent 1px 8px); }}
 
-          /* Riquadro risposta / sintesi */
+          /* ===== Riquadro risposta / sintesi (niente più callout con bordo colorato) ===== */
           .answer-card {{
-              background: {c['tint']}; border: 1px solid {c['border']};
-              border-left: 3px solid {c['accent']}; border-radius: 13px;
-              padding: 15px 18px; margin: 4px 0 14px 0;
+              background: {c['surface2']}; border: 1px solid {c['border']};
+              border-radius: 12px; padding: 14px 16px; margin: 4px 0 14px 0;
           }}
           .answer-label {{
-              font-family: var(--mono); color: {c['accent']}; font-weight: 600;
-              font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em;
-              margin-bottom: 7px; display: flex; align-items: center; gap: 8px;
+              font-family: var(--mono); color: {c['deep']}; font-weight: 600;
+              font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.12em;
+              margin-bottom: 8px;
           }}
-          .answer-label::before {{ content:""; width:14px; height:2px; background:{c['accent']}; }}
-          .answer-body {{ color: {c['ink']}; font-size: 1.0rem; line-height: 1.6; }}
-          /* Il grassetto della prosa NON va in mono: "West" in mono a metà frase
-             sembrava un errore. Resta l'enfasi (colore + peso), stesso font del testo. */
+          .answer-body {{ color: {c['ink']}; font-size: 0.98rem; line-height: 1.6; }}
           .answer-body b {{ color: {c['deep']}; font-weight: 600; }}
 
-          /* Metriche native (fallback), tabelle, chat */
+          /* ===== Componenti nativi ===== */
+          [data-testid="stDataFrame"] {{ border-radius: 10px; }}
           div[data-testid="stMetricValue"] {{ font-family: var(--mono); color: {c['accent']}; font-weight: 600; }}
           div[data-testid="stMetricLabel"] {{ font-family: var(--mono); color: {c['ink2']}; }}
           div[data-testid="stChatMessage"] {{
               background: {c['surface']}; border: 1px solid {c['border']};
-              border-radius: 14px; padding: 6px 14px;
+              border-radius: 12px; padding: 4px 12px;
           }}
-          .stExpander {{ border-radius: 12px; border: 1px solid {c['border']}; }}
-          /* Box domanda: fissato in alto (sempre raggiungibile senza scrollare) */
-          [data-testid="stForm"] {{
-              position: sticky; top: 0; z-index: 60;
-              background: {c['page']}; padding: 8px 0 6px;
-          }}
-          /* Box domanda inline: input pulito + pulsante in accento */
+          .stExpander {{ border-radius: 10px; border: 1px solid {c['border']}; }}
+          .stExpander summary {{ font-family: var(--mono); font-size: 0.78rem;
+              text-transform: uppercase; letter-spacing: 0.04em; color: {c['ink2']}; }}
+
+          /* Input della chat + pulsanti in accento teal */
           [data-testid="stTextInput"] input {{
               border-radius: 10px; border: 1px solid {c['strong']};
               background: {c['surface']}; color: {c['ink']};
           }}
-          [data-testid="stTextInput"] input:focus {{ border-color: {c['accent']}; }}
-          [data-testid="stFormSubmitButton"] button {{
+          [data-testid="stTextInput"] input:focus {{ border-color: {c['accent']}; box-shadow: 0 0 0 2px {c['tint']}; }}
+          [data-testid="stFormSubmitButton"] button,
+          [data-testid="stButton"] button[kind="primary"] {{
               background: {c['accent']}; color: #ffffff; border: 0;
               border-radius: 10px; font-weight: 600; font-family: var(--display);
           }}
-          [data-testid="stFormSubmitButton"] button:hover {{ background: {c['deep']}; }}
+          [data-testid="stFormSubmitButton"] button:hover,
+          [data-testid="stButton"] button[kind="primary"]:hover {{ background: {c['deep']}; }}
+          [data-testid="stDownloadButton"] button {{
+              border-radius: 9px; border: 1px solid {c['border']};
+              color: {c['deep']}; font-family: var(--mono); font-size: 0.8rem;
+          }}
         </style>
         """
