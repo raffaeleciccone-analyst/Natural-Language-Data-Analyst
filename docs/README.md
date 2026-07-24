@@ -5,7 +5,7 @@ Il README mostra due **screenshot reali** della demo:
 - `preview-report.png` — l'app intera: sidebar, KPI, report automatico e box domanda
 - `preview-answer.png` — una domanda con la risposta testuale e il grafico generati
 
-Catturati dalla [demo pubblica](https://natural-language-data-analyst.streamlit.app/)
+Catturati dalla [demo pubblica](https://natural-language-data-analyst-v1.streamlit.app/)
 (provider Groq) e ritagliati dallo screenshot del browser.
 
 ## Rigenerarle
