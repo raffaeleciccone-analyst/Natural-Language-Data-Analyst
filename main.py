@@ -22,6 +22,7 @@ from nlda.ui.pages import (
     fill_overview,
     refresh_report_state,
     render_chat,
+    render_column_structure,
     render_executive_report,
     render_filter,
     render_join,
@@ -43,7 +44,7 @@ _FAVICON = Path(__file__).parent / "assets" / "favicon.png"
 # Altezza dei due contenitori affiancati (report | chat). st.container(height=...)
 # rende ciascuna colonna scrollabile per conto suo: le due metà non si trascinano
 # lo scroll a vicenda. È un valore fisso (Streamlit non espone l'altezza del viewport).
-_COL_H = 720
+_COL_H = 560
 
 
 def configure_page() -> None:
@@ -119,12 +120,16 @@ def main() -> None:
     col_report, col_chat = st.columns([1.55, 1], gap="large")
     with col_report, st.container(height=_COL_H, border=False):
         slot_sintesi = render_report(df, insights, sel_measure, unit)
-        render_period_comparison(df, sel_measure, unit)
         render_executive_report(
             agent, insights, limits,
             exec_sig=(report_sig, config.provider, config.model_name, unit), unit=unit,
         )
-    with col_chat, st.container(height=_COL_H, border=False):
+        render_period_comparison(df, sel_measure, unit)
+        render_column_structure()
+    # La chat NON ha altezza fissa: prende quella del suo contenuto. Con un box fisso
+    # come il report, da vuota lasciava mezza colonna bianca sotto i suggerimenti.
+    # Il report resta a scorrimento (è lungo); le colonne si allineano in alto (CSS).
+    with col_chat:
         render_chat(service, df, limits, explain=config.explain, unit=unit,
                     dataset_label=source_label,
                     sel_measure=sel_measure, sel_category=sel_category)
