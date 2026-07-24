@@ -40,6 +40,10 @@ def console_css() -> str:
               font-family: var(--sans); color: {c['ink']};
           }}
           .block-container {{ padding-top: 1.6rem; max-width: 1700px; }}
+          /* Colonne affiancate allineate in ALTO: la chat, più corta del report, non
+             viene stirata alla sua altezza — così sotto la chat non resta mezza
+             colonna vuota. Vale anche per KPI e coppie di grafici (già di pari altezza). */
+          [data-testid="stHorizontalBlock"] {{ align-items: flex-start; }}
           h1, h2, h3, h4 {{ font-family: var(--display); color: {c['ink']}; letter-spacing: -0.01em; }}
           h2, h3 {{ font-size: 1.05rem; text-transform: uppercase; letter-spacing: 0.02em; }}
           .app-subtitle {{ font-family: var(--sans); color: {c['ink2']} !important;

@@ -39,7 +39,7 @@ from nlda.ui.session import (
     load_second_dataset,
 )
 from nlda.ui_components import answer_card, build_kpis, readout, render_linked_charts, render_result
-from nlda.utils import fmt_num, with_unit
+from nlda.utils import fmt_num, md_safe, with_unit
 
 
 def render_sidebar_config(limits: DemoLimits) -> SidebarConfig:
@@ -251,10 +251,15 @@ def render_report(df: pd.DataFrame, insights: dict, sel_measure, unit: str):
 
     _render_distribution_and_correlations(insights, sel_measure)
 
+    return slot_sintesi
+
+
+def render_column_structure() -> None:
+    """Expander col profilo delle colonne (tipi, mancanti, valori). Estratto da
+    render_report per poterlo tenere IN FONDO alla colonna, dopo il report esecutivo
+    e il confronto tra periodi (è materiale di dettaglio, non di apertura)."""
     with st.expander("Struttura delle colonne (tipi, mancanti, valori)"):
         st.dataframe(st.session_state.get("profile"), width="stretch", hide_index=True)
-
-    return slot_sintesi
 
 
 def fill_overview(slot, agent: DataAgent, insights: dict, unit: str,
@@ -338,7 +343,7 @@ def render_executive_report(agent: DataAgent, insights: dict, limits: DemoLimits
 
     if st.session_state.get("exec_report"):
         with st.container(border=True):
-            st.markdown(st.session_state.exec_report)
+            st.markdown(md_safe(st.session_state.exec_report))
         st.download_button("Scarica il report (.md)", st.session_state.exec_report,
                            file_name="report_esecutivo.md", mime="text/markdown")
 
