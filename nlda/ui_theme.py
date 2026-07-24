@@ -78,6 +78,10 @@ def console_css() -> str:
           }}
           section[data-testid="stSidebar"] [data-testid="stLogoSpacer"] {{ display: none !important; }}
           section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{ padding-top: 0.6rem !important; }}
+          /* Menu a tendina del selectbox più basso: l'ultimo in fondo (Filtro) apriva
+             un elenco da 300px che sbordava sotto lo schermo. Con max-height ridotta il
+             menu resta nello schermo e le voci in più scorrono al suo interno. */
+          [role="listbox"] {{ max-height: 150px !important; }}
           section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ color: {c['rail_soft']}; }}
           /* Campi scuri dentro il rail. Due trappole trovate testando la demo:
              1) il selectbox di Streamlit non espone più `data-baseweb="select"` (è
