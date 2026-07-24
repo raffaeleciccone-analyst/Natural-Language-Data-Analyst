@@ -17,6 +17,11 @@ from nlda.loader import monthly_trend
 from nlda.results import ExecutionFailure, ExecutionResult
 from nlda.utils import IT_NUM_FORMAT, fmt_num
 
+# Tacca colorata sotto i KPI: teal per tutte (coerenza), ma il KPI PRINCIPALE
+# (Totale) usa un teal più LUMINOSO, così risalta sugli altri.
+_TICK = "#0d8a7d"        # accento standard (Media, Massimo, Top, conteggi)
+_TICK_MAIN = "#15b8a1"   # più brillante, riservato al Totale
+
 
 def answer_card(label: str, text: str, container=None) -> None:
     """
@@ -64,7 +69,7 @@ def _leader_kpi(label: str, ranking: pd.Series, fmt_sub):
     """
     if ranking.empty:
         return None
-    return (label, str(ranking.index[0]), fmt_sub(ranking.iloc[0]), "#c8d0d8", True)
+    return (label, str(ranking.index[0]), fmt_sub(ranking.iloc[0]), _TICK, True)
 
 
 def build_kpis(df, sel_measure, sel_category, unit):
@@ -77,14 +82,14 @@ def build_kpis(df, sel_measure, sel_category, unit):
     def wu(v):  # accosta l'unità di misura, se indicata
         return f"{fmt_num(v)} {unit}".strip() if unit else fmt_num(v)
 
-    record_kpi = ("Record", fmt_num(len(df)), "", "#c8d0d8", False)
+    record_kpi = ("Record", fmt_num(len(df)), "", _TICK, False)
 
     kpis = []
     if sel_measure:
         s = df[sel_measure]
-        kpis.append((f"Totale {sel_measure}", wu(s.sum()), "", "#0d8a7d", False))
-        kpis.append((f"Media {sel_measure}", wu(s.mean()), "", "#c8d0d8", False))
-        kpis.append((f"Massimo {sel_measure}", wu(s.max()), "", "#c8d0d8", False))
+        kpis.append((f"Totale {sel_measure}", wu(s.sum()), "", _TICK_MAIN, False))
+        kpis.append((f"Media {sel_measure}", wu(s.mean()), "", _TICK, False))
+        kpis.append((f"Massimo {sel_measure}", wu(s.max()), "", _TICK, False))
         leader = None
         if sel_category:
             ranking = df.groupby(sel_category)[sel_measure].sum().sort_values(ascending=False)
@@ -93,14 +98,14 @@ def build_kpis(df, sel_measure, sel_category, unit):
         kpis.append(leader or record_kpi)
     elif sel_category:  # nessuna misura: KPI a conteggi
         vc = df[sel_category].value_counts()
-        kpis.append(("Record", fmt_num(len(df)), "", "#c8d0d8", False))
-        kpis.append((f"{sel_category} distinte", fmt_num(df[sel_category].nunique()), "", "#c8d0d8", False))
+        kpis.append(("Record", fmt_num(len(df)), "", _TICK, False))
+        kpis.append((f"{sel_category} distinte", fmt_num(df[sel_category].nunique()), "", _TICK, False))
         leader = _leader_kpi(f"Top {sel_category}", vc, lambda v: f"{fmt_num(v)} record")
         if leader is not None:
             kpis.append(leader)
     else:
-        kpis.append(("Record", fmt_num(len(df)), "", "#c8d0d8", False))
-        kpis.append(("Colonne", str(df.shape[1]), "", "#c8d0d8", False))
+        kpis.append(("Record", fmt_num(len(df)), "", _TICK, False))
+        kpis.append(("Colonne", str(df.shape[1]), "", _TICK, False))
     return kpis
 
 
