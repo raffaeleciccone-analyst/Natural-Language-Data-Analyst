@@ -63,6 +63,13 @@ def console_css() -> str:
           section[data-testid="stSidebar"] h1,
           section[data-testid="stSidebar"] h2,
           section[data-testid="stSidebar"] h3 {{ color: #ffffff; }}
+          /* Sidebar COMPATTO: i 5 divisori (margine 32px sopra+sotto) e il gap da 16px
+             fra ogni widget facevano sforare il contenuto → barra a scorrimento. Stretti
+             così, tutto entra e la sidebar resta ferma. */
+          section[data-testid="stSidebar"] hr {{ margin: 7px 0 !important; }}
+          section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{ gap: 0.5rem !important; }}
+          section[data-testid="stSidebar"] h2,
+          section[data-testid="stSidebar"] h3 {{ margin: 0.15rem 0 !important; }}
           section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ color: {c['rail_soft']}; }}
           /* Campi scuri dentro il rail. Due trappole trovate testando la demo:
              1) il selectbox di Streamlit non espone più `data-baseweb="select"` (è
