@@ -1,21 +1,20 @@
 # Immagini del README
 
-Il README mostra due **anteprime del design**, non catture dell'app in esecuzione:
+Il README mostra due **screenshot reali** della demo:
 
-- `preview-report.svg` — report iniziale sui dati
-- `preview-answer.svg` — risposta a una domanda, con grafico
+- `preview-report.png` — l'app intera: sidebar, KPI, report automatico e box domanda
+- `preview-answer.png` — una domanda con la risposta testuale e il grafico generati
 
-Sono SVG disegnati a mano: riproducono l'aspetto reale dell'interfaccia (stessa
-palette e stessa tipografia di `nlda/ui_theme.py`) ma restano una
-rappresentazione. La distinzione è dichiarata anche nel README principale.
+Catturati dalla [demo pubblica](https://natural-language-data-analyst.streamlit.app/)
+(provider Groq) e ritagliati dallo screenshot del browser.
 
-## Sostituirle con screenshot veri
+## Rigenerarle
 
-1. Avvia l'app: `streamlit run main.py` — oppure `docker compose up`
-2. Carica un dataset (o usa quello di default) e fai una domanda che produca un
-   grafico
-3. Cattura la finestra del browser a ~1280px di larghezza, salva le immagini in
-   questa cartella e aggiorna i link nella sezione **Anteprima** del `README.md`
+1. Apri la demo (oppure avvia in locale: `streamlit run main.py`).
+2. **Report**: cattura la finestra con la sidebar aperta.
+3. **Risposta**: fai una domanda che produca un grafico (es. *"Mostrami Sales per
+   Region"*) e cattura la colonna della chat con risposta e grafico.
+4. Ritaglia (togliendo la barra del browser in alto) e salva qui con gli stessi nomi.
 
-PNG o GIF vanno bene: GitHub li mostra inline. Una GIF che riprende una domanda
-dall'inizio alla fine racconta il progetto meglio di qualsiasi immagine statica.
+Una GIF che riprende una domanda dall'inizio alla fine racconterebbe il progetto
+ancora meglio di un'immagine statica.

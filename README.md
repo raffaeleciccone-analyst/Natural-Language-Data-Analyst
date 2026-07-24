@@ -25,12 +25,12 @@ si limita a raccontarli.
 
 ## Anteprima
 
-![Report iniziale sui dati](docs/preview-report.svg)
-![Risposta a una domanda](docs/preview-answer.svg)
+![Report iniziale sui dati](docs/preview-report.png)
+![Risposta a una domanda, con grafico](docs/preview-answer.png)
 
-*Sono anteprime del design, non screenshot dell'app in esecuzione: riproducono
-palette e tipografia reali dell'interfaccia. Per provarla davvero c'è la
-[demo](https://natural-language-data-analyst.streamlit.app/).*
+*Screenshot reali della [demo](https://natural-language-data-analyst.streamlit.app/)
+(provider Groq · llama-3.3-70b). In alto i KPI e il report automatico; a destra una
+domanda in linguaggio naturale con la risposta testuale e il grafico generati.*
 
 ## Funzionalità
 
