@@ -41,12 +41,6 @@ from nlda.utils import fmt_num
 # perché il path è relativo alla RADICE del repo, dove vive assets/.
 _FAVICON = Path(__file__).parent / "assets" / "favicon.png"
 
-# Altezza dei due contenitori affiancati (report | chat). st.container(height=...)
-# rende ciascuna colonna scrollabile per conto suo: le due metà non si trascinano
-# lo scroll a vicenda. È un valore fisso (Streamlit non espone l'altezza del viewport).
-_COL_H = 560
-
-
 def configure_page() -> None:
     """Deve essere la PRIMA chiamata Streamlit dello script."""
     st.set_page_config(
@@ -115,10 +109,13 @@ def main() -> None:
     report_sig, insights = refresh_report_state(df, data_sig, sel_measure, sel_category,
                                                 filter_key=filtro or ())
 
-    # Due colonne affiancate: analisi/report a sinistra, chat a destra. Ognuna in un
-    # contenitore ad altezza fissa che scrolla per conto suo.
+    # Due colonne affiancate: analisi/report a sinistra, chat a destra. NIENTE
+    # contenitore ad altezza fissa: un box a scorrimento resettava lo scroll in cima a
+    # ogni rerun, così aprire un expander (Struttura, Confronto…) sembrava "non fare
+    # nulla". Ogni colonna prende l'altezza del suo contenuto e la pagina scorre in modo
+    # naturale; le colonne restano allineate in alto (CSS: stHorizontalBlock flex-start).
     col_report, col_chat = st.columns([1.55, 1], gap="large")
-    with col_report, st.container(height=_COL_H, border=False):
+    with col_report:
         slot_sintesi = render_report(df, insights, sel_measure, unit)
         render_executive_report(
             agent, insights, limits,
@@ -126,9 +123,6 @@ def main() -> None:
         )
         render_period_comparison(df, sel_measure, unit)
         render_column_structure()
-    # La chat NON ha altezza fissa: prende quella del suo contenuto. Con un box fisso
-    # come il report, da vuota lasciava mezza colonna bianca sotto i suggerimenti.
-    # Il report resta a scorrimento (è lungo); le colonne si allineano in alto (CSS).
     with col_chat:
         render_chat(service, df, limits, explain=config.explain, unit=unit,
                     dataset_label=source_label,
