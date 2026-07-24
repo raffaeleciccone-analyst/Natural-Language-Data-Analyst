@@ -98,13 +98,13 @@ def build_kpis(df, sel_measure, sel_category, unit):
         kpis.append(leader or record_kpi)
     elif sel_category:  # nessuna misura: KPI a conteggi
         vc = df[sel_category].value_counts()
-        kpis.append(("Record", fmt_num(len(df)), "", _TICK, False))
+        kpis.append(record_kpi)
         kpis.append((f"{sel_category} distinte", fmt_num(df[sel_category].nunique()), "", _TICK, False))
         leader = _leader_kpi(f"Top {sel_category}", vc, lambda v: f"{fmt_num(v)} record")
         if leader is not None:
             kpis.append(leader)
     else:
-        kpis.append(("Record", fmt_num(len(df)), "", _TICK, False))
+        kpis.append(record_kpi)
         kpis.append(("Colonne", str(df.shape[1]), "", _TICK, False))
     return kpis
 
