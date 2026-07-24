@@ -44,6 +44,16 @@ def console_css() -> str:
              viene stirata alla sua altezza — così sotto la chat non resta mezza
              colonna vuota. Vale anche per KPI e coppie di grafici (già di pari altezza). */
           [data-testid="stHorizontalBlock"] {{ align-items: flex-start; }}
+          /* Scroll indipendente delle due colonne SENZA st.container(height=...):
+             quello resettava lo scroll a ogni rerun (un expander sembrava non aprirsi).
+             Qui l'overflow sta sul div STABILE della colonna, che il browser conserva
+             tra i rerun: cliccare un expander lo apre e lo scroll resta dov'è. Il marker
+             .scrollcol identifica le due colonne giuste (KPI e grafici NON scrollano). */
+          [data-testid="stColumn"]:has(.scrollcol) {{
+              max-height: calc(100vh - 470px); overflow-y: auto; overflow-x: hidden;
+              padding-right: 10px; scrollbar-width: thin;
+          }}
+          [data-testid="stElementContainer"]:has(.scrollcol) {{ display: none !important; }}
           h1, h2, h3, h4 {{ font-family: var(--display); color: {c['ink']}; letter-spacing: -0.01em; }}
           h2, h3 {{ font-size: 1.05rem; text-transform: uppercase; letter-spacing: 0.02em; }}
           .app-subtitle {{ font-family: var(--sans); color: {c['ink2']} !important;
@@ -81,7 +91,7 @@ def console_css() -> str:
           /* Menu a tendina del selectbox più basso: l'ultimo in fondo (Filtro) apriva
              un elenco da 300px che sbordava sotto lo schermo. Con max-height ridotta il
              menu resta nello schermo e le voci in più scorrono al suo interno. */
-          [role="listbox"] {{ max-height: 150px !important; }}
+          [role="listbox"] {{ max-height: 240px !important; }}
           section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ color: {c['rail_soft']}; }}
           /* Campi scuri dentro il rail. Due trappole trovate testando la demo:
              1) il selectbox di Streamlit non espone più `data-baseweb="select"` (è
@@ -178,20 +188,20 @@ def console_css() -> str:
           /* ===== KPI readout ===== */
           .readout {{
               background: {c['surface']}; border: 1px solid {c['border']};
-              border-radius: 12px; padding: 14px 16px 13px; min-height: 116px;
-              box-shadow: 0 1px 2px rgba(20,30,40,0.04);
+              border-radius: 12px; padding: 20px 16px 18px; min-height: 140px;
+              box-shadow: 0 1px 2px rgba(20,30,40,0.04); text-align: center;
           }}
-          .readout .r-k {{ font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.1em;
+          .readout .r-k {{ font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em;
               text-transform: uppercase; color: {c['ink2']}; }}
-          .readout .r-v {{ font-family: var(--mono); font-weight: 600; font-size: 1.45rem;
-              letter-spacing: -0.03em; margin-top: 7px; line-height: 1.15;
+          .readout .r-v {{ font-family: var(--mono); font-weight: 600; font-size: 1.9rem;
+              letter-spacing: -0.03em; margin-top: 10px; line-height: 1.1;
               font-variant-numeric: tabular-nums; color: {c['ink']}; white-space: nowrap; }}
-          .readout .r-v.sm {{ font-family: var(--display); font-size: 1.25rem; letter-spacing: 0;
-              line-height: 1.2; margin-top: 10px;
+          .readout .r-v.sm {{ font-family: var(--display); font-size: 1.55rem; letter-spacing: 0;
+              line-height: 1.15; margin-top: 12px;
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-          .readout .r-tick {{ height: 3px; margin-top: 11px; border-radius: 2px;
-              background: var(--bar, {c['accent']}); width: 34px; }}
-          .readout .r-sub {{ font-family: var(--mono); font-size: 0.7rem; color: {c['muted']}; margin-top: 9px; }}
+          .readout .r-tick {{ height: 5px; margin: 14px auto 0; border-radius: 3px;
+              background: var(--bar, {c['accent']}); width: 48px; }}
+          .readout .r-sub {{ font-family: var(--mono); font-size: 0.72rem; color: {c['muted']}; margin-top: 10px; }}
 
           /* Motivo "scala di misura" — la firma, sottile */
           .scale {{ height: 8px; margin: 10px 0 2px;

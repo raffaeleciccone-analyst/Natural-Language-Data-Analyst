@@ -121,6 +121,9 @@ def main() -> None:
     # naturale; le colonne restano allineate in alto (CSS: stHorizontalBlock flex-start).
     col_report, col_chat = st.columns([1.55, 1], gap="large")
     with col_report:
+        # Marcatore invisibile: il CSS lo usa per riconoscere QUESTA colonna e darle
+        # scroll indipendente (i blocchi di KPI/grafici non devono scrollare).
+        st.markdown("<span class='scrollcol'></span>", unsafe_allow_html=True)
         slot_sintesi = render_report(df, insights, sel_measure, unit)
         render_executive_report(
             agent, insights, limits,
@@ -129,6 +132,7 @@ def main() -> None:
         render_period_comparison(df, sel_measure, unit)
         render_column_structure()
     with col_chat:
+        st.markdown("<span class='scrollcol'></span>", unsafe_allow_html=True)
         render_chat(service, df, limits, explain=config.explain, unit=unit,
                     dataset_label=source_label,
                     sel_measure=sel_measure, sel_category=sel_category)
