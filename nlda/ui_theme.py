@@ -70,6 +70,14 @@ def console_css() -> str:
           section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{ gap: 0.5rem !important; }}
           section[data-testid="stSidebar"] h2,
           section[data-testid="stSidebar"] h3 {{ margin: 0.15rem 0 !important; }}
+          /* Banda scura in CIMA: l'header del sidebar (~76px) e lo spazio-logo
+             esistevano per la freccia di chiusura, ora maniglia fissa sul bordo.
+             Azzerati, il contenuto parte dall'alto invece che 76px più giù. */
+          section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {{
+              height: 0 !important; min-height: 0 !important; margin: 0 !important;
+          }}
+          section[data-testid="stSidebar"] [data-testid="stLogoSpacer"] {{ display: none !important; }}
+          section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {{ padding-top: 0.6rem !important; }}
           section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ color: {c['rail_soft']}; }}
           /* Campi scuri dentro il rail. Due trappole trovate testando la demo:
              1) il selectbox di Streamlit non espone più `data-baseweb="select"` (è
