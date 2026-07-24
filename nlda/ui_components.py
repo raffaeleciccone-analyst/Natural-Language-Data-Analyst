@@ -1,9 +1,9 @@
 """
 Componenti di presentazione (Streamlit) del report e delle risposte.
 
-Estratti da main.py per tenere l'entry-point leggibile: qui sta il "come si
-mostra" (card KPI, riquadri, tabelle, grafici collegati), mentre main.py resta
-il flusso ("cosa si mostra e quando"). Tutte le funzioni HTML fanno escaping:
+Qui stanno i pezzi riusabili — il "come si mostra": card KPI, riquadri, tabelle,
+grafici collegati. Le sezioni che li compongono sono in `nlda.ui.pages`, il flusso
+("cosa si mostra e quando") in `main.py`. Tutte le funzioni HTML fanno escaping:
 i valori delle celle sono dati non fidati e non devono iniettare markup.
 """
 import html

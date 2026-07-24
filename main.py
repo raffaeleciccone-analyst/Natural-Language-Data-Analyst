@@ -57,7 +57,9 @@ def main() -> None:
     limits = demo_limits()
     config = render_sidebar_config(limits)
 
-    # Lo stile va iniettato dopo la sidebar (che lo usa) e prima del contenuto.
+    # Il blocco <style> vale per l'intero documento (sidebar compresa) a prescindere
+    # da dove finisce nel DOM: la posizione non cambia la cascata, incide solo su
+    # quanto presto arriva al browser — di qui, prima del contenuto della pagina.
     st.markdown(console_css(), unsafe_allow_html=True)
 
     agent = get_agent(config.provider, config.model_name, config.api_key)

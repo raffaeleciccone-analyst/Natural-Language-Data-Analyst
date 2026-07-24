@@ -38,7 +38,7 @@ _PROVIDERS: dict[str, Callable[..., LLMProvider]] = {
 
 # Provider che richiedono una API key (gli altri girano in locale). NON serve più a
 # get_provider — che passa sempre api_key e lascia decidere a LLMProvider.__init__ —
-# ma alla UI, per mostrare il campo "API Key" solo dove ha senso (main.py).
+# ma alla UI, per mostrare il campo "API Key" solo dove ha senso (nlda/ui/pages.py).
 REQUIRES_API_KEY = {"anthropic", "openai", "gemini", "groq"}
 
 
