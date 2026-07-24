@@ -16,6 +16,14 @@ altre chiamate all'LLM.
 from dataclasses import dataclass
 from typing import Any, Literal, get_args
 
+# Segnaposto per "il codice è andato a buon fine ma non ha prodotto né un valore né
+# una figura" (es. un'assegnazione a una variabile che poi non si legge). Non è un
+# dato da mostrare: la UI lo salta e l'export lo omette. Vive qui, con gli altri
+# tipi d'esito, perché è il runner a produrlo e più moduli lo riconoscono: tenerne
+# copie della stringa in giro significa che basta riformularne una perché gli altri
+# smettano di riconoscerlo e ricomincino a stamparlo all'utente.
+EXECUTED_OK = "Codice eseguito correttamente."
+
 # Causa del fallimento. È la chiave su cui si prendono decisioni (retry, log,
 # messaggistica): resta stabile anche se il testo mostrato all'utente cambia.
 #   syntax    -> il modello ha prodotto codice non parsificabile (o nessun codice)

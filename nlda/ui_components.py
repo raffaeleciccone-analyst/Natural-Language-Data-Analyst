@@ -14,7 +14,7 @@ import streamlit as st
 from nlda.charts import to_chart
 from nlda.checks import columns_referenced, sanity_warnings
 from nlda.loader import monthly_trend
-from nlda.results import ExecutionFailure, ExecutionResult
+from nlda.results import EXECUTED_OK, ExecutionFailure, ExecutionResult
 from nlda.ui_theme import PALETTE
 from nlda.utils import IT_NUM_FORMAT, fmt_num
 
@@ -190,7 +190,7 @@ def render_value(value, kp: str = "r") -> None:
         st.dataframe(value.rename("valore").to_frame(), width="stretch", key=f"{kp}_ser")
     elif isinstance(value, (int, float)):
         st.metric("Risultato", fmt_num(value))
-    elif isinstance(value, str) and value != "Codice eseguito correttamente.":
+    elif isinstance(value, str) and value != EXECUTED_OK:
         st.markdown(f"**Risultato:** {value}")
 
 

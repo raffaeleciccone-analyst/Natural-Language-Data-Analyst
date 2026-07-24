@@ -12,7 +12,7 @@ from datetime import date
 
 import pandas as pd
 
-from nlda.results import ExecutionFailure, ExecutionSuccess
+from nlda.results import EXECUTED_OK, ExecutionFailure, ExecutionSuccess
 from nlda.service import Turn
 from nlda.utils import fmt_num
 
@@ -42,13 +42,20 @@ def _dataframe_to_markdown(df: pd.DataFrame) -> str:
 
 
 def _value_to_markdown(value) -> str:
-    """Il risultato reso in Markdown: tabella per DataFrame/Series, testo per gli scalari."""
+    """
+    Il risultato reso in Markdown: tabella per DataFrame/Series, testo per gli
+    scalari, stringa vuota per il segnaposto "eseguito senza un valore da mostrare"
+    — così l'export omette il blocco Risultato esattamente dove la UI non mostra
+    nulla, invece di scrivere la frase sentinella in grassetto.
+    """
     if isinstance(value, pd.DataFrame):
         return _dataframe_to_markdown(value)
     if isinstance(value, pd.Series):
         return _dataframe_to_markdown(value.to_frame())
     if isinstance(value, float):
         return f"**{fmt_num(value)}**"
+    if value == EXECUTED_OK:
+        return ""
     return f"**{value}**"
 
 
@@ -60,7 +67,9 @@ def turn_to_markdown(turn: Turn) -> str:
         parti.append(turn.explanation.strip())
 
     if isinstance(turn.result, ExecutionSuccess):
-        parti.append("**Risultato:**\n\n" + _value_to_markdown(turn.result.value))
+        corpo = _value_to_markdown(turn.result.value)
+        if corpo:
+            parti.append("**Risultato:**\n\n" + corpo)
         if turn.result.fig is not None:
             parti.append("_(la risposta include un grafico, visibile nell'app)_")
     elif isinstance(turn.result, ExecutionFailure):
