@@ -122,7 +122,17 @@ def _recolor_traces(fig, colorway):
 
 
 def apply_theme(fig):
-    """Applica il tema visuale coerente (colori, griglia, tipografia) a una figura Plotly."""
+    """
+    Applica il tema visuale coerente (colori, griglia, tipografia) a una figura Plotly.
+
+    La applicano già le fabbriche di questo modulo (`to_chart`, `histogram`,
+    `corr_heatmap`) e la sandbox sulle figure prodotte dal codice generato: chi
+    disegna riceve figure GIÀ tematizzate e non deve riapplicarla. È idempotente
+    (verificato: la seconda applicazione lascia il JSON della figura invariato),
+    ma non è gratis — Streamlit ridisegna l'intera pagina a ogni click, quindi
+    riapplicarla al momento del render la fa ripagare a ogni interazione.
+    Serve solo su una figura costruita con `px` grezzo.
+    """
     t = _THEME
     _make_bars_readable(fig)
     _recolor_traces(fig, t["colorway"])
