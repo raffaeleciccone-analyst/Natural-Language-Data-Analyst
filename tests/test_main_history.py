@@ -78,8 +78,10 @@ def test_app_completa_si_disegna_senza_errori(monkeypatch):
     assert "Fai una domanda ai tuoi dati" in testi
     # Il dataset di default (Superstore) ha una colonna data: la sezione c'è.
     assert "Confronto tra periodi" in testi
-    # Le sezioni di sidebar per filtro e join sono presenti (render_filter/render_join).
-    assert "Filtro" in testi and "Unisci un secondo dataset" in testi
+    # "Filtro" resta un subheader; "Unisci un secondo dataset" è ora dentro un expander
+    # (funzione avanzata, richiusa per non allungare la sidebar).
+    assert "Filtro" in testi
+    assert any(e.label == "Unisci un secondo dataset" for e in at.expander)
 
 
 def test_streaming_di_una_risposta(monkeypatch):
