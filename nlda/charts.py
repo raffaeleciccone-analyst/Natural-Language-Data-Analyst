@@ -13,6 +13,7 @@ disegna.
 import pandas as pd
 
 from nlda.log import get_logger
+from nlda.ui_theme import PALETTE
 from nlda.utils import fmt_num
 
 log = get_logger(__name__)
@@ -32,12 +33,16 @@ CATEGORICAL_LIGHT = [
     "#1baf7a", "#eb6834", "#4a3aa7", "#e34948",
 ]
 
-# Colori di superficie/inchiostro dei grafici (coerenti con l'UI "strumento": toni
-# freddi, accento teal in testa alla colorway così le barre a serie singola sono teal;
-# la palette categorica validata resta per i grafici multi-serie).
-_THEME = dict(surface="#ffffff", ink="#1b1f24", secondary="#586471",
-              grid="#e4e8ec", axis="#d5dbe1",
-              colorway=["#0d8a7d", *CATEGORICAL_LIGHT])
+# Colori di superficie/inchiostro dei grafici: sono gli STESSI dell'interfaccia,
+# presi da lì e non ricopiati — erano sei valori esadecimali duplicati, e cambiare
+# l'accento richiedeva di ricordarsi di tre file. `nlda.ui_theme` non importa nulla
+# (nemmeno Streamlit), quindi la dipendenza non pesa nemmeno nel worker della
+# sandbox, che passa da questo modulo. L'accento teal va in TESTA alla colorway
+# così le barre a serie singola sono teal; la palette categorica validata
+# (colorblind-safe) resta per i grafici multi-serie.
+_THEME = dict(surface=PALETTE["surface"], ink=PALETTE["ink"], secondary=PALETTE["ink2"],
+              grid=PALETTE["border"], axis=PALETTE["strong"],
+              colorway=[PALETTE["accent"], *CATEGORICAL_LIGHT])
 
 # Colore delle serie SINGOLE (barre/linea/istogramma). Va passato alla CREAZIONE
 # della figura: Plotly Express cuoce nella traccia il proprio colore di default e
