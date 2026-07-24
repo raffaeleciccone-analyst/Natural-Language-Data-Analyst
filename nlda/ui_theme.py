@@ -75,6 +75,11 @@ def console_css() -> str:
           section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {{
               background: {c['rail2']}; border-color: {c['rail_line']}; color: {c['rail_ink']};
           }}
+          /* Il testo-esempio (placeholder, es. "es. €, kg, %") ha un grigio di default
+             troppo scuro sul rail: lo si porta a un grigio leggibile. */
+          section[data-testid="stSidebar"] [data-testid="stTextInput"] input::placeholder {{
+              color: {c['rail_soft']} !important; opacity: 1 !important;
+          }}
           section[data-testid="stSidebar"] [data-testid="stSelectbox"] [class*="e1fp86qc0"] {{
               background: {c['rail2']} !important; border-color: {c['rail_line']} !important;
           }}
