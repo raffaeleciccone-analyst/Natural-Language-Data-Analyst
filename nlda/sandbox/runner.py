@@ -25,6 +25,7 @@ from nlda.config import settings
 from nlda.log import get_logger
 from nlda.periods import compare_periods
 from nlda.results import (
+    EXECUTED_OK,
     FAILURE_KINDS,
     ExecutionFailure,
     ExecutionResult,
@@ -63,7 +64,7 @@ def _obj_summary(obj, max_rows: int = 30) -> str:
 
 def _make_summary(fig, value, max_rows: int = 30) -> str:
     """Riepilogo testuale del risultato per l'LLM: preferisce i dati alla figura."""
-    if value is not None and not (isinstance(value, str) and value == "Codice eseguito correttamente."):
+    if value is not None and not (isinstance(value, str) and value == EXECUTED_OK):
         return _obj_summary(value, max_rows)
     if fig is not None:
         return _fig_summary(fig, max_rows)
@@ -135,7 +136,7 @@ def _run_code(code: str, df: pd.DataFrame) -> ExecutionResult:
                     value = local_context[last_name]
 
         if fig is None and value is None:
-            value = "Codice eseguito correttamente."
+            value = EXECUTED_OK
 
         # Il riepilogo testuale è calcolato QUI (figura reale) e viaggia col risultato.
         return ExecutionSuccess(fig=fig, value=value, summary=_make_summary(fig, value))

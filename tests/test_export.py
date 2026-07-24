@@ -7,7 +7,7 @@ gestiti senza rompere il Markdown.
 import pandas as pd
 
 from nlda.export import conversation_to_markdown, turn_to_markdown
-from nlda.results import ExecutionFailure, ExecutionSuccess
+from nlda.results import EXECUTED_OK, ExecutionFailure, ExecutionSuccess
 from nlda.service import Turn
 
 
@@ -49,6 +49,22 @@ def test_turno_fallito_riporta_il_messaggio_non_il_codice_come_risultato():
 
 def test_turno_segnala_il_grafico():
     md = turn_to_markdown(_turn_ok("mostrami le vendite", 1, fig=object()))
+    assert "grafico" in md.lower()
+
+
+def test_sentinella_eseguito_senza_valore_non_finisce_nell_export():
+    # Codice eseguito ma senza un valore da mostrare: la UI non stampa nulla, e
+    # l'export deve fare lo stesso invece di scrivere la frase segnaposto.
+    md = turn_to_markdown(_turn_ok("assegna e basta", EXECUTED_OK))
+    assert EXECUTED_OK not in md
+    assert "**Risultato:**" not in md
+    assert "## assegna e basta" in md   # il turno c'è comunque (domanda + codice)
+
+
+def test_grafico_senza_valore_resta_segnalato():
+    # Anche quando il valore è la sentinella, un eventuale grafico va comunque citato.
+    md = turn_to_markdown(_turn_ok("mostrami il trend", EXECUTED_OK, fig=object()))
+    assert EXECUTED_OK not in md
     assert "grafico" in md.lower()
 
 
