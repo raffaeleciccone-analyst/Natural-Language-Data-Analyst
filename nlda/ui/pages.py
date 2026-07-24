@@ -306,7 +306,7 @@ def _render_distribution_and_correlations(insights: dict, sel_measure) -> None:
     if dist_fig is not None:
         with cols[idx]:
             st.markdown(f"**Distribuzione di {sel_measure}**")
-            st.plotly_chart(apply_theme(dist_fig), width="stretch", key="report_dist")
+            st.plotly_chart(dist_fig, width="stretch", key="report_dist")
         idx += 1
     if corr_fig is not None:
         with cols[idx]:
@@ -319,7 +319,7 @@ def _render_distribution_and_correlations(insights: dict, sel_measure) -> None:
                            "La correlazione indica associazione, non causa.")
             else:
                 st.caption("Nessuna coppia con correlazione forte (|r| ≥ 0,6).")
-            st.plotly_chart(apply_theme(corr_fig), width="stretch", key="report_corr")
+            st.plotly_chart(corr_fig, width="stretch", key="report_corr")
 
 
 def render_executive_report(agent: DataAgent, insights: dict, limits: DemoLimits,
@@ -390,6 +390,8 @@ def render_period_comparison(df: pd.DataFrame, sel_measure, unit: str = "") -> N
 
         # Barre in ordine CRONOLOGICO: px.bar non riordina, mentre to_chart ordina
         # per valore — perderebbe la sequenza temporale, che è il punto del confronto.
+        # Unico grafico costruito con px grezzo, quindi l'unico che il tema se lo
+        # deve applicare qui: tutti gli altri arrivano già tematizzati.
         st.plotly_chart(apply_theme(px.bar(comp, x="periodo", y=measure)),
                         width="stretch", key="cmp_chart")
 

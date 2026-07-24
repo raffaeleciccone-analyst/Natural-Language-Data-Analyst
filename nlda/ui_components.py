@@ -11,7 +11,7 @@ import html
 import pandas as pd
 import streamlit as st
 
-from nlda.charts import apply_theme, to_chart
+from nlda.charts import to_chart
 from nlda.checks import columns_referenced, sanity_warnings
 from nlda.loader import monthly_trend
 from nlda.results import ExecutionFailure, ExecutionResult
@@ -145,7 +145,7 @@ def render_linked_charts(df, insights, top_fig, trend_fig) -> None:
         cat, num, _ = insights["top"]
         with chart_cols[idx]:
             st.markdown(f"**Classifica: {num} per {cat}**")
-            event = st.plotly_chart(apply_theme(top_fig), width="stretch",
+            event = st.plotly_chart(top_fig, width="stretch",
                                     on_select="rerun", key="report_top")
             try:
                 pts = event.selection.points  # type: ignore[attr-defined]
@@ -169,11 +169,11 @@ def render_linked_charts(df, insights, top_fig, trend_fig) -> None:
 
             if sub is not None:
                 st.markdown(f"**Andamento di {num} — {cat}: {selected_cat}**")
-                st.plotly_chart(apply_theme(to_chart(sub, kind="line")),
+                st.plotly_chart(to_chart(sub, kind="line"),
                                 width="stretch", key="report_trend_filtered")
             else:
                 st.markdown(f"**Andamento di {num} nel tempo**")
-                st.plotly_chart(apply_theme(trend_fig), width="stretch", key="report_trend")
+                st.plotly_chart(trend_fig, width="stretch", key="report_trend")
 
 
 def render_value(value, kp: str = "r") -> None:
@@ -216,7 +216,7 @@ def render_result(code: str, result: ExecutionResult,
         for avviso in sanity_warnings(result.value):
             st.warning(f"⚠️ {avviso}")
         if result.fig is not None:
-            st.plotly_chart(apply_theme(result.fig), width="stretch", key=f"{kp}_fig")
+            st.plotly_chart(result.fig, width="stretch", key=f"{kp}_fig")
         render_value(result.value, kp)
 
     # 3. Codice generato (in fondo, collassato) + le colonne del dataset che tocca:
