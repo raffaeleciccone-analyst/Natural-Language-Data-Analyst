@@ -86,10 +86,46 @@ def _make_bars_readable(fig):
             fig.update_layout(height=max(220, 38 * n + 70), bargap=0.18)
 
 
+_TINTA_UNITA = {"bar", "scatter", "scattergl", "histogram", "box", "violin", "funnel"}
+
+
+def _recolor_traces(fig, colorway):
+    """
+    Riassegna i colori delle tracce dalla colorway del tema.
+
+    Plotly Express "cuoce" il colore nella traccia alla creazione e IGNORA
+    `layout.colorway` impostato dopo. I grafici del report passano da `to_chart`,
+    che il teal lo forza con `color_discrete_sequence`; ma quelli che l'AGENTE
+    genera con `px.bar` diretto (senza quel parametro) nascono del blu di default.
+    Risultato: barre blu nella chat, teal nel report. Qui si uniforma riassegnando
+    per indice di traccia il colore della colorway — è ciò che `colorway` dovrebbe
+    fare da sé se px non avesse già deciso.
+
+    Si toccano solo le tracce a tinta unita: heatmap e scale continue usano una
+    colorscale, non un marker, e restano intatte. Se una traccia colora per-punto
+    (`marker.color` è un array, non una stringa) non si sovrascrive: quel colore
+    porta informazione (es. mappatura su una categoria o su un valore continuo).
+    """
+    idx = 0
+    for tr in fig.data:
+        if getattr(tr, "type", None) not in _TINTA_UNITA:
+            continue
+        colore = colorway[idx % len(colorway)]
+        marker = getattr(tr, "marker", None)
+        if marker is not None and (marker.color is None or isinstance(marker.color, str)):
+            marker.color = colore
+        linea = getattr(tr, "line", None)
+        if (tr.type in ("scatter", "scattergl") and linea is not None
+                and (linea.color is None or isinstance(linea.color, str))):
+            linea.color = colore
+        idx += 1
+
+
 def apply_theme(fig):
     """Applica il tema visuale coerente (colori, griglia, tipografia) a una figura Plotly."""
     t = _THEME
     _make_bars_readable(fig)
+    _recolor_traces(fig, t["colorway"])
     fig.update_layout(
         colorway=t["colorway"],
         paper_bgcolor=t["surface"],
