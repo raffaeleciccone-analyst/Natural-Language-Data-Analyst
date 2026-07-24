@@ -41,11 +41,6 @@ from nlda.utils import clean_code
 
 log = get_logger(__name__)
 
-# Esecuzione isolata in un sottoprocesso con timeout (chiude i DoS da loop e
-# allocazioni, e aggiunge una barriera di processo). I parametri vivono in
-# nlda.config; qui restano alias comodi per leggibilita' e per i test.
-SANDBOX_SUBPROCESS = settings.sandbox_subprocess
-EXEC_TIMEOUT = settings.exec_timeout  # secondi
 
 def _fig_summary(fig, max_rows: int = 30) -> str:
     lines = []
