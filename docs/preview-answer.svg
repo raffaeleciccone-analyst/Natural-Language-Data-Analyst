@@ -1,56 +1,53 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="560" viewBox="0 0 1040 560" font-family="'Segoe UI',system-ui,sans-serif">
-  <rect width="1040" height="560" fill="#EFF1EE"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="560" viewBox="0 0 1040 560" font-family="'IBM Plex Sans','Segoe UI',system-ui,sans-serif">
+  <rect width="1040" height="560" fill="#f2f4f6"/>
 
-  <!-- Sidebar -->
-  <rect x="0" y="0" width="230" height="560" fill="#FFFFFF"/>
-  <rect x="228" y="0" width="2" height="560" fill="#E2E6E1"/>
-  <rect x="24" y="26" width="32" height="32" rx="8" fill="#0E7C86"/>
+  <!-- Sidebar (rail scuro) -->
+  <rect x="0" y="0" width="230" height="560" fill="#191d23"/>
+  <rect x="229" y="0" width="1" height="560" fill="#2b323b"/>
+  <rect x="24" y="26" width="32" height="32" rx="8" fill="#0d8a7d"/>
   <path d="M32 48 V34 M32 48 h16 M38 44 v-6 M44 44 v-9" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-  <text x="66" y="40" font-size="15" font-weight="700" fill="#16191C">Data Analyst</text>
-  <text x="66" y="55" font-size="10" font-family="monospace" fill="#8A929A">CONSOLE</text>
-  <text x="24" y="104" font-size="10" font-family="monospace" letter-spacing="1" fill="#59626B">PROVIDER</text>
-  <rect x="24" y="112" width="182" height="34" rx="9" fill="#F7F8F6" stroke="#D3D8D1"/>
-  <text x="38" y="134" font-size="12.5" fill="#16191C">Groq</text>
-  <text x="24" y="172" font-size="10" font-family="monospace" letter-spacing="1" fill="#59626B">MODELLO</text>
-  <rect x="24" y="180" width="182" height="34" rx="9" fill="#F7F8F6" stroke="#D3D8D1"/>
-  <text x="38" y="201" font-size="11" font-family="monospace" fill="#16191C">llama-3.3-70b</text>
-  <text x="24" y="248" font-size="10" font-family="monospace" letter-spacing="1" fill="#59626B">SPIEGAZIONE AI</text>
-  <rect x="24" y="256" width="44" height="22" rx="11" fill="#0E7C86"/>
-  <circle cx="57" cy="267" r="8" fill="#FFFFFF"/>
+  <text x="66" y="40" font-size="15" font-weight="700" fill="#ffffff">Data Analyst</text>
+  <text x="66" y="55" font-size="10" font-family="monospace" fill="#8a95a1">CONSOLE</text>
+  <text x="24" y="104" font-size="10" font-family="monospace" letter-spacing="1" fill="#8a95a1">PROVIDER</text>
+  <rect x="24" y="112" width="182" height="34" rx="9" fill="#20262e" stroke="#2b323b"/>
+  <text x="38" y="134" font-size="12.5" fill="#d6dde4">Groq</text>
+  <text x="24" y="172" font-size="10" font-family="monospace" letter-spacing="1" fill="#8a95a1">MODELLO</text>
+  <rect x="24" y="180" width="182" height="34" rx="9" fill="#20262e" stroke="#2b323b"/>
+  <text x="38" y="201" font-size="11" font-family="monospace" fill="#d6dde4">llama-3.3-70b</text>
+  <text x="24" y="248" font-size="10" font-family="monospace" letter-spacing="1" fill="#8a95a1">SPIEGAZIONE AI</text>
+  <rect x="24" y="256" width="44" height="22" rx="11" fill="#0d8a7d"/>
+  <circle cx="57" cy="267" r="8" fill="#ffffff"/>
 
-  <!-- Question box (sticky form) -->
-  <rect x="266" y="30" width="628" height="44" rx="10" fill="#FFFFFF" stroke="#D3D8D1"/>
-  <text x="286" y="57" font-size="13.5" fill="#16191C">Qual è la categoria con più vendite?</text>
-  <rect x="906" y="30" width="110" height="44" rx="10" fill="#0E7C86"/>
-  <text x="961" y="57" font-size="13.5" font-weight="600" fill="#FFFFFF" text-anchor="middle">Invia</text>
+  <!-- Question box (form) -->
+  <rect x="266" y="30" width="628" height="44" rx="10" fill="#ffffff" stroke="#d5dbe1"/>
+  <text x="286" y="57" font-size="13.5" fill="#1b1f24">Qual è la categoria con più vendite?</text>
+  <rect x="906" y="30" width="110" height="44" rx="10" fill="#0d8a7d"/>
+  <text x="961" y="57" font-size="13.5" font-weight="600" fill="#ffffff" text-anchor="middle">Invia</text>
 
-  <!-- Answer card -->
-  <rect x="266" y="92" width="750" height="96" rx="13" fill="#E2F0F0" stroke="#E2E6E1"/>
-  <rect x="266" y="92" width="3" height="96" fill="#0E7C86"/>
-  <rect x="286" y="112" width="14" height="2" fill="#0E7C86"/>
-  <text x="308" y="117" font-size="11" font-family="monospace" letter-spacing="1" font-weight="600" fill="#0E7C86">RISPOSTA</text>
-  <text x="286" y="144" font-size="13.5" fill="#16191C">La categoria leader è <tspan font-weight="600">Technology</tspan> con 827.456 $, davanti a Furniture (728.659 $):</text>
-  <text x="286" y="164" font-size="13.5" fill="#16191C">un vantaggio di circa 98.797 $, il 14% in più. Segue Office Supplies a breve distanza.</text>
+  <!-- Answer card (superficie fredda, etichetta mono teal, niente bordo colorato) -->
+  <rect x="266" y="92" width="750" height="96" rx="12" fill="#f7f9fb" stroke="#e4e8ec"/>
+  <text x="286" y="118" font-size="11" font-family="monospace" letter-spacing="1" font-weight="600" fill="#0a6b61">RISPOSTA</text>
+  <text x="286" y="146" font-size="13.5" fill="#1b1f24">La categoria leader è <tspan font-weight="600" fill="#0a6b61">Technology</tspan> con 827.456 $, davanti a Furniture (728.659 $):</text>
+  <text x="286" y="166" font-size="13.5" fill="#1b1f24">un vantaggio di circa 98.797 $, il 14% in più. Segue Office Supplies a breve distanza.</text>
 
-  <!-- Chart card -->
-  <rect x="266" y="204" width="750" height="252" rx="14" fill="#FFFFFF" stroke="#E2E6E1"/>
-  <text x="286" y="232" font-size="14" font-weight="700" fill="#16191C">Sales per Category</text>
-  <line x1="330" y1="258" x2="990" y2="258" stroke="#E2E6E1"/>
-  <line x1="330" y1="316" x2="990" y2="316" stroke="#E2E6E1"/>
-  <line x1="330" y1="374" x2="990" y2="374" stroke="#E2E6E1"/>
-  <line x1="330" y1="422" x2="990" y2="422" stroke="#C3C2B7"/>
-  <rect x="420" y="266" width="120" height="156" rx="4" fill="#2a78d6"/>
-  <rect x="620" y="286" width="120" height="136" rx="4" fill="#2a78d6"/>
-  <rect x="820" y="290" width="120" height="132" rx="4" fill="#2a78d6"/>
-  <g font-family="monospace" font-size="11" fill="#16191C" text-anchor="middle">
+  <!-- Chart card (barre teal) -->
+  <rect x="266" y="204" width="750" height="252" rx="12" fill="#ffffff" stroke="#e4e8ec"/>
+  <text x="286" y="232" font-size="14" font-weight="700" fill="#1b1f24">Sales per Category</text>
+  <line x1="330" y1="258" x2="990" y2="258" stroke="#e4e8ec"/>
+  <line x1="330" y1="316" x2="990" y2="316" stroke="#e4e8ec"/>
+  <line x1="330" y1="374" x2="990" y2="374" stroke="#e4e8ec"/>
+  <line x1="330" y1="422" x2="990" y2="422" stroke="#d5dbe1"/>
+  <rect x="420" y="266" width="120" height="156" rx="4" fill="#0d8a7d"/>
+  <rect x="620" y="286" width="120" height="136" rx="4" fill="#0d8a7d"/>
+  <rect x="820" y="290" width="120" height="132" rx="4" fill="#0d8a7d"/>
+  <g font-family="monospace" font-size="11" fill="#1b1f24" text-anchor="middle">
     <text x="480" y="258">827k</text><text x="680" y="278">729k</text><text x="880" y="282">719k</text>
   </g>
-  <g font-family="monospace" font-size="11" fill="#59626B" text-anchor="middle">
+  <g font-family="monospace" font-size="11" fill="#586471" text-anchor="middle">
     <text x="480" y="440">Technology</text><text x="680" y="440">Furniture</text><text x="880" y="440">Office Supplies</text>
   </g>
 
   <!-- Code expander -->
-  <rect x="266" y="472" width="750" height="34" rx="9" fill="#F7F8F6" stroke="#E2E6E1"/>
-  <text x="286" y="493" font-size="12" fill="#59626B">▸</text>
-  <text x="304" y="493" font-size="12" fill="#59626B">Codice Pandas generato</text>
+  <rect x="266" y="472" width="750" height="34" rx="9" fill="#f7f9fb" stroke="#e4e8ec"/>
+  <text x="286" y="493" font-size="12" font-family="monospace" fill="#586471">▸ Codice Pandas generato</text>
 </svg>
