@@ -45,6 +45,20 @@ def with_unit(text: str, unit: str) -> str:
     return f"L'unità di misura dei valori è '{unit}'.\n{text}" if unit else text
 
 
+def md_safe(text: str) -> str:
+    r"""
+    Rende un testo narrativo sicuro per il markdown di Streamlit.
+
+    Due sorprese dei modelli, viste nella chat:
+    - i `$` della valuta ("492 $ ... 669 $"): una COPPIA di `$` è delimitatore
+      LaTeX, e Streamlit rende quel tratto come una formula in corsivo con le
+      parole appiccicate. Con `\$` il simbolo resta letterale.
+    - i backtick sparsi: diventano frammenti `monospace` colorati senza motivo.
+    Si tolgono/neutralizzano a valle, appena prima di disegnare.
+    """
+    return text.replace("`", "").replace("$", r"\$")
+
+
 def column_kind(series: pd.Series) -> str:
     """Classifica il tipo di una colonna in una categoria comprensibile."""
     if pd.api.types.is_bool_dtype(series):

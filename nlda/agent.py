@@ -7,7 +7,7 @@ from nlda.errors import ProviderError
 from nlda.log import get_logger
 from nlda.providers import LLMProvider, get_provider
 from nlda.sanitize import MAX_LEN_NOME, sanitize
-from nlda.utils import clean_code, column_kind
+from nlda.utils import clean_code, column_kind, md_safe
 
 log = get_logger(__name__)
 
@@ -313,8 +313,9 @@ class DataAgent:
         system_prompt, user_prompt = self._explain_prompts(user_question, result_summary)
         try:
             for blocco in self.provider.stream(system_prompt, user_prompt):
-                # I backtick spaiati diventano frammenti monospace: si tolgono per blocco.
-                yield blocco.replace("`", "")
+                # Neutralizza per blocco ciò che il markdown di Streamlit interpreterebbe
+                # male: backtick (monospace a caso) e `$` della valuta (coppie = LaTeX).
+                yield md_safe(blocco)
         except Exception as e:  # noqa: BLE001 — la narrativa è tollerante, non solleva
             log.error("Streaming della spiegazione fallito: %s", e)
             yield f"_(Impossibile generare la spiegazione: {self._motivo_llm(e)})_"

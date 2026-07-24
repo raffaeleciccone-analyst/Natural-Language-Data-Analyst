@@ -15,7 +15,7 @@ from nlda.charts import apply_theme, to_chart
 from nlda.checks import columns_referenced, sanity_warnings
 from nlda.loader import monthly_trend
 from nlda.results import ExecutionFailure, ExecutionResult
-from nlda.utils import IT_NUM_FORMAT, fmt_num
+from nlda.utils import IT_NUM_FORMAT, fmt_num, md_safe
 
 
 def answer_card(label: str, text: str, container=None) -> None:
@@ -26,7 +26,7 @@ def answer_card(label: str, text: str, container=None) -> None:
     `st.empty()`: serve a disegnare la pagina subito e riempire più tardi la parte
     che deve attendere il modello.
     """
-    safe = html.escape(text).replace("\n", "<br>")
+    safe = md_safe(html.escape(text)).replace("\n", "<br>")
     (container or st).markdown(
         f"<div class='answer-card'>"
         f"<div class='answer-label'>{html.escape(label)}</div>"
