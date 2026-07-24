@@ -106,6 +106,11 @@ def main() -> None:
     with st.expander("Anteprima dei dati (prime 10 righe)"):
         st.dataframe(df.head(10), width="stretch")
 
+    # Righello "scala di misura" (la firma) a TUTTA LARGHEZZA, sopra le colonne: dentro
+    # la sola colonna report sfalsava di qualche pixel il titolo "Report iniziale" rispetto
+    # a "Fai una domanda". Qui separa l'intestazione dalle due colonne, che restano allineate.
+    st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
+
     report_sig, insights = refresh_report_state(df, data_sig, sel_measure, sel_category,
                                                 filter_key=filtro or ())
 

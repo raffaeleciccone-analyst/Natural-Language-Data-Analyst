@@ -227,7 +227,6 @@ def render_report(df: pd.DataFrame, insights: dict, sel_measure, unit: str):
     farli aspettare la chiamata al modello significherebbe mostrare una pagina
     vuota per decine di secondi con un modello locale.
     """
-    st.markdown("<div class='scale'></div>", unsafe_allow_html=True)
     st.subheader("Report iniziale sui dati")
 
     slot_sintesi = st.empty()
@@ -429,7 +428,10 @@ def _render_turn_streaming(service: AnalysisService, question: str, turn: Turn,
         testo = None
         if explain and isinstance(turn.result, ExecutionSuccess):
             reso = st.write_stream(service.stream_explanation(question, turn.result, unit))
-            testo = (str(reso).strip() or None)
+            # Lo streaming ha reso i `$` come `\$` per non farli diventare LaTeX; nel
+            # testo CONSERVATO li riporta a `$`, perché il riquadro dello storico
+            # (answer_card) è HTML e mostrerebbe il backslash in chiaro.
+            testo = (str(reso).replace("\\$", "$").strip() or None)
         render_result(turn.code, turn.result, explanation=None, kp="live", columns=columns)
     return replace(turn, explanation=testo)
 
