@@ -15,7 +15,7 @@ license = "MIT"
 # determina gli stub di tipo con cui gira il type-check in CI.
 dependencies = [
     "streamlit==1.60.0",
-    "pandas==3.0.3",
+    "pandas==3.0.5",
     "numpy==2.5.1",
     "plotly==6.9.0",
     "openpyxl==3.1.5",   # lettura file Excel (.xlsx)
