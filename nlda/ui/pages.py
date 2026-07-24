@@ -92,9 +92,9 @@ def render_join(left: pd.DataFrame, left_label: str):
     file. Il join produce UN solo df, che alimenta la pipeline come sempre — sandbox,
     prompt e report non sanno nemmeno che c'erano due file.
     """
-    with st.sidebar:
-        st.divider()
-        st.subheader("Unisci un secondo dataset")
+    # Funzione avanzata: sta in un expander CHIUSO per non allungare la sidebar (e per
+    # non spingere il filtro così in basso che il suo menu finisce sotto lo schermo).
+    with st.sidebar, st.expander("Unisci un secondo dataset"):
         second = st.file_uploader("Secondo file (opzionale, per un join)",
                                   type=SUPPORTED_EXTENSIONS, key="join_file")
         if second is None:
