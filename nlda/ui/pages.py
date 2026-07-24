@@ -123,8 +123,11 @@ def render_join(left: pd.DataFrame, left_label: str):
         return merged, f"{left_label} ⨝ {second.name}"
 
 
-def render_report_selectors(df: pd.DataFrame):
-    """Seconda parte della barra laterale: misura, categoria e unità di misura."""
+def render_report_selectors(df: pd.DataFrame) -> tuple[str | None, str | None, str]:
+    """Seconda parte della barra laterale: misura, categoria e unità di misura.
+
+    Misura e categoria sono `None` quando il dataset non ne offre: il tipo di
+    ritorno lo dichiara, così chi le riceve non le tratta per stringhe sicure."""
     measures = ordered_measures(measure_columns(df))
     cats = category_columns(df)
     with st.sidebar:
@@ -436,7 +439,7 @@ def _render_turn_streaming(service: AnalysisService, question: str, turn: Turn,
     return replace(turn, explanation=testo)
 
 
-def _esempi_domande(sel_measure: str, sel_category: str) -> list[str]:
+def _esempi_domande(sel_measure: str | None, sel_category: str | None) -> list[str]:
     """
     Domande d'esempio per l'empty-state della chat, costruite sulle colonne già
     scelte per il report: così i suggerimenti sono sempre pertinenti al dataset
@@ -456,7 +459,7 @@ def _esempi_domande(sel_measure: str, sel_category: str) -> list[str]:
 
 def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
                 explain: bool, unit: str, dataset_label: str = "",
-                sel_measure: str = "", sel_category: str = "") -> None:
+                sel_measure: str | None = "", sel_category: str | None = "") -> None:
     """Box domanda e storico della conversazione (turno più recente in alto)."""
     st.subheader("Fai una domanda ai tuoi dati")
 
