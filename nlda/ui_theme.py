@@ -60,13 +60,32 @@ def console_css() -> str:
           section[data-testid="stSidebar"] h2,
           section[data-testid="stSidebar"] h3 {{ color: #ffffff; }}
           section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ color: {c['rail_soft']}; }}
-          /* Campi (select, input, uploader) scuri dentro il rail */
-          section[data-testid="stSidebar"] [data-baseweb="select"] > div,
+          /* Campi scuri dentro il rail. Due trappole trovate testando la demo:
+             1) il selectbox di Streamlit non espone più `data-baseweb="select"` (è
+                passato a React-Aria): il controllo si aggancia per testid + la famiglia
+                di classi emotion `e1fp86qc0`, altrimenti resta bianco sul rail scuro;
+             2) il pulsante nativo dell'uploader (`stBaseButton-secondary`) nasce BIANCO,
+                e col testo reso chiaro dal tema del rail il suo "Upload" spariva
+                (chiaro su bianco). Serve scurirne lo sfondo. */
           section[data-testid="stSidebar"] [data-testid="stTextInput"] input,
           section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {{
               background: {c['rail2']}; border-color: {c['rail_line']}; color: {c['rail_ink']};
           }}
-          section[data-testid="stSidebar"] [data-baseweb="select"] svg {{ fill: {c['rail_soft']}; }}
+          section[data-testid="stSidebar"] [data-testid="stSelectbox"] [class*="e1fp86qc0"] {{
+              background: {c['rail2']} !important; border-color: {c['rail_line']} !important;
+          }}
+          section[data-testid="stSidebar"] [data-testid="stSelectbox"] [class*="e1fp86qc0"],
+          section[data-testid="stSidebar"] [data-testid="stSelectbox"] [class*="e1fp86qc0"] * {{
+              color: {c['rail_ink']} !important;
+          }}
+          section[data-testid="stSidebar"] [data-testid="stSelectbox"] svg {{ fill: {c['rail_soft']} !important; }}
+          section[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] {{
+              background: {c['rail2']} !important; color: {c['rail_ink']} !important;
+              border: 1px solid {c['rail_line']} !important;
+          }}
+          section[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"]:hover {{
+              border-color: {c['accent']} !important; color: #ffffff !important;
+          }}
           section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {{
               font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.12em;
               text-transform: uppercase; color: {c['rail_soft']}; }}
