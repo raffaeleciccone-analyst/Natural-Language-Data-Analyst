@@ -121,6 +121,18 @@ class _ProviderRotto(LLMProvider):
         raise RuntimeError("connessione rifiutata")
 
 
+class _ProviderNonInstallato(LLMProvider):
+    """Provider la cui libreria non è installata: imita l'import lazy fallito
+    (es. 'import ollama' senza il pacchetto). È il caso che un recruiter incontra
+    aprendo la demo se il provider scelto non è disponibile."""
+
+    def __init__(self):
+        super().__init__(model_name="assente")
+
+    def _call(self, system_prompt: str, user_prompt: str) -> str:
+        raise ModuleNotFoundError("No module named 'ollama'")
+
+
 class _ProviderFinto(LLMProvider):
     """Provider che risponde con un testo fisso, senza rete."""
 
@@ -150,7 +162,20 @@ def test_narrativa_fallita_non_propaga_ma_avvisa(metodo, argomenti):
     agente = DataAgent(provider=_ProviderRotto())
     testo = getattr(agente, metodo)(*argomenti)
     assert testo.startswith("_(Impossibile generare ") and testo.endswith(")_")
-    assert "connessione rifiutata" in testo
+    # Il messaggio grezzo del provider NON finisce in pagina (resta nei log): è
+    # rumore tecnico che farebbe sembrare l'app rotta a chi apre la demo.
+    assert "connessione rifiutata" not in testo
+    assert "non è al momento raggiungibile" in testo
+
+
+def test_narrativa_non_svela_libreria_mancante():
+    # Un ImportError ('No module named ollama') è un dettaglio implementativo: non
+    # deve finire in pagina a far sembrare l'app rotta a un recruiter. Si mostra un
+    # motivo comprensibile, e la traccia tecnica resta nei log.
+    agente = DataAgent(provider=_ProviderNonInstallato())
+    testo = agente.overview("profilo del dataset")
+    assert "No module named" not in testo and "ModuleNotFoundError" not in testo
+    assert "nessun modello LLM configurato" in testo
 
 
 def test_generazione_codice_fallita_solleva_providererror(sales_df: pd.DataFrame):
