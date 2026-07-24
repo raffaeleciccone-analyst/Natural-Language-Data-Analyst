@@ -78,6 +78,10 @@ warn_redundant_casts = true
 # Adozione graduale: non pretendiamo l'annotazione completa su tutto il codice
 # esistente. Il valore è intercettare gli errori di tipo evidenti.
 check_untyped_defs = true
+# Bersagli di default: senza questi `mypy` nudo esce con "Missing target module"
+# e il type-check gira solo dove qualcuno ricorda di elencarli. Sono gli stessi
+# della CI (`mypy nlda main.py`); gli argomenti da riga di comando li scavalcano.
+files = ["nlda", "main.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
