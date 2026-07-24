@@ -353,11 +353,15 @@ def render_executive_report(agent: DataAgent, insights: dict, limits: DemoLimits
 _FREQ_LABELS = {"Trimestre": "trimestre", "Mese": "mese", "Anno": "anno"}
 
 
-def render_period_comparison(df: pd.DataFrame, sel_measure, unit: str = "") -> None:
+def render_period_comparison(df: pd.DataFrame, sel_measure, unit: str = "",
+                             report_sig: tuple = ()) -> None:
     """
     Confronto di una misura tra periodi (mese/trimestre/anno), deterministico:
     stessi numeri che il modello otterrebbe via `compare_periods`, ma senza LLM.
     Compare solo se il dataset ha almeno una colonna data e una misura numerica.
+
+    `report_sig` identifica i dati su cui si sta lavorando (file + filtro) ed entra
+    nella chiave con cui il risultato viene tenuto da parte: vedi sotto.
     """
     date_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c])]
     measures = ordered_measures(measure_columns(df))
@@ -372,10 +376,26 @@ def render_period_comparison(df: pd.DataFrame, sel_measure, unit: str = "") -> N
         measure = c2.selectbox("Misura", measures, index=idx, key="cmp_measure")
         freq_label = c3.selectbox("Periodo", list(_FREQ_LABELS), key="cmp_freq")
 
-        try:
-            comp = compare_periods(df, date_col, measure, freq=_FREQ_LABELS[freq_label])
-        except Exception as e:  # noqa: BLE001 — dati dell'utente: si spiega, non si esplode
-            st.caption(f"Confronto non disponibile: {e}")
+        # Streamlit esegue il corpo di un expander anche quando è CHIUSO, e
+        # compare_periods è un groupby sull'intero dataset: senza memoria si
+        # ripagherebbe a ogni rerun (misurati 23 ms sul dataset di esempio, 144 ms
+        # su un milione di righe) per un risultato che spesso non è nemmeno in
+        # vista. La funzione è pura, quindi basta rifarla quando cambia un
+        # ingresso: i dati (report_sig) o una delle tre scelte.
+        chiave = (report_sig, date_col, measure, freq_label)
+        if st.session_state.get("cmp_key") != chiave:
+            st.session_state.cmp_key = chiave
+            try:
+                st.session_state.cmp_out = (
+                    compare_periods(df, date_col, measure, freq=_FREQ_LABELS[freq_label]), None)
+            except Exception as e:  # noqa: BLE001 — dati dell'utente: si spiega, non si esplode
+                # Anche il fallimento si tiene da parte: rifare il calcolo a ogni
+                # rerun per riottenere lo stesso errore non serve a nessuno.
+                st.session_state.cmp_out = (None, str(e))
+
+        comp, errore = st.session_state.cmp_out
+        if errore is not None:
+            st.caption(f"Confronto non disponibile: {errore}")
             return
 
         # Tabella leggibile: numeri formattati e variazione con segno (— sul primo).

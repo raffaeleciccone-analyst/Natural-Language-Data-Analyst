@@ -131,7 +131,7 @@ def main() -> None:
             agent, insights, limits,
             exec_sig=(report_sig, config.provider, config.model_name, unit), unit=unit,
         )
-        render_period_comparison(df, sel_measure, unit)
+        render_period_comparison(df, sel_measure, unit, report_sig=report_sig)
         render_column_structure()
     with col_chat:
         st.markdown("<span class='scrollcol'></span>", unsafe_allow_html=True)
