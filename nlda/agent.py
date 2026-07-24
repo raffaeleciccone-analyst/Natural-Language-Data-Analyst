@@ -158,6 +158,24 @@ class DataAgent:
             raise ProviderError.classify(self.provider.name, e) from e
         return clean_code(raw or "")
 
+    @staticmethod
+    def _motivo_llm(e: Exception) -> str:
+        """
+        Motivo leggibile del fallimento narrativo, da mostrare in pagina.
+
+        La narrativa è un COMPLEMENTO: quando manca, l'utente non ha bisogno della
+        causa tecnica — quella resta nei log (vedi il `log.error` dei chiamanti).
+        Il messaggio del provider, invece, è quasi sempre inadatto alla pagina:
+        un `ImportError` espone il nome del pacchetto ('No module named ollama'),
+        e l'SDK OpenAI su chiave mancante risponde con un muro che cita perfino
+        `OPENAI_API_KEY` mentre il provider attivo è Groq. A un recruiter che apre
+        la demo tutto questo fa sembrare l'app rotta. Si distingue solo il caso
+        "provider non installato" da "non risponde"; il resto è rumore.
+        """
+        if isinstance(e, ImportError):   # copre anche ModuleNotFoundError
+            return "nessun modello LLM configurato"
+        return "il modello AI non è al momento raggiungibile"
+
     def _narrate(self, system_prompt: str, user_prompt: str, description: str) -> str:
         """Genera testo narrativo (non codice); in caso di errore ritorna un avviso in corsivo.
 
@@ -171,7 +189,7 @@ class DataAgent:
             return self.provider.generate(system_prompt, user_prompt).strip().replace("`", "")
         except Exception as e:
             log.error("Generazione narrativa (%s) fallita: %s", description, e)
-            return f"_(Impossibile generare {description}: {e})_"
+            return f"_(Impossibile generare {description}: {self._motivo_llm(e)})_"
 
     def _chart_intent(self, question: str):
         """Deduce se la domanda richiede un grafico e di che tipo (linea vs barre)."""
@@ -299,7 +317,7 @@ class DataAgent:
                 yield blocco.replace("`", "")
         except Exception as e:  # noqa: BLE001 — la narrativa è tollerante, non solleva
             log.error("Streaming della spiegazione fallito: %s", e)
-            yield f"_(Impossibile generare la spiegazione: {e})_"
+            yield f"_(Impossibile generare la spiegazione: {self._motivo_llm(e)})_"
             return
         log.info("explanation_stream_ok", extra={
             "provider": self.provider.name, "model": self.provider.model_name,
