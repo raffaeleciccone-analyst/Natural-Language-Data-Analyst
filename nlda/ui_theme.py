@@ -86,6 +86,63 @@ def console_css() -> str:
           section[data-testid="stSidebar"] [data-testid="stBaseButton-secondary"]:hover {{
               border-color: {c['accent']} !important; color: #ffffff !important;
           }}
+
+          /* ===== Maniglia per chiudere/aprire il sidebar =====
+             Di default è una piccola freccia in alto a destra, poco visibile. La
+             portiamo a maniglia circolare centrata verticalmente sul BORDO del rail:
+             sempre in vista e comoda da cliccare. `position: fixed` la tiene ferma
+             anche quando il contenuto del sidebar scorre. Il `left` assume la
+             larghezza di default del sidebar (~300px); se Streamlit la cambia, è
+             l'unico numero da ritoccare. */
+          [data-testid="stSidebarCollapseButton"] {{
+              position: fixed !important; top: 50% !important; left: 286px !important;
+              transform: translateY(-50%) !important; z-index: 1000 !important;
+              width: 30px !important; height: 30px !important;
+              background: {c['rail2']} !important; border: 1px solid {c['rail_line']} !important;
+              border-radius: 50% !important; box-shadow: 0 2px 8px rgba(0,0,0,.4) !important;
+              display: flex !important; align-items: center !important; justify-content: center !important;
+              /* Di default Streamlit la nasconde e la mostra solo all'hover del rail:
+                 la forziamo sempre visibile, è tutto il senso della maniglia. */
+              visibility: visible !important; opacity: 1 !important;
+          }}
+          [data-testid="stSidebarCollapseButton"]:hover {{
+              border-color: {c['accent']} !important; background: {c['rail_line']} !important;
+          }}
+          [data-testid="stSidebarCollapseButton"] button {{
+              width: 100% !important; height: 100% !important; background: transparent !important;
+              visibility: visible !important; opacity: 1 !important;
+          }}
+          [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"] {{
+              color: {c['rail_ink']} !important;
+          }}
+
+          /* Sidebar CHIUSO: è lo STESSO pulsante (Streamlit non ne espone uno
+             separato), ma il rail viene traslato via con una `transform`, e
+             `position: fixed` si ancora a quel frame traslato invece che al viewport —
+             la maniglia finirebbe fuori schermo a sinistra. Si riconosce lo stato da
+             `aria-expanded="false"` e si compensa lo scostamento (~299px, la larghezza
+             del rail) così resta una maniglia comoda sul bordo sinistro. */
+          /* Da CHIUSO il pulsante interno del rail (stSidebarCollapseButton) va
+             nascosto: fa parte del rail traslato via, e col `position: fixed` finiva
+             per riaffiorare fuori posto. Il VERO controllo di riapertura è un elemento
+             separato, stExpandSidebarButton (fuori dal rail, quindi il fixed si ancora
+             pulito al viewport): lo porto a maniglia centrata sul bordo sinistro,
+             simmetrica a quella di chiusura. La sua icona è già » (verso l'apertura). */
+          section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarCollapseButton"] {{
+              display: none !important;
+          }}
+          [data-testid="stExpandSidebarButton"] {{
+              position: fixed !important; top: 50% !important; left: 6px !important;
+              transform: translateY(-50%) !important; z-index: 1000 !important;
+          }}
+          [data-testid="stExpandSidebarButton"] button {{
+              width: 30px !important; height: 30px !important;
+              background: {c['rail2']} !important; border: 1px solid {c['rail_line']} !important;
+              border-radius: 50% !important; box-shadow: 0 2px 8px rgba(0,0,0,.4) !important;
+              display: flex !important; align-items: center !important; justify-content: center !important;
+          }}
+          [data-testid="stExpandSidebarButton"] button:hover {{ border-color: {c['accent']} !important; }}
+          [data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] {{ color: {c['rail_ink']} !important; }}
           section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {{
               font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.12em;
               text-transform: uppercase; color: {c['rail_soft']}; }}
