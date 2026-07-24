@@ -13,7 +13,12 @@ esiste un modo ufficiale per stilare quei componenti; se un giorno il tema si
 custom (`.readout`, `.answer-card`, `.scale`) sono definite da noi e stabili.
 """
 
-# Palette dell'UI. Chiavi "storiche" (page, surface, accent...) + le tinte del rail.
+# Palette dell'UI, fonte unica: la leggono il CSS qui sotto, i grafici
+# (`nlda.charts._THEME`) e le tacche dei KPI (`nlda.ui_components`).
+# ⚠️ Per questo il modulo NON deve importare nulla: `nlda.charts` viene caricato
+# anche dal worker della sandbox, e una dipendenza aggiunta qui — Streamlit su
+# tutte — entrerebbe nel costo di avvio di ogni esecuzione di codice.
+# Chiavi "storiche" (page, surface, accent...) + le tinte del rail.
 PALETTE = dict(
     page="#f2f4f6", surface="#ffffff", surface2="#f7f9fb",
     border="#e4e8ec", strong="#d5dbe1", ink="#1b1f24", ink2="#586471",

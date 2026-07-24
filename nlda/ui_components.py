@@ -15,12 +15,13 @@ from nlda.charts import to_chart
 from nlda.checks import columns_referenced, sanity_warnings
 from nlda.loader import monthly_trend
 from nlda.results import ExecutionFailure, ExecutionResult
+from nlda.ui_theme import PALETTE
 from nlda.utils import IT_NUM_FORMAT, fmt_num
 
 # Tacca colorata sotto i KPI: teal per tutte (coerenza), ma il KPI PRINCIPALE
 # (Totale) usa un teal più LUMINOSO, così risalta sugli altri.
-_TICK = "#0d8a7d"        # accento standard (Media, Massimo, Top, conteggi)
-_TICK_MAIN = "#15b8a1"   # più brillante, riservato al Totale
+_TICK = PALETTE["accent"]   # accento standard (Media, Massimo, Top, conteggi)
+_TICK_MAIN = "#15b8a1"      # più brillante, riservato al Totale: esiste solo qui
 
 
 def answer_card(label: str, text: str, container=None) -> None:
