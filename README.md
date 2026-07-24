@@ -6,7 +6,7 @@
 
 *Analista di dati AI-powered che interroghi in linguaggio naturale.*
 
-> ▶️ **Prova la demo: https://natural-language-data-analyst.streamlit.app/**
+> ▶️ **Prova la demo: https://natural-language-data-analyst-v1.streamlit.app/**
 >
 > 📄 **Perché questo progetto:** [VALUE.md](VALUE.md) · le decisioni in
 > [ARCHITECTURE.md](ARCHITECTURE.md) · la sicurezza in [THREAT_MODEL.md](THREAT_MODEL.md)
@@ -28,7 +28,7 @@ si limita a raccontarli.
 ![Report iniziale sui dati](docs/preview-report.png)
 ![Risposta a una domanda, con grafico](docs/preview-answer.png)
 
-*Screenshot reali della [demo](https://natural-language-data-analyst.streamlit.app/)
+*Screenshot reali della [demo](https://natural-language-data-analyst-v1.streamlit.app/)
 (provider Groq · llama-3.3-70b). In alto i KPI e il report automatico; a destra una
 domanda in linguaggio naturale con la risposta testuale e il grafico generati.*
 
