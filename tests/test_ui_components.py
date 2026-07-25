@@ -191,6 +191,22 @@ def test_render_result_fallimento_mostra_solo_il_messaggio(st_finto: MagicMock):
     st_finto.code.assert_called_once_with("import os", language="python")
 
 
+def test_render_result_avvisa_su_colonna_inventata_nella_domanda(st_finto: MagicMock):
+    # La domanda nomina 'Fatturato' (inesistente) e il codice usa Sales: va mostrato
+    # un avviso in chiaro, con la colonna su cui la risposta si basa davvero.
+    risultato = ExecutionSuccess(fig=None, value=2261537.0, summary="ok")
+    render_result("df['Sales'].sum()", risultato, columns=["Sales", "Region"],
+                  question="somma della colonna Fatturato")
+    avvisi = [str(c) for c in st_finto.warning.call_args_list]
+    assert any("Fatturato" in a and "Sales" in a for a in avvisi)
+
+
+def test_render_result_niente_avviso_se_la_colonna_e_reale(st_finto: MagicMock):
+    render_result("df['Sales'].sum()", ExecutionSuccess(fig=None, value=1.0, summary="ok"),
+                  columns=["Sales", "Region"], question="somma della colonna Sales")
+    st_finto.warning.assert_not_called()
+
+
 def _insights(df: pd.DataFrame) -> dict:
     """Insight nella forma prodotta da `analyze` per classifica e andamento."""
     top = (df.groupby("Region", as_index=False)["Sales"].sum()
