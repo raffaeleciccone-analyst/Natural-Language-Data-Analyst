@@ -48,10 +48,14 @@ esplicitamente ammesso**.
   (match, walrus, async, e ciò che arriverà). Elencando invece la manciata di nodi
   che servono a un'espressione Pandas, `def`/`class`/`import`/`with`/`try` e i
   costrutti futuri restano fuori **per costruzione**, senza doverli prevedere.
-- **Trade-off dichiarato.** L'AST vede la *sintassi*, non l'I/O interno a una
-  libreria: `px.data.gapminder()` o `fig.show()` passano il validatore ed eseguono
-  I/O *dentro* la chiamata. La chiusura vera non è statica — è l'isolamento del
-  sistema operativo (Docker, punto 2).
+- **Trade-off dichiarato.** L'AST vede i *tipi di nodo*, non *quale oggetto* una
+  catena di attributi raggiunge: da `px`/`pd`/`go` si arriverebbe a `os`/`subprocess`
+  per traversata dei sottomoduli (`px.np.f2py`, `px.data.os`). Lo chiude un secondo
+  layer — il **namespace d'esecuzione protetto** (`_SafeModule`): `pd`/`px`/`go`
+  sono esposti al codice tramite un wrapper che nega gli attributi di tipo modulo
+  (alias-safe). Resta scoperto solo l'I/O *interno* a una chiamata non-modulo
+  (`df.plot()`, `fig.show()`): invisibile all'analisi, la chiusura vera è
+  l'isolamento del sistema operativo (Docker, punto 2).
 
 ### 2. Isolamento: una barriera di processo, onestamente non di sistema
 
