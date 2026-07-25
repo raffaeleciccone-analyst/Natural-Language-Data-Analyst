@@ -43,6 +43,46 @@ def columns_referenced(code: str, columns) -> list[str]:
     return list(dict.fromkeys(valore for valore, _, _ in trovate))  # dedup, ordine di comparsa
 
 
+def _string_keys(slice_node) -> list[str]:
+    """Le chiavi-stringa di un subscript: `df['A']` → ['A']; `df[['A','B']]` →
+    ['A','B']. Maschere booleane, slice e chiavi calcolate non danno stringhe."""
+    if isinstance(slice_node, ast.Constant) and isinstance(slice_node.value, str):
+        return [slice_node.value]
+    if isinstance(slice_node, (ast.List, ast.Tuple)):
+        return [el.value for el in slice_node.elts
+                if isinstance(el, ast.Constant) and isinstance(el.value, str)]
+    return []
+
+
+def unknown_columns_referenced(code: str, columns) -> list[str]:
+    """
+    Colonne LETTE dal dataframe originale (`df['X']`) che NON esistono nel dataset.
+
+    Coglie il caso in cui il codice generato inventa una colonna: è la stessa causa
+    di un KeyError a runtime, ma vista PRIMA di eseguire, così l'app non calcola su
+    una colonna fantasma. Volutamente conservativa per non avere falsi positivi:
+    - guarda SOLO i subscript sul nome `df`; i frame DERIVATI hanno colonne nuove e
+      legittime che qui non conosciamo (`detail['percentuale']` non è toccato);
+    - solo in LETTURA: `df['nuova'] = ...` CREA una colonna, non la inventa;
+    - solo chiavi che sono stringhe letterali (`df[col]` con variabile è ignorato).
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
+    nomi = {str(c) for c in columns}
+    ignote: list[str] = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Subscript)
+                and isinstance(node.value, ast.Name) and node.value.id == "df"
+                and isinstance(node.ctx, ast.Load)):
+            continue
+        for chiave in _string_keys(node.slice):
+            if chiave not in nomi and chiave not in ignote:
+                ignote.append(chiave)
+    return ignote
+
+
 def sanity_warnings(value) -> list[str]:
     """
     Segnali deterministici che un risultato è sospetto. Volutamente pochi e ad alta

@@ -236,6 +236,20 @@ def test_execute_pandas_code_blocca_codice_pericoloso(sales_df: pd.DataFrame):
     assert "sicurezza" in out.message.lower()
 
 
+def test_colonna_inventata_fermata_prima_di_eseguire(sales_df: pd.DataFrame, monkeypatch):
+    # Una colonna fantasma non deve produrre un numero: viene fermata nel padre, con
+    # un messaggio che elenca le colonne reali (così la correzione ha di che aggrapparsi)
+    # ed è ritentabile, come il KeyError che sostituisce. In-process per determinismo.
+    from nlda.config import Settings
+    monkeypatch.setattr("nlda.sandbox.runner.settings", Settings(sandbox_subprocess=False))
+    out = execute_pandas_code("df['Fatturato'].mean()", sales_df)
+    assert isinstance(out, ExecutionFailure)
+    assert out.kind == "runtime"
+    assert out.retryable is True
+    assert "Fatturato" in out.message
+    assert "Sales" in out.message  # le colonne disponibili guidano la correzione
+
+
 # --- try_chart: un risultato non graficabile non è un errore -------------------
 def test_try_chart_restituisce_none_su_uno_scalare():
     from nlda.charts import try_chart
