@@ -35,8 +35,10 @@ from nlda.results import (
 from nlda.sandbox.pool import riserva
 from nlda.sandbox.validator import (
     SAFE_BUILTINS,
+    UnsafeCodeError,
     _last_assigned_name,
     _parse_and_validate,
+    _SafeModule,
 )
 from nlda.utils import clean_code
 
@@ -92,9 +94,16 @@ def _run_code(code: str, df: pd.DataFrame) -> ExecutionResult:
         return parsed
     tree = parsed
 
-    # Contesto isolato per l'esecuzione (builtin ridotti al minimo; niente 'st')
+    # Contesto isolato per l'esecuzione (builtin ridotti al minimo; niente 'st').
+    # pd/px/go sono avvolti in _SafeModule: chiude la traversata dei sottomoduli
+    # (px.np.f2py.subprocess, px.data.os) che l'allowlist AST — controllando i tipi
+    # di nodo e non gli oggetti raggiunti — non può vedere. Le funzioni helper
+    # ricevono comunque i moduli reali (sono codice fidato, non generato).
     safe_globals = {"__builtins__": SAFE_BUILTINS}
-    local_context = {"df": df, "pd": pd, "px": px, "go": go,
+    local_context = {"df": df,
+                     "pd": _SafeModule(pd, "pd"),
+                     "px": _SafeModule(px, "px"),
+                     "go": _SafeModule(go, "go"),
                      "to_chart": to_chart, "try_chart": try_chart,
                      "compare_periods": compare_periods}
 
@@ -141,6 +150,12 @@ def _run_code(code: str, df: pd.DataFrame) -> ExecutionResult:
         # Il riepilogo testuale è calcolato QUI (figura reale) e viaggia col risultato.
         return ExecutionSuccess(fig=fig, value=value, summary=_make_summary(fig, value))
 
+    except UnsafeCodeError as e:
+        # Traversata di un sottomodulo fermata dal namespace protetto: è un rifiuto
+        # di SICUREZZA (non un guasto del codice), quindi non ritentabile — rigenerare
+        # porterebbe allo stesso blocco. Va intercettata PRIMA del generico Exception.
+        log.warning("Sandbox: traversata bloccata a runtime (%s) — %r", e, code[:200])
+        return ExecutionFailure("security", f"Errore di sicurezza: {e}.", code)
     except Exception as e:
         return ExecutionFailure("runtime", f"Errore di esecuzione sul codice generato: {e}", code)
 # --- Canale di ritorno dal worker: SOLO dati, mai oggetti ----------------------

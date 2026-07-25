@@ -11,6 +11,7 @@ nodi ammessi valgono poi regole mirate su attributi, nomi e chiavi.
 """
 import ast
 import re
+from types import ModuleType
 
 from nlda.errors import NLDAError
 from nlda.log import get_logger
@@ -68,6 +69,37 @@ class UnsafeCodeError(NLDAError):
     di sicurezza — se un giorno sfuggisse, un `except NLDAError` la riconoscerebbe
     come rifiuto atteso invece di scambiarla per un errore di programmazione.
     """
+
+
+class _SafeModule:
+    """
+    Avvolge un modulo iniettato nel contesto d'esecuzione (pd, px, go) e nega
+    l'accesso ai suoi ATTRIBUTI DI TIPO MODULO.
+
+    È la difesa che l'allowlist AST non può dare da sola. L'AST controlla i TIPI
+    di nodo, non QUALE oggetto una catena di attributi raggiunge: da px/pd/go si
+    arriverebbe a os/subprocess per semplice traversata dei sottomoduli
+    (`px.np.f2py.subprocess`, `px.data.os`). Un blocco per NOME sarebbe aggirabile
+    con un alias (`x = px; x.np`); legando invece i tre nomi a questo proxy, ogni
+    accesso — anche via alias, che punta pur sempre a QUESTO oggetto — ripassa di
+    qui. Si negano i soli sottomoduli: funzioni, classi e costanti dell'API
+    restano accessibili, quindi gli idiomi Pandas/Plotly legittimi non ne
+    risentono. Fail-closed: un attributo modulo non previsto viene negato, mai
+    ammesso di default.
+    """
+    __slots__ = ("_modulo", "_nome")
+
+    def __init__(self, modulo, nome: str):
+        self._modulo = modulo
+        self._nome = nome
+
+    def __getattr__(self, attr: str):
+        # _modulo/_nome sono slot: risolti dalla lookup normale, non rientrano qui.
+        valore = getattr(self._modulo, attr)
+        if isinstance(valore, ModuleType):
+            raise UnsafeCodeError(
+                f"accesso al sottomodulo '{self._nome}.{attr}' non consentito")
+        return valore
 # --- Allowlist dei nodi AST ----------------------------------------------------
 # Il default è NEGARE: tutto ciò che non compare qui viene rifiutato.
 #
