@@ -8,7 +8,7 @@ import pandas as pd
 from nlda.config import settings
 from nlda.log import get_logger
 from nlda.sanitize import sanitize
-from nlda.utils import column_kind, fmt_num
+from nlda.utils import column_kind, fmt_num, to_datetime_quiet
 
 log = get_logger(__name__)
 
@@ -45,13 +45,13 @@ def _maybe_parse_dates(df: pd.DataFrame) -> pd.DataFrame:
         if sample.empty:
             continue
         try:
-            parsed = pd.to_datetime(sample, errors="coerce", dayfirst=True)
+            parsed = to_datetime_quiet(sample, dayfirst=True)
         except Exception:  # noqa: BLE001
             # Colonna non interpretabile come data: si passa alla successiva.
             continue  # nosec B112
         frac = parsed.notna().mean()
         if (bool(_DATE_HINT.search(str(col))) and frac >= 0.5) or frac >= 0.9:
-            df[col] = pd.to_datetime(s, errors="coerce", dayfirst=True)
+            df[col] = to_datetime_quiet(s, dayfirst=True)
     return df
 
 
