@@ -1,7 +1,24 @@
 """Utility condivise tra i moduli del pacchetto (evita duplicazioni)."""
 import re
+import warnings
 
 import pandas as pd
+
+
+def to_datetime_quiet(values, *, dayfirst: bool = False) -> pd.Series:
+    """
+    `pd.to_datetime(errors='coerce')` senza il rumore di 'Could not infer format'.
+
+    Il loader prova a interpretare come data OGNI colonna testuale (per rilevare
+    quali lo sono) e `compare_periods` riceve talvolta date ancora in stringa: in
+    entrambi i casi il formato è ignoto e il fallback per-elemento di pandas è
+    VOLUTO. L'avviso che pandas emette è quindi solo rumore — circa uno per colonna
+    all'avvio — e va spento qui, dove la scelta è deliberata, non altrove.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Could not infer format",
+                                category=UserWarning)
+        return pd.to_datetime(values, errors="coerce", dayfirst=dayfirst)
 
 # Convenzione numerica italiana (separatore migliaia '.', decimale ','), usata sia
 # da fmt_num sia dalla formattazione delle tabelle (Styler.format) — unica fonte.
