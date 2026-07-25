@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import re
@@ -72,13 +73,35 @@ def _stringify_complex(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# Delimitatori che un CSV usa davvero. NON si lascia indovinare il separatore a
+# `csv.Sniffer` (sep=None): su un file a COLONNA SINGOLA il sniffer non trova un
+# delimitatore vero e ne sceglie uno qualsiasi — tipicamente una lettera
+# dell'intestazione — spezzando 'Fatturato' in ['Fa','ura','o']. Qui si cerca solo
+# tra delimitatori reali; se l'header non ne contiene, è una colonna sola e va
+# tenuta intera.
+_CANDIDATI_SEP = [",", ";", "\t", "|"]
+
+
+def _detect_sep(header: str) -> str:
+    presenti = [s for s in _CANDIDATI_SEP if s in header]
+    # Nessun delimitatore nell'intestazione -> colonna singola. Si usa ',' proprio
+    # perché ASSENTE: non spezza nulla, a differenza di sep=None.
+    return max(presenti, key=header.count) if presenti else ","
+
+
 def _read_csv_resilient(f) -> pd.DataFrame:
-    """Legge un CSV rilevando il separatore e gestendo encoding non-UTF8."""
-    try:
-        return pd.read_csv(f, sep=None, engine="python")
-    except (UnicodeDecodeError, UnicodeError):
-        f.seek(0)
-        return pd.read_csv(f, sep=None, engine="python", encoding="latin-1")
+    """Legge un CSV rilevando il separatore tra delimitatori reali, togliendo il BOM
+    e gestendo gli encoding non-UTF8."""
+    raw = f.read()
+    if isinstance(raw, str):
+        text = raw
+    else:
+        try:
+            text = raw.decode("utf-8-sig")   # '-sig' rimuove il BOM in testa, se c'è
+        except UnicodeDecodeError:
+            text = raw.decode("latin-1")
+    header = text.split("\n", 1)[0]
+    return pd.read_csv(io.StringIO(text), sep=_detect_sep(header), engine="python")
 
 
 def _check_dimensioni(df: pd.DataFrame) -> None:
