@@ -41,28 +41,48 @@ from nlda.sandbox.validator import (
     _parse_and_validate,
     _SafeModule,
 )
+from nlda.sanitize import sanitize
 from nlda.utils import clean_code
 
 log = get_logger(__name__)
+
+# Il riepilogo del risultato finisce nel prompt narrativo (explain/report), e i suoi
+# VALORI vengono dal file dell'utente: vanno sanitizzati come lo schema, altrimenti
+# una cella ostile può iniettare testo nelle istruzioni al modello. Cap generoso —
+# non taglia i nomi reali di prodotto/categoria — ma finito, così l'iniezione non è
+# illimitata. Numeri e date restano intatti.
+_MAX_CELL = 80
+
+
+def _clean_cell(v):
+    return sanitize(v, _MAX_CELL) if isinstance(v, str) else v
 
 
 def _fig_summary(fig, max_rows: int = 30) -> str:
     lines = []
     for trace in fig.data:
-        name = getattr(trace, "name", None) or "serie"
+        name = sanitize(str(getattr(trace, "name", None) or "serie"), _MAX_CELL)
         x_attr = getattr(trace, "x", None)
         y_attr = getattr(trace, "y", None)
         xs = list(x_attr) if x_attr is not None else []
         ys = list(y_attr) if y_attr is not None else []
-        pairs = ", ".join(f"{x}={y}" for x, y in list(zip(xs, ys, strict=False))[:max_rows])
+        pairs = ", ".join(f"{_clean_cell(x)}={y}"
+                          for x, y in list(zip(xs, ys, strict=False))[:max_rows])
         lines.append(f"{name}: {pairs}")
     return "Dati del grafico -> " + " | ".join(lines)
 
 
 def _obj_summary(obj, max_rows: int = 30) -> str:
-    if isinstance(obj, (pd.DataFrame, pd.Series)):
-        return obj.head(max_rows).to_string()
-    return str(obj)
+    # I valori di testo (celle, indice, nomi di colonna) vengono dal file: sanitizzati
+    # prima di comporre il riepilogo per l'LLM. `_clean_cell` lascia intatti numeri e
+    # date, quindi si può mappare l'intero oggetto senza toccarne i valori numerici.
+    if isinstance(obj, pd.Series):
+        return obj.head(max_rows).rename(index=_clean_cell).map(_clean_cell).to_string()
+    if isinstance(obj, pd.DataFrame):
+        head = obj.head(max_rows).rename(
+            index=_clean_cell, columns=lambda c: sanitize(str(c), _MAX_CELL))
+        return head.map(_clean_cell).to_string()
+    return sanitize(str(obj), _MAX_CELL)
 
 
 def _make_summary(fig, value, max_rows: int = 30) -> str:
