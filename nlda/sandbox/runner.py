@@ -21,6 +21,7 @@ import pandas as pd
 # px e go finiscono nel contesto di esecuzione del codice generato: il prompt
 # promette al modello che Plotly Express sia gia' disponibile come 'px'.
 from nlda.charts import apply_theme, go, is_plotly_figure, px, to_chart, try_chart
+from nlda.checks import unknown_columns_referenced
 from nlda.config import settings
 from nlda.log import get_logger
 from nlda.periods import compare_periods
@@ -307,6 +308,19 @@ def execute_pandas_code(code_string: str, df: pd.DataFrame) -> ExecutionResult:
     parsed = _parse_and_validate(code)
     if isinstance(parsed, ExecutionFailure):
         return parsed
+
+    # Colonna inventata: il codice legge df['X'] con X che non esiste nel dataset.
+    # È la stessa causa di un KeyError a runtime ('colonna assente'), ma còlta PRIMA
+    # di eseguire — così l'app non calcola su una colonna fantasma e il messaggio
+    # elenca le colonne reali, guidando la correzione. retryable, come il KeyError.
+    ignote = unknown_columns_referenced(code, df.columns)
+    if ignote:
+        etichetta = ", ".join(f"'{c}'" for c in ignote)
+        disponibili = ", ".join(str(c) for c in df.columns)
+        return ExecutionFailure(
+            "runtime",
+            f"Errore: colonna {etichetta} non presente nel dataset. "
+            f"Colonne disponibili: {disponibili}.", code)
 
     # Esecuzione isolata in sottoprocesso (con timeout e cap memoria su POSIX).
     if settings.sandbox_subprocess:

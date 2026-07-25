@@ -6,7 +6,11 @@ sanity check che grida al lupo su risposte corrette è peggio che non averlo.
 import numpy as np
 import pandas as pd
 
-from nlda.checks import columns_referenced, sanity_warnings
+from nlda.checks import (
+    columns_referenced,
+    sanity_warnings,
+    unknown_columns_referenced,
+)
 
 
 # --- Colonne usate ---------------------------------------------------------------
@@ -33,6 +37,51 @@ def test_codice_non_parsabile_non_esplode():
 def test_nessun_doppione_ordine_preservato():
     code = "df['A'] + df['B'] + df['A']"
     assert columns_referenced(code, ["A", "B"]) == ["A", "B"]
+
+
+# --- Colonne inventate: lette da df ma inesistenti -------------------------------
+def test_colonna_inventata_rilevata():
+    assert unknown_columns_referenced("df['Fatturato'].mean()", ["Sales", "Region"]) == \
+        ["Fatturato"]
+
+
+def test_colonna_reale_non_e_segnalata():
+    assert unknown_columns_referenced("df['Sales'].mean()", ["Sales", "Region"]) == []
+
+
+def test_creare_una_colonna_non_e_inventarla():
+    # df['nuova'] = ... CREA una colonna (contesto Store): non è un accesso a una
+    # colonna fantasma e non va segnalato.
+    code = "df['margine'] = df['Profit'] / df['Sales']"
+    assert unknown_columns_referenced(code, ["Profit", "Sales"]) == []
+
+
+def test_frame_derivato_non_e_controllato():
+    # 'percentuale' è una colonna nuova di un frame DERIVATO (detail), legittima:
+    # si guardano solo i subscript sul nome `df`.
+    code = ("detail = df.groupby('Region', as_index=False)['Sales'].sum()\n"
+            "detail['percentuale'] = detail['Sales'] / detail['Sales'].sum()\n"
+            "result = detail")
+    assert unknown_columns_referenced(code, ["Region", "Sales"]) == []
+
+
+def test_maschera_booleana_non_da_falsi_positivi():
+    # df[df['Sales'] > 100]: la chiave è una Series booleana, non una stringa.
+    assert unknown_columns_referenced("df[df['Sales'] > 100]", ["Sales"]) == []
+
+
+def test_lista_di_subscript_con_una_inventata():
+    assert unknown_columns_referenced("df[['Region', 'Ignota']]", ["Region", "Sales"]) == \
+        ["Ignota"]
+
+
+def test_chiave_variabile_ignorata():
+    # df[col] con col variabile: non è una stringa letterale, non si può giudicare.
+    assert unknown_columns_referenced("col = 'x'\nresult = df[col]", ["Sales"]) == []
+
+
+def test_codice_non_parsabile_non_esplode_ignote():
+    assert unknown_columns_referenced("df[[[", ["A"]) == []
 
 
 # --- Sanity check: scattano solo quando devono -----------------------------------

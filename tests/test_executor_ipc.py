@@ -142,7 +142,10 @@ def test_sottoprocesso_reale_con_dataframe(sales_df: pd.DataFrame):
 
 def test_sottoprocesso_reale_propaga_la_causa_dell_errore(sales_df: pd.DataFrame):
     # L'errore nasce NEL worker: la causa deve arrivare al padre attraverso il JSON.
-    out = execute_pandas_code("df['ColonnaInesistente'].sum()", sales_df)
+    # Si usa una divisione per zero (non una colonna assente): una colonna fantasma
+    # viene ora còlta dal pre-controllo nel padre e non raggiungerebbe il worker,
+    # mancando il bersaglio di questo test (la propagazione dell'errore dal worker).
+    out = execute_pandas_code("1 / 0", sales_df)
     assert isinstance(out, ExecutionFailure)
     assert out.kind == "runtime"
 
