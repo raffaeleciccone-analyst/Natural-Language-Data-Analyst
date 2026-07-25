@@ -200,6 +200,12 @@ risposta testuale.
   niente metodi di I/O (`to_*`/`read_*`/`write_*` su file o rete, con una
   whitelist di convertitori puri in memoria), niente esecuzione dinamica
   (`eval`, `exec`, `query`, `format`).
+- **Namespace d'esecuzione protetto**: l'allowlist AST controlla i *tipi di nodo*,
+  non quale oggetto una catena di attributi raggiunge — da `px`/`pd`/`go` si
+  arriverebbe a `os`/`subprocess` per traversata dei sottomoduli (`px.np.f2py`,
+  `px.data.os`). Per questo `pd`/`px`/`go` sono esposti al codice generato tramite
+  un wrapper che nega l'accesso ai *sottomoduli*, chiudendo la traversata (e resta
+  tale anche via alias).
 - **Sottoprocesso dedicato** con timeout: barriera di processo attorno al codice
   generato dall'LLM. È una barriera *di processo*, non di sistema: il worker
   gira come lo stesso utente dell'app. L'isolamento dal sistema lo aggiunge il
