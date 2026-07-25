@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 
 from nlda.charts import to_chart
-from nlda.checks import columns_referenced, sanity_warnings
+from nlda.checks import claimed_missing_columns, columns_referenced, sanity_warnings
 from nlda.loader import monthly_trend
 from nlda.results import EXECUTED_OK, ExecutionFailure, ExecutionResult
 from nlda.ui_theme import PALETTE
@@ -195,14 +195,29 @@ def render_value(value, kp: str = "r") -> None:
 
 
 def render_result(code: str, result: ExecutionResult,
-                  explanation: "str | None" = None, kp: str = "r", columns=None) -> None:
+                  explanation: "str | None" = None, kp: str = "r", columns=None,
+                  question: str = "") -> None:
     """
     Rende un turno completo: risposta testuale, eventuali avvisi, risultato visuale
     e codice generato con le colonne usate.
 
     `columns` (le colonne del dataset) abilita la riga "Colonne usate": mostra su
-    cosa poggia la risposta, così l'utente può fidarsi o verificare.
+    cosa poggia la risposta, così l'utente può fidarsi o verificare. `question`
+    abilita l'avviso quando la domanda nomina una colonna che non esiste.
     """
+    # 0. Avviso anti-allucinazione, PRIMA della risposta: se la domanda nomina
+    # esplicitamente una colonna inesistente, il modello tende a sostituirla in
+    # silenzio con una reale e a spacciarla per quella chiesta. Lo si dice qui, in
+    # chiaro, non lo si nasconde nel pannello del codice.
+    if columns is not None and question:
+        inventate = claimed_missing_columns(question, columns)
+        if inventate:
+            etichetta = ", ".join(f"«{c}»" for c in inventate)
+            verbo = "non è una colonna" if len(inventate) == 1 else "non sono colonne"
+            base = columns_referenced(code, columns)
+            suffisso = f" La risposta si basa su: {', '.join(base)}." if base else ""
+            st.warning(f"⚠️ {etichetta} {verbo} del dataset.{suffisso}")
+
     # 1. Risposta testuale (in un riquadro dedicato)
     if explanation:
         answer_card("Risposta", explanation)

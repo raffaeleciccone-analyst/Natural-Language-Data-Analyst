@@ -435,7 +435,7 @@ def _render_turn(turn: Turn, key_index: int, columns=None) -> None:
         st.write(turn.question)
     with st.chat_message("assistant"):
         render_result(turn.code, turn.result, turn.explanation,
-                      kp=f"h{key_index}", columns=columns)
+                      kp=f"h{key_index}", columns=columns, question=turn.question)
 
 
 def _render_turn_streaming(service: AnalysisService, question: str, turn: Turn,
@@ -457,7 +457,8 @@ def _render_turn_streaming(service: AnalysisService, question: str, turn: Turn,
             # testo CONSERVATO li riporta a `$`, perché il riquadro dello storico
             # (answer_card) è HTML e mostrerebbe il backslash in chiaro.
             testo = (str(reso).replace("\\$", "$").strip() or None)
-        render_result(turn.code, turn.result, explanation=None, kp="live", columns=columns)
+        render_result(turn.code, turn.result, explanation=None, kp="live",
+                      columns=columns, question=question)
     return replace(turn, explanation=testo)
 
 

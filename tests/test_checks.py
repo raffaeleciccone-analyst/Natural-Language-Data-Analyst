@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from nlda.checks import (
+    claimed_missing_columns,
     columns_referenced,
     sanity_warnings,
     unknown_columns_referenced,
@@ -82,6 +83,43 @@ def test_chiave_variabile_ignorata():
 
 def test_codice_non_parsabile_non_esplode_ignote():
     assert unknown_columns_referenced("df[[[", ["A"]) == []
+
+
+# --- Colonne NOMINATE dalla domanda ma inesistenti -------------------------------
+_COLS = ["Region", "Sales", "Order Date", "Order ID", "Sub-Category"]
+
+
+def test_domanda_nomina_una_colonna_inventata():
+    assert claimed_missing_columns("Qual è la somma della colonna Fatturato?", _COLS) == \
+        ["Fatturato"]
+
+
+def test_domanda_con_df_subscript_inventato():
+    assert claimed_missing_columns("dammi df['Zorglub'] per favore", _COLS) == ["Zorglub"]
+
+
+def test_colonna_reale_nominata_non_avvisa():
+    assert claimed_missing_columns("media della colonna Sales", _COLS) == []
+
+
+def test_colonna_composta_reale_non_e_spezzata():
+    # 'Order Date' è una colonna reale: il pattern la cattura intera, non 'Order'.
+    assert claimed_missing_columns("mostrami la colonna Order Date", _COLS) == []
+
+
+def test_parola_funzione_dopo_colonna_non_e_falso_positivo():
+    # "la colonna con più vendite": 'con' è minuscola, non un nome di colonna.
+    assert claimed_missing_columns("Qual è la colonna con più vendite?", _COLS) == []
+
+
+def test_nessuna_menzione_esplicita_non_avvisa():
+    # Nessun 'colonna/campo/df[...]': non si inventano avvisi su valori o concetti.
+    assert claimed_missing_columns("Mostrami le vendite per regione", _COLS) == []
+
+
+def test_piu_colonne_inventate_dedup_ordine():
+    q = "somma della colonna Fatturato e della colonna Fatturato, più df['Ghost']"
+    assert claimed_missing_columns(q, _COLS) == ["Fatturato", "Ghost"]
 
 
 # --- Sanity check: scattano solo quando devono -----------------------------------

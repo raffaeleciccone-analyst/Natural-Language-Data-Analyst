@@ -17,6 +17,7 @@ Funzioni pure, nessuno Streamlit: la UI le chiama, ma si testano da sole.
 """
 import ast
 import math
+import re
 
 import pandas as pd
 
@@ -81,6 +82,40 @@ def unknown_columns_referenced(code: str, columns) -> list[str]:
             if chiave not in nomi and chiave not in ignote:
                 ignote.append(chiave)
     return ignote
+
+
+# Una colonna 'nominata' dalla domanda: `df['X']`, oppure 'colonna/campo/column'
+# seguito da virgolette o da un Nome Capitalizzato (anche composto, es. 'Order Date').
+# Il vincolo sull'iniziale maiuscola è ciò che dà PRECISIONE: assorbe i nomi
+# multi-parola reali e tiene fuori le parole-funzione ('la colonna con piu' vendite'
+# non cattura 'con'). Solo il keyword è case-insensitive.
+_COLONNA_NOMINATA = re.compile(
+    r"df\s*\[\s*['\"](?P<sub>[^'\"]+)['\"]\s*\]"
+    r"|(?i:colonn[ae]|campo|column)\s+"
+    r"(?:['\"](?P<quot>[^'\"]+)['\"]"
+    r"|(?P<cap>[A-Z][\w-]*(?:\s+[A-Z][\w-]*)*))"
+)
+
+
+def claimed_missing_columns(question: str, columns) -> list[str]:
+    """
+    Nomi che la DOMANDA presenta esplicitamente come colonne (`df['X']`, 'colonna X',
+    'campo X') ma che NON esistono nel dataset.
+
+    È il segnale deterministico dietro l'avviso anti-allucinazione: quando l'utente
+    nomina una colonna inventata, il modello tende a sostituirla in silenzio con una
+    reale (es. Sales) e la risposta la spaccia per quella chiesta. Qui NON si indovina
+    l'intento — si cattura solo ciò che l'utente ha marcato come colonna — così
+    l'avviso resta ad alta precisione: niente falsi positivi su valori o concetti
+    generici, e i nomi di colonna composti (`Order Date`) non vengono spezzati.
+    """
+    nomi = {str(c) for c in columns}
+    fuori: list[str] = []
+    for m in _COLONNA_NOMINATA.finditer(question or ""):
+        nome = (m.group("sub") or m.group("quot") or m.group("cap") or "").strip()
+        if nome and nome not in nomi and nome not in fuori:
+            fuori.append(nome)
+    return fuori
 
 
 def sanity_warnings(value) -> list[str]:
