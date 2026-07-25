@@ -56,10 +56,83 @@ def _maybe_parse_dates(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+_SIMBOLO_VALUTA = re.compile(r"[$€£¥]")
+_SOLO_NON_NUMERICO = re.compile(r"[^\d,.\-]")
+_MIGLIAIA_VIRGOLA = re.compile(r"^-?\d{1,3}(,\d{3})+$")   # 1,234 / 12,345,678
+_MIGLIAIA_PUNTO = re.compile(r"^-?\d{1,3}(\.\d{3})+$")    # 1.234 / 1.234.567 (EU)
+
+
+def _numero_da_valuta(v):
+    """
+    Interpreta una stringa di valuta/numero formattato (`$1,000`, `1.234,56`) come
+    float, o None se non è un numero. Il separatore decimale è l'ULTIMO tra ',' e '.';
+    con un separatore solo, i gruppi di 3 cifre sono migliaia, il resto è decimale.
+    """
+    if not isinstance(v, str):
+        return v
+    s = _SOLO_NON_NUMERICO.sub("", v)
+    if not any(ch.isdigit() for ch in s):
+        return None
+    has_c, has_d = "," in s, "." in s
+    if has_c and has_d:
+        if s.rfind(",") > s.rfind("."):
+            s = s.replace(".", "").replace(",", ".")
+        else:
+            s = s.replace(",", "")
+    elif has_c:
+        s = s.replace(",", "") if _MIGLIAIA_VIRGOLA.match(s) else s.replace(",", ".")
+    elif has_d:
+        s = s.replace(".", "") if _MIGLIAIA_PUNTO.match(s) else s
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _numero_semplice(v):
+    """Un numero 'nudo' (nessun separatore ambiguo da interpretare), o None."""
+    if not isinstance(v, str):
+        return v
+    try:
+        return float(v.strip())
+    except ValueError:
+        return None
+
+
+def _maybe_parse_numbers(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Converte in numerico le colonne testuali che sono in realtà numeri: valuta
+    formattata (`$1,000`) e misure con qualche cella-testo per i mancanti (`n.d.`).
+
+    Due prudenze contro i numeri sbagliati:
+    - il munging dei separatori (ambiguo tra stile US ed EU) si applica SOLO alle
+      colonne con un simbolo di valuta, dove l'intento 'denaro' è chiaro; le altre
+      accettano solo numeri nudi, così una stringa ambigua senza contesto resta testo;
+    - si converte solo se ≥90% dei valori non-nulli diventa numero: pochi 'n.d.'/'N/A'
+      passano a NaN, ma una colonna categoriale (in gran parte non numerica) resta testo.
+    """
+    for col in df.columns:
+        s = df[col]
+        # Solo colonne testuali (in pandas 3 il testo ha dtype 'str', non 'object').
+        if not (s.dtype == object or pd.api.types.is_string_dtype(s)):
+            continue
+        campione = s.dropna().astype(str)
+        if campione.empty:
+            continue
+        valuta = bool(campione.str.contains(_SIMBOLO_VALUTA).mean() >= 0.5)
+        num = pd.to_numeric(s.map(_numero_da_valuta if valuta else _numero_semplice),
+                            errors="coerce")
+        non_nulli = int(s.notna().sum())
+        if non_nulli and num.notna().sum() / non_nulli >= 0.9:
+            df[col] = num
+    return df
+
+
 def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Pulisce i nomi delle colonne (spazi) e rileva automaticamente le colonne data."""
+    """Pulisce i nomi delle colonne (spazi) e rileva automaticamente date e numeri."""
     df.columns = [str(c).strip() for c in df.columns]
-    return _maybe_parse_dates(df)
+    df = _maybe_parse_dates(df)
+    return _maybe_parse_numbers(df)
 
 
 def _stringify_complex(df: pd.DataFrame) -> pd.DataFrame:
