@@ -44,6 +44,26 @@ def test_measure_columns_esclude_identificatori():
     assert "Year" not in measures          # anno escluso
 
 
+def test_solo_id_numerico_non_diventa_una_misura():
+    # Regressione: con la sola colonna numerica = un ID progressivo, il fallback
+    # 'measures or num_cols' la ripescava e l'app sommava gli ID ('Totale OrderID').
+    # Ora una chiave densa e distinta resta fuori: niente misura -> modalità conteggi.
+    df = pd.DataFrame({"OrderID": range(1000, 1030),
+                       "Citta": ["Roma", "Milano"] * 15})
+    assert measure_columns(df) == []
+    res = analyze(df)
+    assert res["measure"] is None       # non somma gli ID
+    assert res["category"] == "Citta"   # conteggi per città
+
+
+def test_misura_intera_ad_alta_varianza_resta_una_misura():
+    # Un intero quasi-unico ma NON una sequenza densa (es. importi) è una misura,
+    # non una chiave: il fallback selettivo deve ripescarlo.
+    df = pd.DataFrame({"Regione": ["N", "S"] * 15,
+                       "Importo": [i * 37 % 9000 for i in range(30)]})
+    assert "Importo" in measure_columns(df)
+
+
 def test_read_any_csv_da_bytes():
     csv = b"Region,Sales\nNorth,100\nSouth,200\n"
     buf = io.BytesIO(csv)

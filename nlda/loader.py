@@ -252,11 +252,40 @@ def _is_identifier(name, series: pd.Series, n: int) -> bool:
     return False
 
 
+def _is_strong_id(name, series: pd.Series) -> bool:
+    """
+    Chiave CERTA: nome-ID/anno, oppure una sequenza di interi densa e tutta distinta
+    (codici progressivi tipo OrderID 1000..1029). A differenza di `_is_identifier`,
+    NON basta l'alta cardinalità: un intero ad alta varianza (Profit, importi) resta
+    fuori. Serve al fallback delle misure, per non ripescare una chiave da sommare.
+    """
+    if _ID_PATTERN.search(str(name)) or _is_year_like(name, series):
+        return True
+    s = series.dropna()
+    if s.empty or not pd.api.types.is_integer_dtype(s):
+        return False
+    span = int(s.max() - s.min()) + 1
+    # tutti distinti E impacchettati densamente nel loro intervallo -> è una sequenza
+    return bool(s.nunique() == len(s) and span > 0 and s.nunique() / span >= 0.9)
+
+
 def _measure_columns(df: pd.DataFrame, num_cols: list) -> list:
-    """Colonne numeriche 'misura' (esclude gli identificatori); ripiega su tutte se vuota."""
+    """
+    Colonne numeriche 'misura' (esclude gli identificatori).
+
+    Se l'esclusione non lascia nulla, si ripiega sulle numeriche — l'euristica di
+    unicità può aver scartato una misura continua (near-unique ma non una chiave) —
+    ESCLUSE però le chiavi certe (`_is_strong_id`). Prima il ripiego era su TUTTE le
+    numeriche ('measures or num_cols'): un dataset 'OrderID + città' finiva per
+    sommare gli ID e dichiarare 'Totale OrderID' con la quota del leader, un numero
+    senza senso spacciato per un fatto. Ora un ID progressivo resta fuori e l'analisi
+    passa alla modalità a conteggi.
+    """
     n = len(df)
     measures = [c for c in num_cols if not _is_identifier(c, df[c], n)]
-    return measures or num_cols
+    if measures:
+        return measures
+    return [c for c in num_cols if not _is_strong_id(c, df[c])]
 
 
 def measure_columns(df: pd.DataFrame) -> list:
