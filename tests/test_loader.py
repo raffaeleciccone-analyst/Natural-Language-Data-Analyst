@@ -99,6 +99,47 @@ def test_csv_separatore_tab():
     assert list(df.columns) == ["Regione", "Vendite"]
 
 
+def test_valuta_formattata_diventa_numerica():
+    # '$1,000' era testo -> nessuna analisi economica. Ora si riconosce come numero.
+    csv = b"Regione,Fatturato\n" + b"".join(
+        f'{"N" if i % 2 else "S"},"$1,{i:03d}"\n'.encode() for i in range(20))
+    df = read_any(_upload(csv, "valuta.csv"))
+    assert pd.api.types.is_numeric_dtype(df["Fatturato"])
+    assert df["Fatturato"].sum() == sum(1000 + i for i in range(20))  # 20.190
+
+
+def test_valuta_stile_europeo():
+    # '1.234,00 €' (punto migliaia, virgola decimale) va letto come 1234.00.
+    righe = "".join(f'A,"1.234,{i:02d} €"\n' for i in range(15))
+    df = read_any(_upload(("Voce,Importo\n" + righe).encode("utf-8"), "eu.csv"))
+    assert pd.api.types.is_numeric_dtype(df["Importo"])
+    assert abs(df["Importo"].iloc[0] - 1234.00) < 0.001
+
+
+def test_colonna_numerica_con_pochi_valori_testo():
+    # Missing codificati come testo ('n.d.'): la colonna resta numerica, il testo -> NaN.
+    corpo = b"".join(f"N,{i}\n".encode() for i in range(19)) + b"S,n.d.\n"
+    df = read_any(_upload(b"Regione,Valore\n" + corpo, "nd.csv"))
+    assert pd.api.types.is_numeric_dtype(df["Valore"])
+    assert int(df["Valore"].isna().sum()) == 1
+
+
+def test_colonna_categoriale_non_diventa_numerica():
+    # In gran parte non numerica: NON va convertita (niente somme su codici/categorie).
+    csv = b"Codice\n" + b"A1\nB2\nrosso\nverde\nblu\n" * 4
+    df = read_any(_upload(csv, "cat.csv"))
+    assert not pd.api.types.is_numeric_dtype(df["Codice"])
+
+
+def test_stringa_numerica_ambigua_senza_valuta_resta_testo():
+    # '1,234' senza simbolo di valuta è ambiguo (migliaia o decimale?): si lascia
+    # testo invece di rischiare un numero sbagliato. CSV a ';' così la virgola resta
+    # dentro il valore.
+    csv = "Regione;Chiave\n" + "".join(f"N;{v}\n" for v in ["1,234", "5,678", "9,012"] * 8)
+    df = read_any(_upload(csv.encode(), "amb.csv"))
+    assert not pd.api.types.is_numeric_dtype(df["Chiave"])
+
+
 def test_csv_bom_viene_rimosso_dall_intestazione():
     # Un BOM in testa lasciava la prima colonna chiamata '﻿Regione', che non
     # combaciava con filtri e domande. utf-8-sig lo toglie.
