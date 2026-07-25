@@ -53,6 +53,39 @@ def test_read_any_csv_da_bytes():
     assert len(df) == 2
 
 
+def test_csv_a_colonna_singola_non_viene_spezzato():
+    # Regressione: con sep=None il csv.Sniffer sceglieva una LETTERA dell'header
+    # come separatore e spezzava 'Fatturato' in ['Fa','ura','o']. Un CSV a colonna
+    # sola deve restare una colonna sola, col nome intatto e il tipo giusto.
+    df = read_any(_upload(b"Fatturato\n100\n200\n300\n", "una.csv"))
+    assert list(df.columns) == ["Fatturato"]
+    assert df["Fatturato"].sum() == 600  # numerico, quindi sommabile
+
+
+def test_csv_a_colonna_singola_di_testo():
+    df = read_any(_upload(b"Citta\nRoma\nMilano\nNapoli\n", "citta.csv"))
+    assert list(df.columns) == ["Citta"]
+    assert len(df) == 3
+
+
+def test_csv_separatore_punto_e_virgola():
+    df = read_any(_upload(b"Regione;Vendite\nNord;10\nSud;20\n", "pv.csv"))
+    assert list(df.columns) == ["Regione", "Vendite"]
+    assert df["Vendite"].sum() == 30
+
+
+def test_csv_separatore_tab():
+    df = read_any(_upload(b"Regione\tVendite\nNord\t10\nSud\t20\n", "tab.csv"))
+    assert list(df.columns) == ["Regione", "Vendite"]
+
+
+def test_csv_bom_viene_rimosso_dall_intestazione():
+    # Un BOM in testa lasciava la prima colonna chiamata '﻿Regione', che non
+    # combaciava con filtri e domande. utf-8-sig lo toglie.
+    df = read_any(_upload("﻿Regione,Vendite\nNord,10\n".encode(), "bom.csv"))
+    assert list(df.columns) == ["Regione", "Vendite"]
+
+
 def test_monthly_trend_aggrega_per_mese(sales_df: pd.DataFrame):
     per = monthly_trend(sales_df, "Order Date", "Sales")
     assert per is not None
