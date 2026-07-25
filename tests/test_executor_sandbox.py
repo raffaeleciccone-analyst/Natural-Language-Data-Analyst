@@ -74,6 +74,52 @@ def test_codice_pericoloso_rifiutato(code: str):
     assert _is_rejected(code), f"NON rifiutato (escape!): {code!r}"
 
 
+# --- Traversata dei moduli: chiusa dal namespace protetto ----------------------
+# Questi passano l'allowlist AST (sono solo accessi ad attributo, nodi ammessi) ma
+# raggiungerebbero os/subprocess per traversata dei sottomoduli di px/pd. Il
+# contenimento è nel CONTESTO d'esecuzione (pd/px/go avvolti in _SafeModule),
+# quindi si verifica ESEGUENDO, non col solo _parse_and_validate.
+MODULE_ESCAPES = [
+    "px.data.os.getcwd()",
+    "px.data.os.environ",
+    "px.np.f2py.subprocess.run(['echo', 'x'])",
+    "pd.io.common.get_handle('x', 'w')",
+    # aggiramento per alias: 'x' punta comunque al proxy, quindi 'x.np' ricade qui
+    "x = px\nrisultato = x.np.f2py",
+]
+
+
+@pytest.mark.parametrize("code", MODULE_ESCAPES)
+def test_traversata_moduli_bloccata(code: str, sales_df: pd.DataFrame):
+    res = _run_code(code, sales_df)
+    assert isinstance(res, ExecutionFailure), f"NON bloccato (escape!): {code!r}"
+    assert res.kind == "security", (code, res.kind, res.message)
+    assert res.retryable is False
+
+
+def test_traversata_moduli_bloccata_sul_percorso_pubblico(
+        sales_df: pd.DataFrame, monkeypatch):
+    # Percorso completo: l'escape supera il pre-controllo statico e viene fermato in
+    # esecuzione dal namespace protetto. In-process per determinismo (come gli altri
+    # test end-to-end), così l'esito non dipende dall'avvio del sottoprocesso.
+    from nlda.config import Settings
+    monkeypatch.setattr("nlda.sandbox.runner.settings", Settings(sandbox_subprocess=False))
+    out = execute_pandas_code("px.np.f2py.subprocess.run(['echo', 'x'])", sales_df)
+    assert isinstance(out, ExecutionFailure)
+    assert out.kind == "security"
+
+
+def test_api_legittima_di_px_pd_non_bloccata(sales_df: pd.DataFrame):
+    # Il proxy nega i soli sottomoduli: funzioni/classi dell'API devono passare,
+    # altrimenti avremmo rotto gli idiomi che il prompt insegna.
+    res = _run_code("fig = px.bar(df, x='Region', y='Sales')", sales_df)
+    assert isinstance(res, ExecutionSuccess)
+    assert res.fig is not None
+    res2 = _run_code("result = pd.concat([df, df]).shape[0]", sales_df)
+    assert isinstance(res2, ExecutionSuccess)
+    assert res2.value == len(sales_df) * 2
+
+
 # --- Codice LEGITTIMO: deve passare il validatore ------------------------------
 ALLOWED = [
     "df['Sales'].sum()",
