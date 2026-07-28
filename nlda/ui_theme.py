@@ -40,6 +40,18 @@ def console_css() -> str:
             --display:"Space Grotesk",system-ui,sans-serif;
             --mono:"IBM Plex Mono",ui-monospace,"SF Mono",monospace;
           }}
+          /* Scala tipografica FLUIDA, in un punto solo. Tutte le misure del tema —
+             e quelle di Streamlit — sono in rem, cioè multipli di questo valore:
+             cambiarlo qui le muove tutte insieme, senza dover mettere un clamp() su
+             ogni singola regola (dodici clamp che si devono tenere in accordo a mano
+             sono dodici occasioni di sbagliare).
+             Il termine `- 0.21vw` fa CRESCERE il testo quando lo schermo è stretto:
+             su un portatile 1366-1920px si va a 17.5-18px (+9/+13% rispetto a oggi),
+             su un monitor da 2560px si torna ai 16.2px di prima (+1%: invisibile) —
+             il tema "strumento di misura" resta compatto dove c'è spazio. I due
+             estremi del clamp impediscono sia il gigantismo sotto i 1200px sia il
+             rimpicciolimento su un ultrawide. */
+          html {{ font-size: clamp(16px, 21.5px - 0.21vw, 18px); }}
           .stApp, [data-testid="stAppViewContainer"] {{ background: {c['page']}; }}
           .stApp, .stApp p, .stApp label, .stApp li, .stMarkdown {{
               font-family: var(--sans); color: {c['ink']};
@@ -53,9 +65,15 @@ def console_css() -> str:
              quello resettava lo scroll a ogni rerun (un expander sembrava non aprirsi).
              Qui l'overflow sta sul div STABILE della colonna, che il browser conserva
              tra i rerun: cliccare un expander lo apre e lo scroll resta dov'è. Il marker
-             .scrollcol identifica le due colonne giuste (KPI e grafici NON scrollano). */
+             .scrollcol identifica le due colonne giuste (KPI e grafici NON scrollano).
+             I 470px sono l'intestazione a tutta larghezza (titolo, KPI, anteprima,
+             righello) misurata su schermo grande. Da soli erano una trappola: su un
+             portatile con viewport alto 621px lasciavano alle colonne 151px, una
+             fessura. Il `max(...)` garantisce comunque il 58% dell'altezza dello
+             schermo; sotto la soglia del blocco responsive in fondo al file le
+             colonne smettono del tutto di scrollare e si impilano. */
           [data-testid="stColumn"]:has(.scrollcol) {{
-              max-height: calc(100vh - 470px); overflow-y: auto; overflow-x: hidden;
+              max-height: max(58vh, calc(100vh - 470px)); overflow-y: auto; overflow-x: hidden;
               padding-right: 10px; scrollbar-width: thin;
           }}
           [data-testid="stElementContainer"]:has(.scrollcol) {{ display: none !important; }}
@@ -71,8 +89,28 @@ def console_css() -> str:
           [data-testid="stCaptionContainer"] {{ font-family: var(--mono); color: {c['muted']}; }}
 
           /* ===== RAIL (sidebar scura, non la barra grigia di default) ===== */
+          /* Larghezza in REM, non in px: così segue la scala tipografica fluida qui
+             sopra. Con i 300px fissi di prima, il testo che cresceva su schermo
+             stretto veniva tagliato dal rail che restava fermo ("CSV, XLSX, XL…").
+             18.9rem valgono 302px alla scala base — i 300px di sempre sul monitor
+             grande, a due pixel — e 340px quando il testo sale a 18px: cresce quanto
+             ciò che contiene, e il rapporto fra i due non cambia mai. Il numero è
+             misurato sulla riga più lunga del rail ("25MB per file · CSV, XLSX, XLS,
+             JSON"): a 18.6rem l'ellissi le mangiava ancora l'ultima parola.
+             ⚠️ La larghezza vale SOLO da rail APERTO (`aria-expanded="true"`), ed è
+             il punto delicato: Streamlit chiude la barra portandone la larghezza a
+             zero, e un `width !important` incondizionato glielo impedisce — la barra
+             scompare ma il suo spazio resta prenotato, il contenuto non si ricentra e
+             a sinistra rimane una fascia vuota larga quanto il rail. Legata allo
+             stato aperto, da chiuso la regola smette di valere e Streamlit richiude
+             la larghezza a 0 come fa di suo. Se un domani non esponesse più
+             l'attributo, il rail tornerebbe ai suoi 300px di default: si perdono
+             pochi pixel sulla riga più lunga, non si rompe il layout. */
           section[data-testid="stSidebar"] {{
               background: {c['rail']}; border-right: 1px solid {c['rail_line']};
+          }}
+          section[data-testid="stSidebar"][aria-expanded="true"] {{
+              width: 18.9rem !important; min-width: 18.9rem !important;
           }}
           section[data-testid="stSidebar"] .stMarkdown,
           section[data-testid="stSidebar"] p,
@@ -155,7 +193,9 @@ def console_css() -> str:
               position: fixed !important; top: 50% !important;
               transform: translateY(-50%) !important; z-index: 1000 !important;
           }}
-          [data-testid="stSidebarCollapseButton"] {{ left: 286px !important; }}
+          /* Segue la larghezza del rail (18.6rem), meno mezza maniglia: resta a
+             cavallo del bordo a qualunque scala tipografica. */
+          [data-testid="stSidebarCollapseButton"] {{ left: calc(18.9rem - 15px) !important; }}
           [data-testid="stExpandSidebarButton"] {{ left: 6px !important; }}
           [data-testid="stSidebarCollapseButton"],
           [data-testid="stExpandSidebarButton"] button {{
@@ -252,6 +292,84 @@ def console_css() -> str:
           [data-testid="stDownloadButton"] button {{
               border-radius: 9px; border: 1px solid {c['border']};
               color: {c['deep']}; font-family: var(--mono); font-size: 0.8rem;
+          }}
+
+          /* ===== SCHERMI PICCOLI (portatili) =====================================
+             Il tema nasce su un monitor grande: due colonne affiancate, ciascuna con
+             il proprio scroll. Su un portatile quel disegno si ritorce contro, e le
+             misure prese sull'app dicono quanto: a 1904x933 la colonna del report era
+             alta 463px con 1782px di contenuto dentro — si vedeva il 26% del report
+             attraverso una feritoia. A 1350x621 scendeva a 151px.
+
+             La soglia guarda LARGHEZZA **o** ALTEZZA, e l'altezza non è un dettaglio:
+             un portatile 1920x1080 è largo abbastanza da passare un test sulla sola
+             larghezza, ma il suo viewport è alto ~930px ed è lì che il layout si
+             rompe. `max-height: 950px` intercetta proprio quel caso; un 2560x1440
+             (viewport ~1300px) resta sopra entrambe le soglie e vede l'app identica
+             a prima — questo blocco per lui non esiste. */
+          @media (max-width: 1500px), (max-height: 950px) {{
+              /* Le due colonne si impilano: report sopra, chat sotto. */
+              [data-testid="stHorizontalBlock"]:has(.scrollcol) {{ flex-direction: column; }}
+              /* E soprattutto smettono di scrollare per conto loro: a scorrere è la
+                 pagina, come si aspetta chiunque apra un sito su un portatile. Senza
+                 `min-width` Streamlit terrebbe la larghezza calcolata sul rapporto
+                 1.55/1 anche da impilate, lasciando due colonne strette e mezzo
+                 schermo vuoto a destra. */
+              [data-testid="stColumn"]:has(.scrollcol) {{
+                  max-height: none !important; overflow: visible !important;
+                  padding-right: 0; width: 100% !important;
+                  flex: 1 1 100% !important; min-width: 100% !important;
+              }}
+              /* Impilate, report e chat si toccherebbero senza stacco. Le separa lo
+                 stesso motivo a tacche della classe .scale — la firma del tema, qui
+                 riusata come linea di demarcazione invece di un banale bordo grigio. */
+              [data-testid="stColumn"]:has(.scrollcol) + [data-testid="stColumn"]:has(.scrollcol) {{
+                  margin-top: 18px; padding-top: 22px;
+                  background-image: repeating-linear-gradient(90deg, {c['strong']} 0 1px, transparent 1px 8px);
+                  background-size: 100% 8px; background-repeat: no-repeat;
+              }}
+          }}
+
+          /* Solo per la LARGHEZZA: su schermo stretto le file di colonne che NON sono
+             le due principali (i 4 KPI, le coppie di grafici, i selettori dentro gli
+             expander) vanno a capo invece di stringersi. I 4 KPI diventano 2x2: a
+             1350px erano ~250px l'uno, e i valori — mono, 1.9rem, `white-space:nowrap`
+             — non ci stavano. Un 1920x1080 tiene i suoi 4 KPI in fila, lì lo spazio
+             in larghezza c'è: per questo la regola è separata dal blocco sopra. */
+          @media (max-width: 1500px) {{
+              [data-testid="stHorizontalBlock"]:not(:has(.scrollcol)) {{ flex-wrap: wrap; }}
+              [data-testid="stHorizontalBlock"]:not(:has(.scrollcol)) > [data-testid="stColumn"] {{
+                  min-width: 46% !important;
+              }}
+              /* Margini laterali generosi su 2560px, spreco su 1366px: recuperano
+                 ~90px di larghezza utile, che è quasi un quarto di una colonna. */
+              .block-container {{ padding-left: 1.6rem !important; padding-right: 1.6rem !important; }}
+              /* Le card KPI su due righe raddoppiano l'altezza dell'intestazione, e
+                 sotto la piega finirebbe tutto il resto: si stringono in verticale
+                 (i 140px di min-height servivano a pareggiare 4 card in fila, cosa
+                 che a 2x2 non serve più) recuperando ~50px per riga. */
+              .readout {{ min-height: 116px; padding: 14px 12px 12px; }}
+              .readout .r-tick {{ margin-top: 10px; }}
+              .readout .r-sub {{ margin-top: 7px; }}
+          }}
+
+          /* Schermi BASSI: qui il problema non è la larghezza ma i pixel verticali.
+             Su un portatile 1366x768 il viewport utile è 621px e l'intestazione a
+             tutta larghezza (titolo + sottotitolo + KPI + anteprima + righello) ne
+             occupava 614: si apriva l'app e il report cominciava esattamente sotto
+             la piega — nessun indizio che sotto ci fosse altro. Titolo e margini
+             stretti liberano ~90px, abbastanza perché la prima riga del report si
+             veda e inviti a scorrere.
+             ⚠️ Il `padding-top` del .block-container NON si tocca: la barra di
+             Streamlit (stHeader, alta 3.75rem) è in `position: absolute` e sta SOPRA
+             il contenuto — quel padding è ciò che tiene il titolo fuori da lì.
+             Ridurlo a 0.7rem faceva finire la prima riga del titolo sotto la barra.
+             Essendo in rem, si adegua da sé alla scala tipografica. */
+          @media (max-height: 800px) {{
+              .stApp h1 {{ font-size: 2.1rem; }}
+              .app-subtitle {{ margin-top: -0.2rem; }}
+              .readout {{ min-height: 104px; padding: 12px 12px 10px; }}
+              .scale {{ margin: 6px 0 2px; }}
           }}
         </style>
         """
