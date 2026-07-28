@@ -230,19 +230,43 @@ def console_css() -> str:
               text-transform: uppercase; color: {c['rail_soft']}; }}
 
           /* ===== KPI readout ===== */
+          /* `container-type: inline-size` rende la card un contenitore misurabile:
+             dentro di essa l'unità `cqi` vale l'1% della SUA larghezza, non di quella
+             della finestra. Serve al valore qui sotto, che si deve adattare alla card
+             (4 in fila, 2x2, impilate: la larghezza cambia parecchio) e non allo
+             schermo. */
           .readout {{
               background: {c['surface']}; border: 1px solid {c['border']};
               border-radius: 12px; padding: 20px 16px 18px; min-height: 140px;
               box-shadow: 0 1px 2px rgba(20,30,40,0.04); text-align: center;
+              container-type: inline-size;
           }}
           .readout .r-k {{ font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em;
               text-transform: uppercase; color: {c['ink2']}; }}
+          /* Il valore NON deve mai uscire dalla card. Tre difese in fila:
+             1) `--vfs`, calcolato in `ui_components.readout` sulla lunghezza della
+                cifra e moltiplicato qui per la larghezza della card (cqi);
+             2) `min(1.9rem, ...)`: il coefficiente può solo rimpicciolire — su una
+                card larga il valore resta ai 1.9rem del tema, non si gonfia;
+             3) `overflow: hidden` + ellissi: rete di sicurezza per il caso che non
+                abbiamo previsto. Meglio un valore troncato dentro il riquadro che
+                una cifra che esce e si sovrappone alla card accanto.
+             La prima `font-size` in rem NON è un doppione: se un browser non conosce
+             `cqi` scarta solo la riga dopo e resta il comportamento di prima. */
           .readout .r-v {{ font-family: var(--mono); font-weight: 600; font-size: 1.9rem;
               letter-spacing: -0.03em; margin-top: 10px; line-height: 1.1;
-              font-variant-numeric: tabular-nums; color: {c['ink']}; white-space: nowrap; }}
+              font-variant-numeric: tabular-nums; color: {c['ink']}; white-space: nowrap;
+              overflow: hidden; text-overflow: ellipsis; }}
+          .readout .r-v {{ font-size: min(1.9rem, calc(var(--vfs, 14) * 1cqi)); }}
+          /* Il KPI testuale ("Top region: West") usa il font proporzionale, che a
+             parità di caratteri occupa meno del monospazio: stesso `--vfs` con un
+             fattore più generoso. 1.2 è MISURATO, non stimato: Space Grotesk sta
+             sui 0.494em per carattere (non 0.5 tondo), e col 1.42 che veniva dal
+             calcolo teorico "Trentino-Alto Adige" finiva ancora sotto l'ellissi. */
           .readout .r-v.sm {{ font-family: var(--display); font-size: 1.55rem; letter-spacing: 0;
               line-height: 1.15; margin-top: 12px;
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+          .readout .r-v.sm {{ font-size: min(1.55rem, calc(var(--vfs, 14) * 1.2cqi)); }}
           .readout .r-tick {{ height: 5px; margin: 14px auto 0; border-radius: 3px;
               background: var(--bar, {c['accent']}); width: 48px; }}
           .readout .r-sub {{ font-family: var(--mono); font-size: 0.72rem; color: {c['muted']}; margin-top: 10px; }}
