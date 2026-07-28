@@ -51,8 +51,20 @@ def readout(col, label: str, value: str, sub: str = "",
     # hanno tutte la stessa altezza.
     sub_html = f"<div class='r-sub'>{html.escape(sub) if sub else '&nbsp;'}</div>"
     cls = "r-v sm" if small else "r-v"
+    # Quanto può essere grande il valore dipende da DUE cose che il CSS da solo non
+    # sa mettere insieme: la larghezza della card (cambia col responsive) e la
+    # LUNGHEZZA della cifra, che dipende dai dati — "9.412" e "1.284.377.905,40 €"
+    # non occupano lo stesso spazio. La seconda si conosce solo qui, ed è per quello
+    # che il calcolo sta in Python: al CSS si passa un coefficiente espresso in `cqi`
+    # (1% della larghezza della card) e il browser lo riapplica a ogni ridimensiona-
+    # mento, senza una riga di JavaScript.
+    # 153 ≈ 100 / (0.6 × 0.92): 0.6em è la larghezza di un carattere del monospazio,
+    # 0.92 il margine che tiene il valore staccato dai bordi. Il `min()` nel CSS
+    # impedisce che su una card larga il valore superi i 1.9rem di progetto: questo
+    # coefficiente può solo RIMPICCIOLIRE, mai ingrandire oltre il tema.
+    vfs = round(153 / max(len(value), 1), 1)
     col.markdown(
-        f"<div class='readout'>"
+        f"<div class='readout' style='--vfs:{vfs}'>"
         f"<div class='r-k'>{html.escape(label)}</div>"
         f"<div class='{cls}'>{html.escape(value)}</div>"
         f"<div class='r-tick' style='--bar:{tick}'></div>{sub_html}</div>",

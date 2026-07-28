@@ -306,3 +306,31 @@ def test_clicked_category_fallback_su_x_stringa():
 def test_clicked_category_fallback_su_y_se_x_non_e_stringa():
     # Barre orizzontali: x è la misura numerica, la categoria è su y.
     assert ui._clicked_category({"x": 100, "y": "Sud"}) == "Sud"
+
+
+# --- Dimensione del valore nelle card KPI --------------------------------------
+# `readout` non decide il font in pixel: passa al CSS un coefficiente `--vfs` che il
+# browser moltiplica per la larghezza della card. Il calcolo sta in Python perché è
+# l'unico punto che conosce la LUNGHEZZA del valore, e senza quello i numeri lunghi
+# uscivano dal riquadro (misurato: con 4 card in fila a ~1580px di finestra il valore
+# aveva 2px di margine — bastava una cifra in più).
+def _vfs(value: str) -> float:
+    """Estrae il coefficiente --vfs dall'HTML generato da `readout`."""
+    col = MagicMock()
+    ui.readout(col, "Etichetta", value)
+    html_reso = col.markdown.call_args.args[0]
+    return float(html_reso.split("--vfs:")[1].split("'")[0])
+
+
+def test_valore_lungo_riceve_un_coefficiente_piu_piccolo():
+    assert _vfs("1.284.377.905,40 €") < _vfs("9.412")
+
+
+def test_coefficiente_proporzionale_alla_lunghezza():
+    # 153 / 17 caratteri, arrotondato a un decimale.
+    assert _vfs("19.981.676.855 $") == pytest.approx(153 / 16, abs=0.05)
+
+
+def test_valore_vuoto_non_divide_per_zero():
+    # Una card può nascere senza valore (dataset degenere): non deve esplodere.
+    assert _vfs("") == pytest.approx(153, abs=0.05)
