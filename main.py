@@ -28,6 +28,7 @@ from nlda.ui.pages import (
     render_join,
     render_kpis,
     render_period_comparison,
+    render_project_chat,
     render_report,
     render_report_selectors,
     render_sidebar_config,
@@ -135,9 +136,17 @@ def main() -> None:
         render_column_structure()
     with col_chat:
         st.markdown("<span class='scrollcol'></span>", unsafe_allow_html=True)
-        render_chat(service, df, limits, explain=config.explain, unit=unit,
-                    dataset_label=source_label,
-                    sel_measure=sel_measure, sel_category=sel_category)
+        # Due interlocutori diversi nella stessa colonna: chi USA l'app fa domande
+        # sui propri dati, chi la VALUTA ne fa sul progetto. Due schede invece di
+        # due colonne perché la seconda non serve mai contemporaneamente alla prima
+        # — e perché la larghezza, su un portatile, non basterebbe a nessuna delle due.
+        tab_dati, tab_progetto = st.tabs(["I tuoi dati", "Chiedi al progetto"])
+        with tab_dati:
+            render_chat(service, df, limits, explain=config.explain, unit=unit,
+                        dataset_label=source_label,
+                        sel_measure=sel_measure, sel_category=sel_category)
+        with tab_progetto:
+            render_project_chat(agent, limits)
 
     # PER ULTIMA, anche se compare in cima alla pagina: è l'unica parte che
     # aspetta il modello. Generandola qui, l'utente ha già davanti KPI, tabelle,
