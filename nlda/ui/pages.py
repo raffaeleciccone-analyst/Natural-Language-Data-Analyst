@@ -25,6 +25,7 @@ from nlda.loader import (
     profile,
 )
 from nlda.periods import compare_periods
+from nlda.project_qa import answer as answer_about_project
 from nlda.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers
 from nlda.results import ExecutionFailure, ExecutionSuccess
 from nlda.service import AnalysisService, Turn
@@ -480,6 +481,15 @@ def _esempi_domande(sel_measure: str | None, sel_category: str | None) -> list[s
     return esempi[:3] or ["Quante righe ha il dataset?", "Mostrami le prime 10 righe"]
 
 
+# Domande che un valutatore fa davvero, e che la documentazione copre bene: fanno
+# da vetrina alle sezioni piu' interessanti invece di lasciare il campo vuoto.
+_ESEMPI_PROGETTO = (
+    "Come funziona la sandbox di sicurezza?",
+    "Come evitate che l'AI inventi i numeri?",
+    "Che design pattern sono stati usati?",
+)
+
+
 def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
                 explain: bool, unit: str, dataset_label: str = "",
                 sel_measure: str | None = "", sel_category: str | None = "") -> None:
@@ -554,3 +564,70 @@ def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
                 demo_consume(limits)
             turn = _render_turn_streaming(service, question, turn, colonne, unit, explain)
         st.session_state.messages = _cap_storico(turns + [turn])
+
+def render_project_chat(agent: DataAgent, limits: DemoLimits) -> None:
+    """
+    "Chiedi al progetto": domande sul lavoro, non sui dati.
+
+    Sta accanto alla chat sui dati perche' chi valuta questo progetto ha domande
+    di natura diversa da chi lo usa ("come funziona la sandbox?" invece di "qual e'
+    il mese migliore?"), e finora l'unico modo di rispondergli era che io fossi
+    presente o che leggesse quattordicimila parole di documentazione.
+
+    Condivide la QUOTA della demo con la chat sui dati: sono chiamate allo stesso
+    modello, sulla stessa chiave, e tenere due budget separati significherebbe
+    raddoppiare il tetto di spesa senza dirlo.
+    """
+    st.caption("Domande su architettura, sicurezza, scelte tecniche, test, deploy. "
+               "Le risposte vengono dalla documentazione del repository, con la fonte citata.")
+
+    if "project_qa" not in st.session_state:
+        st.session_state.project_qa = []
+
+    with st.form("project_form", clear_on_submit=True):
+        q = st.text_input("domanda sul progetto", label_visibility="collapsed",
+                          key="project_q",
+                          placeholder="Es. 'Come funziona la sandbox?' oppure "
+                                      "'Perche' Streamlit e non Flask?'")
+        inviata = st.form_submit_button("Chiedi", width="stretch")
+
+    live = st.container()
+    storico = st.session_state.project_qa
+
+    domanda = q.strip() if (inviata and q and q.strip()) else None
+
+    # I suggerimenti vivono in un SEGNAPOSTO, non scritti direttamente nella pagina.
+    # Streamlit riporta il click di un bottone al rerun SUCCESSIVO a quello in cui il
+    # bottone è stato disegnato: nel giro in cui si risponde, i suggerimenti sono
+    # quindi già a schermo e resterebbero sopra la risposta. Potendo svuotare il
+    # segnaposto, spariscono nello stesso istante in cui non servono più.
+    suggerimenti = st.empty()
+    if not storico:
+        with suggerimenti.container():
+            st.caption("Oppure prova una di queste 👇")
+            for j, ex in enumerate(_ESEMPI_PROGETTO):
+                if st.button(ex, key=f"pq_{j}", width="stretch"):
+                    domanda = ex
+    if domanda:
+        suggerimenti.empty()
+
+    if domanda and demo_allows(limits, "domande"):
+        with live, st.spinner("Cerco nella documentazione…"):
+            testo, fonti = answer_about_project(agent.provider, domanda)
+        # Se il recupero non ha trovato nulla il modello non e' stato chiamato:
+        # non c'e' niente da addebitare alla quota.
+        if fonti:
+            demo_consume(limits)
+        st.session_state.project_qa = ([(domanda, testo, [f.citazione for f in fonti])]
+                                       + storico)[:_TURNI_IN_VISTA]
+        storico = st.session_state.project_qa
+
+    for dom, risp, citazioni in storico:
+        with st.chat_message("user"):
+            st.markdown(md_safe(dom))
+        with st.chat_message("assistant"):
+            st.markdown(md_safe(risp))
+            if citazioni:
+                with st.expander(f"Fonti ({len(citazioni)})"):
+                    for c in citazioni:
+                        st.caption(f"• {c}")
