@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "./api/client";
 import type { DatasetResponse, ReportResponse } from "./api/types";
+import { BollaProgetto } from "./components/BollaProgetto";
 import { Chat } from "./components/Chat";
 import { Grafico } from "./components/Grafico";
 import { Kpi, KpiScheletro } from "./components/Kpi";
@@ -213,6 +214,8 @@ export default function App() {
           </>
         )}
       </main>
+
+      <BollaProgetto />
     </div>
   );
 }
