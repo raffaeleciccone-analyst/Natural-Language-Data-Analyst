@@ -10,7 +10,6 @@ Restano di proposito a livello di modulo le funzioni decorate con `@st.cache_*`:
 definirle dentro una funzione le ricreerebbe a ogni rerun di Streamlit, la chiave
 di cache cambierebbe ogni volta e la cache non verrebbe mai colpita.
 """
-import io
 import os
 from dataclasses import dataclass
 from datetime import date
@@ -20,7 +19,7 @@ import streamlit as st
 
 from nlda.agent import DataAgent
 from nlda.demo import DemoLimits
-from nlda.loader import load_dataset, read_any
+from nlda.loader import NamedBytesIO, load_dataset, read_any
 from nlda.log import get_logger
 
 log = get_logger(__name__)
@@ -127,17 +126,9 @@ def demo_consume(limits: DemoLimits) -> None:
 # Streamlit ri-esegue l'intero script a ogni interazione: senza cache il file
 # verrebbe riletto e ri-parsato a ogni click. @st.cache_data memoizza sul
 # CONTENUTO (nome + byte), quindi la rilettura avviene solo se il file cambia.
-class _NamedBytesIO(io.BytesIO):
-    """BytesIO con un attributo `.name`, così read_any riconosce l'estensione."""
-
-    def __init__(self, data: bytes, name: str):
-        super().__init__(data)
-        self.name = name
-
-
 @st.cache_data(show_spinner=False)
 def load_uploaded_cached(name: str, data: bytes) -> pd.DataFrame:
-    return read_any(_NamedBytesIO(data, name))
+    return read_any(NamedBytesIO(data, name))
 
 
 @st.cache_data(show_spinner=False)
@@ -181,13 +172,3 @@ def load_second_dataset(uploaded_file):
     if uploaded_file is None:
         return None
     return load_uploaded_cached(uploaded_file.name, uploaded_file.getvalue())
-
-
-def _try_fig(fn, *args, **kwargs):
-    """Costruisce una figura, o None se qualcosa va storto (report robusto).
-    L'errore viene loggato (non mostrato all'utente) per restare diagnosticabile."""
-    try:
-        return fn(*args, **kwargs)
-    except Exception as e:  # noqa: BLE001
-        log.warning("Figura del report non generata da %s: %s", getattr(fn, "__name__", fn), e)
-        return None

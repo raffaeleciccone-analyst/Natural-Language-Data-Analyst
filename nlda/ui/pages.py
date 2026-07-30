@@ -11,9 +11,10 @@ import pandas as pd
 import streamlit as st
 
 from nlda.agent import DataAgent
-from nlda.charts import apply_theme, corr_heatmap, histogram, px, to_chart
+from nlda.charts import apply_theme, corr_heatmap, histogram, px, to_chart, try_fig
 from nlda.demo import DemoLimits
 from nlda.export import conversation_to_markdown
+from nlda.kpis import build_kpis
 from nlda.loader import (
     SUPPORTED_EXTENSIONS,
     analyze,
@@ -33,12 +34,16 @@ from nlda.ui.session import (
     _KEY_ENV,
     SidebarConfig,
     _secret,
-    _try_fig,
     demo_allows,
     demo_consume,
     load_second_dataset,
 )
-from nlda.ui_components import answer_card, build_kpis, readout, render_linked_charts, render_result
+from nlda.ui_components import (
+    answer_card,
+    readout,
+    render_linked_charts,
+    render_result,
+)
 from nlda.utils import fmt_num, md_safe, with_unit
 from nlda.views import join_datasets
 
@@ -210,14 +215,14 @@ def refresh_report_state(df: pd.DataFrame, data_sig, sel_measure, sel_category, 
             insights = analyze(df, measure=sel_measure, category=sel_category)
             st.session_state.insights = insights
             st.session_state.top_fig = (
-                _try_fig(to_chart, insights["top"].data, kind="bar") if "top" in insights else None)
+                try_fig(to_chart, insights["top"].data, kind="bar") if "top" in insights else None)
             st.session_state.trend_fig = (
-                _try_fig(to_chart, insights["trend"].data, kind="line")
+                try_fig(to_chart, insights["trend"].data, kind="line")
                 if "trend" in insights else None)
             st.session_state.corr_fig = (
-                _try_fig(corr_heatmap, insights["corr"]) if "corr" in insights else None)
+                try_fig(corr_heatmap, insights["corr"]) if "corr" in insights else None)
             st.session_state.dist_fig = (
-                _try_fig(histogram, df, sel_measure) if sel_measure else None)
+                try_fig(histogram, df, sel_measure) if sel_measure else None)
 
     return report_sig, st.session_state.get("insights", {})
 

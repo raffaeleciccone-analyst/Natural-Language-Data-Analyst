@@ -20,6 +20,9 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    sourcemap: true,
+    // Niente sourcemap in produzione: erano 11,4 MB dei 16,3 del frontend
+    // nell'immagine, e spediscono il codice sorgente a chiunque apra gli
+    // strumenti del browser. In sviluppo Vite le genera comunque, sempre.
+    sourcemap: false,
   },
 });

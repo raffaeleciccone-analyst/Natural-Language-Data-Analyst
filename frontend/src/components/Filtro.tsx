@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api } from "../api/client";
+import { useRichiesta } from "../api/useRichiesta";
 import type { DatasetResponse, FiltroSpec } from "../api/types";
 
 /**
@@ -24,37 +25,16 @@ export function Filtro({
   onCambia: (f: FiltroSpec | null) => void;
 }) {
   const [colonna, setColonna] = useState("");
-  const [valori, setValori] = useState<string[]>([]);
-  const [troncati, setTroncati] = useState(false);
 
-  // Cambiando dataset il filtro precedente non ha più senso: si azzera invece di
-  // restare attivo su una colonna che magari non esiste più.
-  useEffect(() => {
-    setColonna("");
-    setValori([]);
-    onCambia(null);
-  }, [dataset.dataset_id, onCambia]);
-
-  useEffect(() => {
-    if (!colonna) {
-      setValori([]);
-      return;
-    }
-    let annullato = false;
-    void api
-      .distinti(dataset.dataset_id, colonna)
-      .then((r) => {
-        if (annullato) return;
-        setValori(r.values);
-        setTroncati(r.truncated);
-      })
-      .catch(() => {
-        if (!annullato) setValori([]);
-      });
-    return () => {
-      annullato = true;
-    };
-  }, [dataset.dataset_id, colonna]);
+  // I valori si chiedono all'API invece di ricavarli dall'anteprima: quella e' di
+  // dieci righe, e un filtro costruito su quelle mostrerebbe solo i valori che
+  // capita compaiano in cima al file.
+  const { dati: distinti } = useRichiesta(
+    colonna ? () => api.distinti(dataset.dataset_id, colonna) : null,
+    [dataset.dataset_id, colonna],
+  );
+  const valori = distinti?.values ?? [];
+  const troncati = distinti?.truncated ?? false;
 
   const selezionati = filtro?.column === colonna ? filtro.values : [];
 

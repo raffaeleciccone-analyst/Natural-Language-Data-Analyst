@@ -16,16 +16,12 @@
  *    pagina, e questa è un'app che esegue codice generato da un modello.
  */
 import type {
-  AskRequest,
-  AskResponse,
-  ConfigResponse,
   DatasetResponse,
   DistinctResponse,
   ErrorResponse,
   ExportRequest,
   ExportResponse,
   FiltroSpec,
-  JoinRequest,
   PeriodsResponse,
   ProjectQaResponse,
   ReportResponse,
@@ -66,31 +62,42 @@ async function richiesta<T>(percorso: string, init?: RequestInit): Promise<T> {
     throw new ApiError("Impossibile contattare il server. Controlla che sia in esecuzione.", 0);
   }
 
-  if (!risposta.ok) {
-    // L'API ha una forma d'errore sola; se per qualche motivo non arriva, non si
-    // deve fallire nel gestire il fallimento.
-    let dettaglio = `Errore ${risposta.status}`;
-    try {
-      const corpo = (await risposta.json()) as ErrorResponse;
-      if (corpo?.detail) dettaglio = corpo.detail;
-    } catch {
-      /* risposta non JSON: resta il messaggio generico */
-    }
-    throw new ApiError(dettaglio, risposta.status);
-  }
+  if (!risposta.ok) throw await erroreDaRisposta(risposta);
 
   return (await risposta.json()) as T;
 }
 
-function json(corpo: unknown, apiKey?: string): RequestInit {
+/**
+ * Intestazioni di una richiesta JSON. Esportata perche' la usa anche `stream.ts`:
+ * finche' erano due, `/ask` mandava la chiave dell'utente e `/ask/stream` no —
+ * cioe' proprio la strada che la chat usa davvero.
+ */
+export function intestazioniJson(apiKey?: string): Record<string, string> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (apiKey) headers["X-API-Key"] = apiKey;
-  return { method: "POST", headers, body: JSON.stringify(corpo) };
+  return headers;
+}
+
+/**
+ * Traduce una risposta HTTP non riuscita in `ApiError`. Esportata per lo stesso
+ * motivo: una forma d'errore sola merita un lettore solo.
+ */
+export async function erroreDaRisposta(risposta: Response): Promise<ApiError> {
+  let dettaglio = `Errore ${risposta.status}`;
+  try {
+    const corpo = (await risposta.json()) as ErrorResponse;
+    if (corpo?.detail) dettaglio = corpo.detail;
+  } catch {
+    /* risposta non JSON: resta il messaggio generico */
+  }
+  return new ApiError(dettaglio, risposta.status);
+}
+
+function json(corpo: unknown, apiKey?: string): RequestInit {
+  return { method: "POST", headers: intestazioniJson(apiKey), body: JSON.stringify(corpo) };
 }
 
 export const api = {
-  config: () => richiesta<ConfigResponse>("/config"),
-
   /** Carica un file. `FormData` imposta da sé il Content-Type col boundary. */
   caricaFile: (file: File) => {
     const corpo = new FormData();
@@ -140,12 +147,7 @@ export const api = {
     );
   },
 
-  unisci: (corpo: JoinRequest) => richiesta<DatasetResponse>("/dataset/join", json(corpo)),
-
   esporta: (corpo: ExportRequest) => richiesta<ExportResponse>("/export", json(corpo)),
-
-  chiedi: (richiestaDomanda: AskRequest, apiKey?: string) =>
-    richiesta<AskResponse>("/ask", json(richiestaDomanda, apiKey)),
 
   chiediAlProgetto: (question: string, apiKey?: string) =>
     richiesta<ProjectQaResponse>("/project-qa", json({ question }, apiKey)),

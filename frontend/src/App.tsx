@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, api } from "./api/client";
-import type { DatasetResponse, FiltroSpec, ReportResponse } from "./api/types";
+import { useRef, useState } from "react";
+import { api } from "./api/client";
+import { messaggioErrore, useRichiesta } from "./api/useRichiesta";
+import type { DatasetResponse, FiltroSpec } from "./api/types";
 import { BollaProgetto } from "./components/BollaProgetto";
 import { Chat } from "./components/Chat";
 import { Filtro } from "./components/Filtro";
@@ -20,7 +21,6 @@ import "./theme.css";
  */
 export default function App() {
   const [dataset, setDataset] = useState<DatasetResponse | null>(null);
-  const [report, setReport] = useState<ReportResponse | null>(null);
   const [misura, setMisura] = useState("");
   const [categoria, setCategoria] = useState("");
   const [unita, setUnita] = useState("");
@@ -30,52 +30,42 @@ export default function App() {
   const inputFile = useRef<HTMLInputElement>(null);
 
   /** Percorso comune al caricamento di un file e del dataset di esempio. */
-  const accogli = useCallback(async (promessa: Promise<DatasetResponse>) => {
+  async function accogli(promessa: Promise<DatasetResponse>) {
     setCaricamento(true);
     setErrore(null);
-    setReport(null);
     try {
       const d = await promessa;
       setDataset(d);
+      setFiltro(null);
       setMisura(d.suggested_measure ?? "");
       setCategoria(d.suggested_category ?? "");
       setUnita(d.suggested_unit ?? "");
     } catch (e) {
-      setErrore(e instanceof ApiError ? e.message : "Errore imprevisto.");
+      setErrore(messaggioErrore(e));
       setDataset(null);
     } finally {
       setCaricamento(false);
     }
-  }, []);
+  }
 
-  // Il report si ricarica quando cambia una delle sue dipendenze. È lo stesso
-  // principio delle "signature" dell'app Streamlit — non ricalcolare l'invariato —
-  // ma qui lo esprime il framework invece di una firma costruita a mano.
-  useEffect(() => {
-    if (!dataset) return;
-    let annullato = false;
-    setErrore(null);
-    api
-      .report(dataset.dataset_id, {
-        measure: misura,
-        category: categoria,
-        unit: unita,
-        filtro,
-      })
-      .then((r) => {
-        // Una risposta che arriva DOPO che l'utente ha già cambiato misura
-        // sovrascriverebbe quella giusta con una vecchia: la si scarta.
-        if (!annullato) setReport(r);
-      })
-      .catch((e: unknown) => {
-        if (!annullato) setErrore(e instanceof ApiError ? e.message : "Errore imprevisto.");
-      });
-    return () => {
-      annullato = true;
-    };
-  }, [dataset, misura, categoria, unita, filtro]);
+  // Il report si ricarica quando cambia una delle sue dipendenze, e le risposte
+  // sorpassate le scarta l'hook: e' lo stesso principio delle "signature"
+  // dell'app Streamlit — non ricalcolare l'invariato — espresso dal framework
+  // invece che da una firma costruita a mano.
+  const { dati: report, errore: erroreReport } = useRichiesta(
+    dataset
+      ? () =>
+          api.report(dataset.dataset_id, {
+            measure: misura,
+            category: categoria,
+            unit: unita,
+            filtro,
+          })
+      : null,
+    [dataset, misura, categoria, unita, filtro],
+  );
 
-  const inAttesa = caricamento || (dataset !== null && report === null && !errore);
+  const inAttesa = caricamento || (dataset !== null && report === null && !errore && !erroreReport);
   const fig = (nome: string) =>
     report?.figures?.[nome] as Record<string, unknown> | undefined;
 
@@ -144,7 +134,15 @@ export default function App() {
               onChange={(e) => setUnita(e.target.value)}
             />
 
-            <Filtro dataset={dataset} filtro={filtro} onCambia={setFiltro} />
+            {/* `key`: cambiando dataset il componente si ricrea da zero, che e'
+                il modo di React di dire "dimentica tutto" — al posto di un
+                effetto che azzerava lo stato a mano. */}
+            <Filtro
+              key={dataset.dataset_id}
+              dataset={dataset}
+              filtro={filtro}
+              onCambia={setFiltro}
+            />
           </>
         )}
       </aside>
@@ -169,7 +167,9 @@ export default function App() {
           </div>
         )}
 
-        {errore && <div className="errore">{errore}</div>}
+        {(errore ?? erroreReport) && (
+          <div className="errore">{errore ?? erroreReport}</div>
+        )}
 
         {!dataset && !caricamento && !errore && (
           <p className="vuoto">I numeri li calcola Pandas; il modello si limita a raccontarli.</p>

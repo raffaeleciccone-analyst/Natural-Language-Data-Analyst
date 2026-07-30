@@ -1,3 +1,5 @@
+import { eNumerico, formattaNumero } from "../api/formato";
+
 /**
  * Tabella di righe generiche, come arrivano dall'API.
  *
@@ -7,19 +9,6 @@
  * meno prevedibile. `unknown` obbliga a decidere come mostrare ogni cella, che è
  * il comportamento giusto.
  */
-
-/** Numeri a destra e in monospazio: incolonnati si confrontano a colpo d'occhio. */
-function cella(valore: unknown): { testo: string; numerica: boolean } {
-  if (valore === null || valore === undefined) return { testo: "—", numerica: false };
-  if (typeof valore === "number") {
-    // La formattazione italiana la fa il backend dove il numero ha un significato
-    // (KPI, statistiche). Qui sono valori grezzi di una tabella: si usa la locale
-    // del browser, che per un italiano dà la stessa convenzione.
-    return { testo: valore.toLocaleString("it-IT", { maximumFractionDigits: 2 }), numerica: true };
-  }
-  if (typeof valore === "boolean") return { testo: valore ? "vero" : "falso", numerica: false };
-  return { testo: String(valore), numerica: false };
-}
 
 export function Tabella({
   righe,
@@ -47,14 +36,11 @@ export function Tabella({
           <tbody>
             {mostrate.map((riga, i) => (
               <tr key={i}>
-                {colonne.map((c) => {
-                  const { testo, numerica } = cella(riga[c]);
-                  return (
-                    <td key={c} className={numerica ? "numero" : undefined}>
-                      {testo}
-                    </td>
-                  );
-                })}
+                {colonne.map((c) => (
+                  <td key={c} className={eNumerico(riga[c]) ? "numero" : undefined}>
+                    {formattaNumero(riga[c])}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>

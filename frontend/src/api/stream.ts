@@ -21,7 +21,7 @@
  * Senza, si perdono eventi in modo intermittente — e sono i bug più difficili da
  * riprodurre, perché dipendono da come la rete ha suddiviso i dati.
  */
-import { ApiError } from "./client";
+import { ApiError, erroreDaRisposta, intestazioniJson } from "./client";
 
 export interface EventoSSE {
   nome: string;
@@ -55,12 +55,13 @@ export async function* flussoEventi(
   percorso: string,
   corpo: unknown,
   segnale?: AbortSignal,
+  apiKey?: string,
 ): AsyncGenerator<EventoSSE> {
   let risposta: Response;
   try {
     risposta = await fetch(`/api${percorso}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: intestazioniJson(apiKey),
       body: JSON.stringify(corpo),
       signal: segnale,
     });
@@ -69,16 +70,9 @@ export async function* flussoEventi(
     throw new ApiError("Impossibile contattare il server.", 0);
   }
 
-  if (!risposta.ok || !risposta.body) {
-    let dettaglio = `Errore ${risposta.status}`;
-    try {
-      const j = (await risposta.json()) as { detail?: string };
-      if (j?.detail) dettaglio = j.detail;
-    } catch {
-      /* la risposta non era JSON: resta il messaggio generico */
-    }
-    throw new ApiError(dettaglio, risposta.status);
-  }
+  // Stessa lettura dell'errore di `client.ts`: una forma sola, un lettore solo.
+  if (!risposta.ok) throw await erroreDaRisposta(risposta);
+  if (!risposta.body) throw new ApiError("Risposta senza corpo dal server.", risposta.status);
 
   const lettore = risposta.body.pipeThrough(new TextDecoderStream()).getReader();
   let accumulato = "";

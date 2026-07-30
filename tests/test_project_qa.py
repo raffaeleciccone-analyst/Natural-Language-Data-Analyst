@@ -210,3 +210,83 @@ def test_domande_tipiche_trovano_la_sezione_giusta(domanda, atteso_nel_titolo):
     trovati = cerca(domanda, k=3)
     titoli = " | ".join(f.titolo.lower() for f in trovati)
     assert atteso_nel_titolo in titoli, f"per {domanda!r} ho trovato: {titoli}"
+
+
+# --- L'indice invertito -------------------------------------------------------
+def _punteggio_ingenuo(domanda: str, frammenti) -> dict[int, float]:
+    """
+    Il calcolo com'era PRIMA dell'indice: tutto rifatto a ogni ricerca.
+
+    Serve come oracolo. L'indice precalcola gli stessi pesi una volta sola
+    (42 ms -> 0,016 ms per ricerca); questa funzione esiste per dimostrare che
+    l'ottimizzazione non ha cambiato i punteggi, solo quando si calcolano.
+    """
+    import math
+
+    from nlda.project_qa import _espandi, _tokenizza
+
+    termini = _espandi(_tokenizza(domanda))
+    corpi = [_tokenizza(f.titolo + " " + f.testo) for f in frammenti]
+    n = len(frammenti)
+    presenze: dict[str, int] = {}
+    for corpo in corpi:
+        for t in set(corpo):
+            presenze[t] = presenze.get(t, 0) + 1
+
+    fuori: dict[int, float] = {}
+    for i, corpo in enumerate(corpi):
+        if not corpo:
+            continue
+        conta: dict[str, int] = {}
+        for t in corpo:
+            conta[t] = conta.get(t, 0) + 1
+        titolo = set(_tokenizza(frammenti[i].titolo))
+        p = 0.0
+        for t in termini:
+            tf = conta.get(t, 0)
+            if not tf:
+                continue
+            idf = math.log(1 + n / (1 + presenze.get(t, 0)))
+            p += idf * (1 + math.log(tf)) * (1.0 + (0.6 if t in titolo else 0.0))
+        if p > 0:
+            fuori[i] = p / math.sqrt(len(corpo))
+    return fuori
+
+
+@pytest.mark.parametrize("domanda", [
+    "come funziona la sandbox?",
+    "che design pattern sono stati usati?",
+    "quali sono i limiti noti del progetto?",
+    "come si testa un LLM?",
+    "_SafeModule",
+])
+def test_l_indice_da_gli_stessi_punteggi_del_calcolo_ingenuo(domanda):
+    """
+    Se questo test è rosso, l'indice ha cambiato il RANKING, non solo la velocità:
+    l'ottimizzazione sarebbe diventata una modifica di comportamento travestita.
+    """
+    from nlda.project_qa import _espandi, _indice, _tokenizza
+
+    base = base_di_conoscenza()
+    atteso = _punteggio_ingenuo(domanda, base)
+
+    indice = _indice(base)
+    ottenuto: dict[int, float] = {}
+    for t in _espandi(_tokenizza(domanda)):
+        for i, peso in indice.get(t, ()):
+            ottenuto[i] = ottenuto.get(i, 0.0) + peso
+
+    assert set(ottenuto) == set(atteso)
+    for i, p in atteso.items():
+        assert ottenuto[i] == pytest.approx(p), f"frammento {i}"
+
+
+def test_l_indice_si_calcola_una_volta_sola():
+    """In cache sui frammenti: due ricerche non ricostruiscono l'indice."""
+    from nlda.project_qa import _indice
+
+    base = base_di_conoscenza()
+    _indice.cache_clear()
+    _indice(base)
+    _indice(base)
+    assert _indice.cache_info().hits >= 1

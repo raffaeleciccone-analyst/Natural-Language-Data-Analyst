@@ -249,9 +249,14 @@ def test_l_impronta_dipende_solo_dal_contenuto():
 
 
 def test_il_file_caricato_conserva_il_nome_per_il_formato():
-    """`read_any` riconosce il formato dall'estensione: il wrapper deve esporla."""
-    from nlda.api.app import _FileConNome
-    f = _FileConNome(b"a,b\n1,2\n", "dati.csv")
+    """
+    `read_any` riconosce il formato dall'estensione: il wrapper deve esporla.
+
+    La classe vive accanto a `read_any`, di cui rispetta il contratto: le due
+    interfacce ne avevano una copia a testa.
+    """
+    from nlda.loader import NamedBytesIO
+    f = NamedBytesIO(b"a,b\n1,2\n", "dati.csv")
     assert f.name == "dati.csv"
     assert isinstance(f, io.BytesIO)
 

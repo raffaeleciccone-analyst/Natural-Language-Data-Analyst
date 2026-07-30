@@ -27,7 +27,6 @@ Che questo modulo sia corto è la prova che la stratificazione era vera: il lavo
   chiamata (dataset inesistente, file illeggibile). È la stessa distinzione che il
   backend fa fra `ExecutionFailure` ed eccezione.
 """
-import io
 import json
 from pathlib import Path
 from typing import Annotated, cast
@@ -73,11 +72,14 @@ from nlda.api.models import (
 from nlda.api.streaming import trasmetti
 from nlda.config import settings
 from nlda.export import conversation_to_markdown
+from nlda.kpis import build_kpis
 from nlda.loader import (
     SUPPORTED_EXTENSIONS,
+    NamedBytesIO,
     analyze,
     best_category,
     category_columns,
+    date_columns,
     default_unit,
     load_dataset,
     measure_columns,
@@ -91,8 +93,6 @@ from nlda.project_qa import answer as project_answer
 from nlda.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers, get_provider
 from nlda.results import ExecutionSuccess
 from nlda.service import AnalysisService, Turn
-from nlda.ui_components import build_kpis
-from nlda.utils import column_kind, to_datetime_quiet
 from nlda.views import apply_filter, join_datasets
 
 log = get_logger(__name__)
@@ -111,14 +111,6 @@ _ERRORI = {
 router = APIRouter(prefix="/api", responses=_ERRORI)  # type: ignore[arg-type]
 
 MAX_UPLOAD_MB = 25   # lo stesso tetto della UI: un limite per interfaccia sarebbe una bugia
-
-
-class _FileConNome(io.BytesIO):
-    """`read_any` riconosce il formato dall'estensione in `.name`; BytesIO non ce l'ha."""
-
-    def __init__(self, dati: bytes, nome: str):
-        super().__init__(dati)
-        self.name = nome
 
 
 def _figura_json(fig) -> dict:
@@ -157,11 +149,25 @@ def _filtrato(df: pd.DataFrame, filtro: "FiltroSpec | None") -> pd.DataFrame:
     """
     if filtro is None:
         return df
-    if filtro.column not in df.columns:
-        raise HTTPException(status_code=400,
-                            detail=f"La colonna '{filtro.column}' non esiste in questo dataset.")
+    _esigi_colonne(df, filter_column=filtro.column)
     ristretto, _ = apply_filter(df, (filtro.column, tuple(filtro.values)))
     return ristretto
+
+
+def _esigi_colonne(df: pd.DataFrame, **colonne: str) -> None:
+    """
+    400 se una colonna nominata dal client non esiste, con lo STESSO messaggio
+    ovunque. Il nome del parametro fa da etichetta, cosi' chi legge l'errore sa
+    quale campo della richiesta correggere.
+
+    Prima il controllo era ripetuto in quattro rotte con tre messaggi diversi: chi
+    integra l'API imparava a riconoscerne uno e trovava gli altri.
+    """
+    for parametro, nome in colonne.items():
+        if nome not in df.columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{parametro}: la colonna '{nome}' non esiste in questo dataset.")
 
 
 def _dataset(dataset_id: str) -> store.Voce:
@@ -254,7 +260,7 @@ async def carica(file: Annotated[UploadFile, File()]) -> DatasetResponse:
         return _descrivi(gia_presente.df, chiave, gia_presente.etichetta)
 
     try:
-        df = read_any(_FileConNome(dati, nome))
+        df = read_any(NamedBytesIO(dati, nome))
     except Exception as e:  # noqa: BLE001 — file dell'utente: si spiega, non si esplode
         raise HTTPException(status_code=400, detail=f"File illeggibile: {e}") from e
 
@@ -292,15 +298,17 @@ def report(dataset_id: str, measure: str | None = None,
 
     figure: dict[str, object] = {}
     if insights.get("top") is not None:
-        fig = charts.try_chart(insights["top"].data, kind="bar")
+        fig = charts.try_fig(charts.try_chart, insights["top"].data, kind="bar")
         if fig is not None:
             figure["top"] = _figura_json(fig)
     if insights.get("trend") is not None:
-        fig = charts.try_chart(insights["trend"].data, kind="line")
+        fig = charts.try_fig(charts.try_chart, insights["trend"].data, kind="line")
         if fig is not None:
             figure["trend"] = _figura_json(fig)
     if measure:
-        fig = charts.histogram(df, measure)
+        # Con `try_fig`, come fa Streamlit: una colonna su cui l'istogramma
+        # esplode toglie un grafico, non fa cadere l'intera rotta con un 500.
+        fig = charts.try_fig(charts.histogram, df, measure)
         if fig is not None:
             figure["dist"] = _figura_json(fig)
 
@@ -376,10 +384,14 @@ def ask_stream(req: AskRequest, x_api_key: str | None = Header(default=None)):
     df = _filtrato(voce.df, req.filtro)
     service = AnalysisService(_agente(req.provider, req.model, x_api_key))
 
+    # Si cattura l'ELENCO delle colonne, non il DataFrame: alla lambda serve solo
+    # quello, e catturare `df` lo terrebbe in vita per tutta la durata dello
+    # stream — che e' la parte lunga del turno.
+    colonne = df.columns
     eventi = trasmetti(
         service, req.question, df, unit=req.unit,
         verso_json=lambda turn, includi_spiegazione: _risposta(
-            turn, df.columns, includi_spiegazione=includi_spiegazione),
+            turn, colonne, includi_spiegazione=includi_spiegazione),
     )
     return StreamingResponse(
         eventi,
@@ -406,8 +418,7 @@ def project_qa(req: ProjectQaRequest,
             summary="Valori distinti di una colonna, per costruire un filtro")
 def distinct(dataset_id: str, column: str) -> DistinctResponse:
     voce = _dataset(dataset_id)
-    if column not in voce.df.columns:
-        raise HTTPException(status_code=400, detail=f"La colonna '{column}' non esiste.")
+    _esigi_colonne(voce.df, column=column)
     # Ordinati e come STRINGHE: il filtro confronta su stringa (views.apply_filter),
     # quindi cio' che si mostra e cio' che si confronta sono la stessa cosa.
     valori = sorted(voce.df[column].dropna().astype(str).unique())
@@ -417,16 +428,9 @@ def distinct(dataset_id: str, column: str) -> DistinctResponse:
 
 @router.get("/dataset/{dataset_id}/date-columns", response_model=list[str],
             summary="Colonne utilizzabili come asse temporale")
-def date_columns(dataset_id: str) -> list[str]:
-    voce = _dataset(dataset_id)
-    fuori = [c for c in voce.df.columns if column_kind(voce.df[c]) == "data"]
-    if fuori:
-        return fuori
-    # Ripiego: colonne testuali che si lasciano interpretare come date. Il loader
-    # converte gia' quelle evidenti, ma un dataset appena unito puo' averne di nuove.
-    return [c for c in voce.df.columns
-            if voce.df[c].dtype == object
-            and to_datetime_quiet(voce.df[c]).notna().mean() > 0.8]
+def date_columns_route(dataset_id: str) -> list[str]:
+    """La decisione sta in `loader.date_columns`: la stessa che usa Streamlit."""
+    return date_columns(_dataset(dataset_id).df)
 
 
 @router.get("/dataset/{dataset_id}/periods", response_model=PeriodsResponse,
@@ -439,10 +443,7 @@ def periods(dataset_id: str, date_column: str, measure: str,
     direttamente. Tre strade, una implementazione.
     """
     voce = _dataset(dataset_id)
-    for nome, col in (("date_column", date_column), ("measure", measure)):
-        if col not in voce.df.columns:
-            raise HTTPException(status_code=400,
-                                detail=f"{nome}: la colonna '{col}' non esiste.")
+    _esigi_colonne(voce.df, date_column=date_column, measure=measure)
     try:
         tabella = compare_periods(voce.df, date_column, measure, freq=freq)
     except ValueError as e:
@@ -463,11 +464,8 @@ def periods(dataset_id: str, date_column: str, measure: str,
              summary="Unisce due dataset gia' caricati")
 def join(req: JoinRequest) -> DatasetResponse:
     sinistra, destra = _dataset(req.left_id), _dataset(req.right_id)
-    for col, df, quale in ((req.left_on, sinistra.df, "left_on"),
-                           (req.right_on, destra.df, "right_on")):
-        if col not in df.columns:
-            raise HTTPException(status_code=400,
-                                detail=f"{quale}: la colonna '{col}' non esiste.")
+    _esigi_colonne(sinistra.df, left_on=req.left_on)
+    _esigi_colonne(destra.df, right_on=req.right_on)
     try:
         unito = join_datasets(sinistra.df, destra.df, req.left_on, req.right_on, how=req.how)
     except Exception as e:  # noqa: BLE001 - chiavi incompatibili: si spiega

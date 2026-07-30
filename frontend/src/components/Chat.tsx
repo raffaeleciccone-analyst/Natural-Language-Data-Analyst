@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ApiError, api } from "../api/client";
+import { api } from "../api/client";
+import { messaggioErrore } from "../api/useRichiesta";
 import { flussoEventi } from "../api/stream";
 import type { AskResponse, DatasetResponse, FiltroSpec } from "../api/types";
 import { Turno, TurnoInAttesa } from "./Turno";
@@ -31,12 +32,10 @@ function esempi(dataset: DatasetResponse): string[] {
 export function Chat({
   dataset,
   unita,
-  provider,
   filtro,
 }: {
   dataset: DatasetResponse;
   unita: string;
-  provider?: string;
   filtro?: FiltroSpec | null;
 }) {
   const [domanda, setDomanda] = useState("");
@@ -67,6 +66,7 @@ export function Chat({
     setFase("Analizzo…");
     setDomanda("");
     setErrore(null);
+    setAvvisoSpiegazione(null);
 
     const controllo = new AbortController();
     annullatore.current = controllo;
@@ -79,7 +79,6 @@ export function Chat({
           dataset_id: dataset.dataset_id,
           question: pulita,
           unit: unita,
-          provider: provider ?? null,
           // La domanda vale sul sottoinsieme filtrato: altrimenti la pagina
           // mostrerebbe i numeri di una parte e risponderebbe sul totale.
           filtro: filtro ?? null,
@@ -115,7 +114,7 @@ export function Chat({
         }
       }
     } catch (e) {
-      setErrore(e instanceof ApiError ? e.message : "Errore imprevisto.");
+      setErrore(messaggioErrore(e));
     } finally {
       setInCorso(null);
       setFase("");
