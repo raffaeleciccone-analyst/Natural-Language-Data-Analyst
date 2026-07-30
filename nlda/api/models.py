@@ -243,6 +243,12 @@ class OverviewResponse(BaseModel):
     text: str | None = Field(description="None se non c'è nulla da raccontare")
 
 
+class ExecutiveReportResponse(BaseModel):
+    """Il report esecutivo in Markdown: cinque sezioni, pronte da scaricare."""
+
+    markdown: str
+
+
 class ErrorResponse(BaseModel):
     """Forma unica degli errori: il client ne gestisce una sola."""
 

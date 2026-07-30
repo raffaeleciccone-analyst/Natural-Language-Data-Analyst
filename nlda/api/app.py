@@ -56,6 +56,7 @@ from nlda.api.models import (
     DatasetResponse,
     DistinctResponse,
     ErrorResponse,
+    ExecutiveReportResponse,
     ExportRequest,
     ExportResponse,
     FiltroSpec,
@@ -424,6 +425,26 @@ def ask_stream(req: AskRequest, x_api_key: str | None = Header(default=None)):
     )
 
 
+def _testo_insight(dataset_id: str, measure: str | None,
+                   category: str | None, unit: str) -> str | None:
+    """
+    I numeri gia' calcolati, in forma di testo, pronti per il prompt.
+
+    E' l'ingresso comune di sintesi e report esecutivo: due prodotti diversi
+    scritti a partire dagli STESSI numeri. Tenerlo in un posto solo garantisce
+    che non possano divergere — se domani la scelta della misura predefinita
+    cambia, cambia per entrambi.
+
+    Restituisce `None` quando il dataset non offre nulla da riassumere; cosa
+    farne (una sintesi vuota o un errore) lo decide la rotta.
+    """
+    df = _dataset(dataset_id).df
+    misure = ordered_measures(measure_columns(df))
+    measure = measure or (misure[0] if misure else None)
+    testo = analyze(df, measure, category or best_category(df)).get("text")
+    return with_unit(testo, unit or default_unit(measure)) if testo else None
+
+
 @router.post("/dataset/{dataset_id}/overview", response_model=OverviewResponse,
              summary="La sintesi in prosa del report")
 def overview(dataset_id: str, measure: str | None = None, category: str | None = None,
@@ -441,17 +462,41 @@ def overview(dataset_id: str, measure: str | None = None, category: str | None =
     I numeri li ha gia' calcolati Pandas: al modello arriva `insights["text"]`, e
     il prompt gli vieta di calcolarne altri.
     """
-    voce = _dataset(dataset_id)
-    df = voce.df
-    misure = ordered_measures(measure_columns(df))
-    measure = measure or (misure[0] if misure else None)
-    insights = analyze(df, measure, category or best_category(df))
-    testo = insights.get("text")
-    if not testo:
+    testo = _testo_insight(dataset_id, measure, category, unit)
+    if testo is None:
         return OverviewResponse(text=None)
+    return OverviewResponse(text=_agente(provider, model, x_api_key).overview(testo))
 
-    agente = _agente(provider, model, x_api_key)
-    return OverviewResponse(text=agente.overview(with_unit(testo, unit or default_unit(measure))))
+
+@router.post("/dataset/{dataset_id}/executive-report", response_model=ExecutiveReportResponse,
+             summary="Il report esecutivo in Markdown")
+def executive_report(dataset_id: str, measure: str | None = None,
+                     category: str | None = None, unit: str = "",
+                     x_api_key: str | None = Header(default=None),
+                     provider: str | None = None,
+                     model: str | None = None) -> ExecutiveReportResponse:
+    """
+    Cinque sezioni (Executive Summary, Key Insights, Business Recommendations,
+    Possible Risks, Next Steps) scritte dal modello sui numeri gia' calcolati.
+
+    Come la sintesi, e' una rotta a parte perche' aspetta il modello — e a
+    differenza della sintesi non si genera da sola: la si chiede, perche' costa
+    una chiamata e non a tutti serve.
+
+    Il prompt impone di usare SOLO i numeri forniti e di formulare
+    raccomandazioni e rischi come ipotesi: correlazione non e' causa.
+    """
+    testo = _testo_insight(dataset_id, measure, category, unit)
+    if testo is None:
+        # Stessa condizione con cui Streamlit disabilita il pulsante
+        # (`pages.render_executive_report`). Oggi `analyze` un testo lo produce
+        # sempre, anche su zero righe, quindi in pratica non si arriva qui: la
+        # guardia resta perche' la garanzia e' di `analyze`, non di questa rotta,
+        # e senza il modello riceverebbe un prompt vuoto.
+        raise HTTPException(status_code=400,
+                            detail="Questo dataset non offre nulla da riassumere.")
+    return ExecutiveReportResponse(
+        markdown=_agente(provider, model, x_api_key).executive_report(testo))
 
 
 # --- Domande sul progetto -----------------------------------------------------
