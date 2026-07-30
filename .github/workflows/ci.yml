@@ -24,17 +24,23 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Installa le dipendenze (app + tutti gli SDK + dev)
+      - name: Installa le dipendenze (app + tutti gli SDK + API + dev)
         run: |
           python -m pip install --upgrade pip
           # requirements.txt per primo: fissa le versioni esatte con cui il
           # type-check è riproducibile (gli stub dipendono dalla release di numpy).
+          # NB: è il manifest di Streamlit Community Cloud, che l'API non la serve:
+          # FastAPI arriva dall'extra `api` qui sotto, non da lì.
           pip install -r requirements.txt
           # `all` (non solo `dev`): i test di contratto sui provider verificano gli
           # argomenti passati contro la firma REALE dell'SDK installato. Senza
           # anthropic/google-genai/ollama quei test si salterebbero in silenzio,
           # cioè proprio dove servono: a intercettare un major che cambia firma.
-          pip install -e ".[all,dev]"
+          #
+          # `api`: senza, i test dell'API non venivano saltati — fallivano in
+          # RACCOLTA, e con loro l'intera suite. È l'unico extra che i test
+          # importano direttamente, quindi l'unico che non può mancare.
+          pip install -e ".[all,api,dev]"
 
       # Soglia di copertura sotto il valore misurato (81% su `nlda`): deve
       # segnalare una REGRESSIONE, non essere un obiettivo aspirazionale che
@@ -69,7 +75,12 @@ jobs:
           # controlla davvero il codice dei provider, invece di lasciarlo cadere
           # sotto `ignore_missing_imports`. Verificato in locale che il
           # type-check resta pulito con tutti e quattro gli SDK presenti.
-          pip install -e ".[all,dev]"
+          #
+          # E `api` per lo stesso motivo, con un effetto meno ovvio: senza
+          # FastAPI, `APIRouter` diventa `Any`, il `type: ignore` che serve con i
+          # tipi veri risulta superfluo e mypy fallisce su `unused-ignore`. Il
+          # type-check senza le dipendenze non è più permissivo: è diverso.
+          pip install -e ".[all,api,dev]"
 
       - name: Ruff (lint)
         run: ruff check .
