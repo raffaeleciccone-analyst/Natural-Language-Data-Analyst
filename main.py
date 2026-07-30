@@ -33,9 +33,10 @@ from nlda.ui.pages import (
     render_report_selectors,
     render_sidebar_config,
 )
-from nlda.ui.session import apply_filter, demo_limits, get_agent, load_dataframe
+from nlda.ui.session import demo_limits, get_agent, load_dataframe
 from nlda.ui_theme import console_css
 from nlda.utils import fmt_num
+from nlda.views import apply_filter
 
 # Favicon: logo del progetto (PNG trasparente in assets/); ripiego sull'emoji se
 # il file non è presente, così l'app parte comunque. Resta qui — non in nlda/ui/ —

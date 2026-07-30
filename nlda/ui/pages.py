@@ -36,11 +36,11 @@ from nlda.ui.session import (
     _try_fig,
     demo_allows,
     demo_consume,
-    join_datasets,
     load_second_dataset,
 )
 from nlda.ui_components import answer_card, build_kpis, readout, render_linked_charts, render_result
 from nlda.utils import fmt_num, md_safe, with_unit
+from nlda.views import join_datasets
 
 
 def render_sidebar_config(limits: DemoLimits) -> SidebarConfig:

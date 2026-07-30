@@ -32,7 +32,15 @@ import json
 from typing import Annotated, cast
 
 import pandas as pd
-from fastapi import APIRouter, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    FastAPI,
+    File,
+    Header,
+    HTTPException,
+    Query,
+    UploadFile,
+)
 from fastapi.responses import JSONResponse
 
 from nlda import charts, checks
@@ -45,8 +53,15 @@ from nlda.api.models import (
     ColumnKind,
     ConfigResponse,
     DatasetResponse,
+    DistinctResponse,
     ErrorResponse,
+    ExportRequest,
+    ExportResponse,
+    FiltroSpec,
+    JoinRequest,
     Kpi,
+    PeriodRow,
+    PeriodsResponse,
     ProjectQaRequest,
     ProjectQaResponse,
     ProviderInfo,
@@ -54,6 +69,7 @@ from nlda.api.models import (
     ValueKind,
 )
 from nlda.config import settings
+from nlda.export import conversation_to_markdown
 from nlda.loader import (
     SUPPORTED_EXTENSIONS,
     analyze,
@@ -67,11 +83,14 @@ from nlda.loader import (
     read_any,
 )
 from nlda.log import get_logger
+from nlda.periods import compare_periods
 from nlda.project_qa import answer as project_answer
 from nlda.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers, get_provider
 from nlda.results import ExecutionSuccess
-from nlda.service import AnalysisService
+from nlda.service import AnalysisService, Turn
 from nlda.ui_components import build_kpis
+from nlda.utils import column_kind, to_datetime_quiet
+from nlda.views import apply_filter, join_datasets
 
 log = get_logger(__name__)
 
@@ -120,6 +139,26 @@ def _righe_json(df: pd.DataFrame, massimo: int = 200) -> list[dict]:
     non è JSON valido. `to_json` di pandas li converte tutti, date comprese.
     """
     return json.loads(df.head(massimo).to_json(orient="records", date_format="iso"))
+
+
+MAX_VALORI_DISTINTI = 500   # oltre, un elenco a discesa non e' piu' usabile
+
+
+def _filtrato(df: pd.DataFrame, filtro: "FiltroSpec | None") -> pd.DataFrame:
+    """
+    Applica il filtro, spiegando l'errore se la colonna non c'e'.
+
+    Il filtro vale per il report E per le domande: se restringessi solo il primo,
+    l'utente vedrebbe numeri di un sottoinsieme e riceverebbe risposte sul totale
+    — due verita' diverse nella stessa pagina.
+    """
+    if filtro is None:
+        return df
+    if filtro.column not in df.columns:
+        raise HTTPException(status_code=400,
+                            detail=f"La colonna '{filtro.column}' non esiste in questo dataset.")
+    ristretto, _ = apply_filter(df, (filtro.column, tuple(filtro.values)))
+    return ristretto
 
 
 def _dataset(dataset_id: str) -> store.Voce:
@@ -234,9 +273,13 @@ def carica_demo() -> DatasetResponse:
 @router.get("/dataset/{dataset_id}/report", response_model=ReportResponse,
             summary="KPI, insight e grafici del report iniziale")
 def report(dataset_id: str, measure: str | None = None,
-           category: str | None = None, unit: str = "") -> ReportResponse:
+           category: str | None = None, unit: str = "",
+           filter_column: str | None = None,
+           filter_values: "Annotated[list[str] | None, Query()]" = None) -> ReportResponse:
     voce = _dataset(dataset_id)
-    df = voce.df
+    filtro = (FiltroSpec(column=filter_column, values=filter_values)
+              if filter_column and filter_values else None)
+    df = _filtrato(voce.df, filtro)
     misure = ordered_measures(measure_columns(df))
     measure = measure or (misure[0] if misure else None)
     category = category or best_category(df)
@@ -286,8 +329,9 @@ def _valore_serializzabile(value: object) -> tuple[object, ValueKind]:
 @router.post("/ask", response_model=AskResponse, summary="Fai una domanda sui dati")
 def ask(req: AskRequest, x_api_key: str | None = Header(default=None)) -> AskResponse:
     voce = _dataset(req.dataset_id)
+    df = _filtrato(voce.df, req.filtro)
     service = AnalysisService(_agente(req.provider, req.model, x_api_key))
-    turn = service.answer(req.question, voce.df, explain=req.explain, unit=req.unit)
+    turn = service.answer(req.question, df, explain=req.explain, unit=req.unit)
 
     if not isinstance(turn.result, ExecutionSuccess):
         return AskResponse(ok=False, question=turn.question, code=turn.code,
@@ -298,7 +342,7 @@ def ask(req: AskRequest, x_api_key: str | None = Header(default=None)) -> AskRes
         ok=True, question=turn.question, code=turn.code, answer=turn.explanation,
         value=valore, value_kind=tipo,
         figure=_figura_json(turn.result.fig) if turn.result.fig is not None else None,
-        columns_used=checks.columns_referenced(turn.code, voce.df.columns),
+        columns_used=checks.columns_referenced(turn.code, df.columns),
         warnings=checks.sanity_warnings(turn.result.value),
     )
 
@@ -312,6 +356,110 @@ def project_qa(req: ProjectQaRequest,
                             model_name=req.model, api_key=x_api_key)
     testo, fonti = project_answer(provider, req.question)
     return ProjectQaResponse(answer=testo, sources=[f.citazione for f in fonti])
+
+
+# --- Filtro, periodi, unione, esportazione ------------------------------------
+@router.get("/dataset/{dataset_id}/distinct", response_model=DistinctResponse,
+            summary="Valori distinti di una colonna, per costruire un filtro")
+def distinct(dataset_id: str, column: str) -> DistinctResponse:
+    voce = _dataset(dataset_id)
+    if column not in voce.df.columns:
+        raise HTTPException(status_code=400, detail=f"La colonna '{column}' non esiste.")
+    # Ordinati e come STRINGHE: il filtro confronta su stringa (views.apply_filter),
+    # quindi cio' che si mostra e cio' che si confronta sono la stessa cosa.
+    valori = sorted(voce.df[column].dropna().astype(str).unique())
+    return DistinctResponse(column=column, values=valori[:MAX_VALORI_DISTINTI],
+                            truncated=len(valori) > MAX_VALORI_DISTINTI)
+
+
+@router.get("/dataset/{dataset_id}/date-columns", response_model=list[str],
+            summary="Colonne utilizzabili come asse temporale")
+def date_columns(dataset_id: str) -> list[str]:
+    voce = _dataset(dataset_id)
+    fuori = [c for c in voce.df.columns if column_kind(voce.df[c]) == "data"]
+    if fuori:
+        return fuori
+    # Ripiego: colonne testuali che si lasciano interpretare come date. Il loader
+    # converte gia' quelle evidenti, ma un dataset appena unito puo' averne di nuove.
+    return [c for c in voce.df.columns
+            if voce.df[c].dtype == object
+            and to_datetime_quiet(voce.df[c]).notna().mean() > 0.8]
+
+
+@router.get("/dataset/{dataset_id}/periods", response_model=PeriodsResponse,
+            summary="Confronto di una misura tra periodi consecutivi")
+def periods(dataset_id: str, date_column: str, measure: str,
+            freq: str = "trimestre") -> PeriodsResponse:
+    """
+    Il calcolo NON e' rifatto qui: `nlda.periods.compare_periods` e' lo stesso
+    motore che la sandbox espone al codice generato e che l'app Streamlit chiama
+    direttamente. Tre strade, una implementazione.
+    """
+    voce = _dataset(dataset_id)
+    for nome, col in (("date_column", date_column), ("measure", measure)):
+        if col not in voce.df.columns:
+            raise HTTPException(status_code=400,
+                                detail=f"{nome}: la colonna '{col}' non esiste.")
+    try:
+        tabella = compare_periods(voce.df, date_column, measure, freq=freq)
+    except ValueError as e:
+        # Frequenza ignota o colonna senza date riconoscibili: e' un errore di
+        # CHIAMATA, e il messaggio del motore dice gia' cosa non va.
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    righe = [
+        PeriodRow(period=str(r["periodo"]),
+                  value=None if pd.isna(r[measure]) else float(r[measure]),
+                  change_pct=None if pd.isna(r["variazione_%"]) else float(r["variazione_%"]))
+        for _, r in tabella.iterrows()
+    ]
+    return PeriodsResponse(rows=righe, measure=measure, freq=freq)
+
+
+@router.post("/dataset/join", response_model=DatasetResponse,
+             summary="Unisce due dataset gia' caricati")
+def join(req: JoinRequest) -> DatasetResponse:
+    sinistra, destra = _dataset(req.left_id), _dataset(req.right_id)
+    for col, df, quale in ((req.left_on, sinistra.df, "left_on"),
+                           (req.right_on, destra.df, "right_on")):
+        if col not in df.columns:
+            raise HTTPException(status_code=400,
+                                detail=f"{quale}: la colonna '{col}' non esiste.")
+    try:
+        unito = join_datasets(sinistra.df, destra.df, req.left_on, req.right_on, how=req.how)
+    except Exception as e:  # noqa: BLE001 - chiavi incompatibili: si spiega
+        raise HTTPException(status_code=400, detail=f"Unione non riuscita: {e}") from e
+
+    etichetta = f"{sinistra.etichetta} + {destra.etichetta}"
+    # L'identificativo deriva dai due di partenza e dai parametri: rifare la stessa
+    # unione ridà la stessa voce invece di duplicarla in memoria.
+    chiave = store.impronta(
+        f"{req.left_id}|{req.right_id}|{req.left_on}|{req.right_on}|{req.how}".encode())
+    store.magazzino.aggiungi(chiave, unito, etichetta)
+    return _descrivi(unito, chiave, etichetta)
+
+
+@router.post("/export", response_model=ExportResponse,
+             summary="La conversazione in Markdown")
+def export(req: ExportRequest) -> ExportResponse:
+    """
+    Il Markdown lo compone `nlda.export`, lo stesso modulo che serve l'app
+    Streamlit: e' l'unico posto in cui si decide come si impagina un turno, e
+    rifarlo nel client significherebbe due formati destinati a divergere.
+
+    I turni arrivano DAL CLIENT perche' l'API non tiene la conversazione (nessuna
+    sessione, vedi il docstring del modulo). E' anche il motivo per cui qui si
+    ricostruiscono `Turn` minimi: del risultato serve la rappresentazione
+    testuale, non l'oggetto Pandas originale, che il client non ha mai avuto.
+    """
+    turni = [
+        Turn(question=t.question, code=t.code,
+             result=ExecutionSuccess(fig=None, value=t.value_preview or None, summary=""),
+             explanation=t.answer)
+        for t in req.turns
+    ]
+    return ExportResponse(
+        markdown=conversation_to_markdown(turni, dataset_label=req.dataset_label))
 
 
 def create_app() -> FastAPI:

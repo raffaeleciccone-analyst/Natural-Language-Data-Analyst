@@ -13,6 +13,8 @@ export interface AskRequest {
   model?: string | null;
   unit?: string;
   explain?: boolean;
+  /** Se presente, la domanda vale sul sottoinsieme filtrato */
+  filtro?: FiltroSpec | null;
 }
 
 /**
@@ -83,10 +85,62 @@ export interface DatasetResponse {
   suggested_unit: string;
 }
 
+/** Valori distinti di una colonna: servono a costruire il filtro. */
+export interface DistinctResponse {
+  column: string;
+  values: string[];
+  /** True se i valori distinti erano più del tetto */
+  truncated: boolean;
+}
+
 /** Forma unica degli errori: il client ne gestisce una sola. */
 export interface ErrorResponse {
   detail: string;
   kind?: string;
+}
+
+export interface ExportRequest {
+  turns: ExportTurn[];
+  dataset_label?: string;
+}
+
+/** Il Markdown pronto: il client lo salva come file. */
+export interface ExportResponse {
+  markdown: string;
+}
+
+/** Un turno come lo tiene il client: basta a ricostruire il Markdown. */
+export interface ExportTurn {
+  question: string;
+  code?: string;
+  answer?: string | null;
+  /** Rappresentazione testuale del risultato */
+  value_preview?: string;
+}
+
+/**
+ * Restringe il dataset a certi valori di una colonna.
+ * Viaggia come parametro delle richieste invece di creare un "dataset filtrato"
+ * con un proprio identificativo: il filtro è una VISTA, non un dato nuovo, e
+ * materializzarlo significherebbe moltiplicare le copie in memoria a ogni
+ * cambio di selezione. Il costo è un `isin` per richiesta, che su un milione di
+ * righe è millisecondi.
+ */
+export interface FiltroSpec {
+  column: string;
+  values: string[];
+}
+
+/**
+ * Unisce due dataset già caricati. Il risultato è un dataset NUOVO, con un
+ * proprio identificativo: da lì in poi il resto dell'API non sa che erano due.
+ */
+export interface JoinRequest {
+  left_id: string;
+  right_id: string;
+  left_on: string;
+  right_on: string;
+  how?: "inner" | "left";
 }
 
 /** Una card in cima al report. */
@@ -97,6 +151,20 @@ export interface Kpi {
   sub?: string;
   /** Colore della tacca, esadecimale */
   tick: string;
+}
+
+/** Un periodo e la variazione rispetto al precedente. */
+export interface PeriodRow {
+  period: string;
+  value: number | null;
+  /** None sul primo periodo: non ha un prima */
+  change_pct: number | null;
+}
+
+export interface PeriodsResponse {
+  rows: PeriodRow[];
+  measure: string;
+  freq: string;
 }
 
 export interface ProjectQaRequest {

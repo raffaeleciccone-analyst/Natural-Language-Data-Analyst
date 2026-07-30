@@ -65,6 +65,79 @@ class DatasetResponse(BaseModel):
     suggested_unit: str = Field(description="'$' per misure economiche senza unità indicata")
 
 
+class FiltroSpec(BaseModel):
+    """
+    Restringe il dataset a certi valori di una colonna.
+
+    Viaggia come parametro delle richieste invece di creare un "dataset filtrato"
+    con un proprio identificativo: il filtro è una VISTA, non un dato nuovo, e
+    materializzarlo significherebbe moltiplicare le copie in memoria a ogni
+    cambio di selezione. Il costo è un `isin` per richiesta, che su un milione di
+    righe è millisecondi.
+    """
+
+    column: str
+    values: list[str] = Field(min_length=1)
+
+
+class DistinctResponse(BaseModel):
+    """Valori distinti di una colonna: servono a costruire il filtro."""
+
+    column: str
+    values: list[str]
+    truncated: bool = Field(description="True se i valori distinti erano più del tetto")
+
+
+# --- Confronto tra periodi ----------------------------------------------------
+class PeriodRow(BaseModel):
+    """Un periodo e la variazione rispetto al precedente."""
+
+    period: str
+    value: float | None
+    change_pct: float | None = Field(description="None sul primo periodo: non ha un prima")
+
+
+class PeriodsResponse(BaseModel):
+    rows: list[PeriodRow]
+    measure: str
+    freq: str
+
+
+# --- Unione di due dataset ----------------------------------------------------
+class JoinRequest(BaseModel):
+    """
+    Unisce due dataset già caricati. Il risultato è un dataset NUOVO, con un
+    proprio identificativo: da lì in poi il resto dell'API non sa che erano due.
+    """
+
+    left_id: str
+    right_id: str
+    left_on: str
+    right_on: str
+    how: Literal["inner", "left"] = "inner"
+
+
+# --- Esportazione -------------------------------------------------------------
+class ExportTurn(BaseModel):
+    """Un turno come lo tiene il client: basta a ricostruire il Markdown."""
+
+    question: str
+    code: str = ""
+    answer: str | None = None
+    value_preview: str = Field(default="", description="Rappresentazione testuale del risultato")
+
+
+class ExportRequest(BaseModel):
+    turns: list[ExportTurn]
+    dataset_label: str = ""
+
+
+class ExportResponse(BaseModel):
+    """Il Markdown pronto: il client lo salva come file."""
+
+    markdown: str
+
+
 # --- Report -------------------------------------------------------------------
 class Kpi(BaseModel):
     """Una card in cima al report."""
@@ -97,6 +170,8 @@ class AskRequest(BaseModel):
     model: str | None = None
     unit: str = ""
     explain: bool = True
+    filtro: FiltroSpec | None = Field(
+        default=None, description="Se presente, la domanda vale sul sottoinsieme filtrato")
 
 
 class AskResponse(BaseModel):

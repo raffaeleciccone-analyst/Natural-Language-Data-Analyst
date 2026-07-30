@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import main
+from nlda import views
 from nlda.demo import DemoLimits
 from nlda.ui import session
 
@@ -217,20 +218,20 @@ def _df_regioni():
 
 def test_filtro_assente_lascia_il_df_invariato():
     df = _df_regioni()
-    fuori, etichetta = session.apply_filter(df, None)
+    fuori, etichetta = views.apply_filter(df, None)
     assert fuori is df and etichetta == ""
 
 
 def test_filtro_su_un_valore_restringe_e_etichetta():
     df = _df_regioni()
-    fuori, etichetta = session.apply_filter(df, ("Regione", ("Nord",)))
+    fuori, etichetta = views.apply_filter(df, ("Regione", ("Nord",)))
     assert list(fuori["Val"]) == [1, 3]
     assert etichetta == "Regione = Nord"
 
 
 def test_filtro_su_piu_valori():
     df = _df_regioni()
-    fuori, etichetta = session.apply_filter(df, ("Regione", ("Nord", "Est")))
+    fuori, etichetta = views.apply_filter(df, ("Regione", ("Nord", "Est")))
     assert list(fuori["Val"]) == [1, 3, 4]
     assert "Nord" in etichetta and "Est" in etichetta
 
@@ -238,7 +239,7 @@ def test_filtro_su_piu_valori():
 def test_filtro_confronta_come_stringa():
     import pandas as pd
     df = pd.DataFrame({"Anno": [2022, 2023, 2022], "Val": [1, 2, 3]})
-    fuori, _ = session.apply_filter(df, ("Anno", ("2022",)))
+    fuori, _ = views.apply_filter(df, ("Anno", ("2022",)))
     assert list(fuori["Val"]) == [1, 3]   # match anche se la colonna è numerica
 
 
@@ -252,7 +253,7 @@ def _vendite_e_clienti():
 
 def test_join_inner_incrocia_sulle_chiavi():
     vendite, clienti = _vendite_e_clienti()
-    out = session.join_datasets(vendite, clienti, "ClienteID", "ClienteID", how="inner")
+    out = views.join_datasets(vendite, clienti, "ClienteID", "ClienteID", how="inner")
     assert list(out["Regione"]) == ["Nord", "Sud", "Nord"]
     assert list(out["Importo"]) == [100, 200, 50]
 
@@ -261,7 +262,7 @@ def test_join_left_tiene_tutte_le_righe_di_sinistra():
     import pandas as pd
     vendite = pd.DataFrame({"ClienteID": [1, 3], "Importo": [100, 70]})
     clienti = pd.DataFrame({"ClienteID": [1], "Regione": ["Nord"]})
-    out = session.join_datasets(vendite, clienti, "ClienteID", "ClienteID", how="left")
+    out = views.join_datasets(vendite, clienti, "ClienteID", "ClienteID", how="left")
     assert len(out) == 2                       # anche il cliente 3 senza corrispondenza
     assert pd.isna(out.loc[out["ClienteID"] == 3, "Regione"]).all()
 
@@ -270,6 +271,6 @@ def test_join_colonne_omonime_prendono_il_suffisso():
     import pandas as pd
     a = pd.DataFrame({"k": [1], "val": [10]})
     b = pd.DataFrame({"k": [1], "val": [99]})
-    out = session.join_datasets(a, b, "k", "k")
+    out = views.join_datasets(a, b, "k", "k")
     assert "val" in out.columns and "val_2" in out.columns   # niente sovrascrittura
     assert out["val"].iloc[0] == 10 and out["val_2"].iloc[0] == 99

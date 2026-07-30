@@ -183,39 +183,6 @@ def load_second_dataset(uploaded_file):
     return load_uploaded_cached(uploaded_file.name, uploaded_file.getvalue())
 
 
-def join_datasets(left: pd.DataFrame, right: pd.DataFrame,
-                  left_on: str, right_on: str, how: str = "inner") -> pd.DataFrame:
-    """
-    Unisce due DataFrame su una coppia di chiavi (merge di pandas). Le colonne del
-    secondo file che si chiamano come una del primo prendono il suffisso '_2', così
-    nessuna colonna viene sovrascritta in silenzio. Funzione pura.
-
-    Il risultato è UN solo DataFrame: il resto dell'app (sandbox, prompt, report)
-    non cambia — vede semplicemente più colonne. Il join è un preprocessing, non un
-    secondo canale da gestire ovunque.
-    """
-    return left.merge(right, left_on=left_on, right_on=right_on, how=how,
-                      suffixes=("", "_2"))
-
-
-def apply_filter(df: pd.DataFrame, spec):
-    """
-    Applica un filtro `(colonna, valori)` al DataFrame. Ritorna `(df_filtrato,
-    etichetta_leggibile)`. Funzione pura (nessuno Streamlit): `spec` None o vuoto
-    lascia il df invariato. Il confronto è su stringa, così vale anche per colonne
-    numeriche o miste senza sorprese sui tipi.
-    """
-    if not spec:
-        return df, ""
-    col, valori = spec
-    mask = df[col].astype(str).isin([str(v) for v in valori])
-    if len(valori) == 1:
-        etichetta = f"{col} = {valori[0]}"
-    else:
-        etichetta = f"{col} ∈ {{{', '.join(str(v) for v in valori)}}}"
-    return df[mask], etichetta
-
-
 def _try_fig(fn, *args, **kwargs):
     """Costruisce una figura, o None se qualcosa va storto (report robusto).
     L'errore viene loggato (non mostrato all'utente) per restare diagnosticabile."""
