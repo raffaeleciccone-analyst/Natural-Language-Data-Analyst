@@ -329,14 +329,34 @@ def _is_year_like(name, series: pd.Series) -> bool:
                 and vals.max() <= 2100 and s.nunique() <= 100)
 
 
+def _sequenza_densa(series: pd.Series) -> bool:
+    """
+    Interi (quasi) tutti distinti e IMPACCHETTATI nel loro intervallo: la forma di
+    un codice progressivo.
+
+    È il tratto che distingue una chiave da una misura continua, perché l'unicità
+    da sola non lo fa: un incasso è distinto quanto un codice cliente. La
+    differenza è che il codice riempie il proprio intervallo (1000..1029, trenta
+    valori su trenta possibili) mentre l'incasso ci si sparpaglia dentro (tremila
+    valori distinti su un intervallo di centinaia di milioni).
+    """
+    s = series.dropna()
+    if s.empty or not pd.api.types.is_integer_dtype(s):
+        return False
+    span = int(s.max() - s.min()) + 1
+    return bool(span > 0 and s.nunique() / span >= 0.9)
+
+
 def _is_identifier(name, series: pd.Series, n: int) -> bool:
     """Riconosce colonne numeriche che NON sono misure: identificatori (ID, CAP, codici) o anni."""
     if _ID_PATTERN.search(str(name)) or _is_year_like(name, series):
         return True
-    # valori quasi tutti distinti -> è una chiave (solo su dataset abbastanza grandi:
-    # con poche righe l'unicità è priva di significato)
+    # Quasi tutti i valori distinti, DA SOLO, non bastava: su un dataset di film
+    # scartava "US Gross" (95,6% di valori distinti) e teneva "US DVD Sales", che
+    # è vuota all'82% — cioè escludeva la misura principale perché troppo
+    # informativa. Serve anche la FORMA della chiave.
     if n >= 20 and series.nunique(dropna=True) / n > 0.9:
-        return True
+        return _sequenza_densa(series)
     return False
 
 
@@ -350,11 +370,8 @@ def _is_strong_id(name, series: pd.Series) -> bool:
     if _ID_PATTERN.search(str(name)) or _is_year_like(name, series):
         return True
     s = series.dropna()
-    if s.empty or not pd.api.types.is_integer_dtype(s):
-        return False
-    span = int(s.max() - s.min()) + 1
     # tutti distinti E impacchettati densamente nel loro intervallo -> è una sequenza
-    return bool(s.nunique() == len(s) and span > 0 and s.nunique() / span >= 0.9)
+    return bool(not s.empty and s.nunique() == len(s)) and _sequenza_densa(series)
 
 
 def _measure_columns(df: pd.DataFrame, num_cols: list) -> list:
@@ -401,8 +418,9 @@ def ordered_measures(measures: list) -> list:
 # ne contiene uno e l'utente non ha indicato un'unità, il dollaro è più
 # informativo di nessuna unità.
 _ECON_HINTS = ("sales", "revenue", "profit", "amount", "price", "cost", "income",
-               "expense", "budget", "margin", "fatturato", "vendite", "ricavi",
-               "costo", "prezzo", "importo", "spesa", "utile", "margine", "incasso")
+               "expense", "budget", "margin", "gross", "box office", "fatturato",
+               "vendite", "ricavi", "costo", "prezzo", "importo", "spesa", "utile",
+               "margine", "incasso")
 
 
 def default_unit(measure) -> str:
@@ -680,9 +698,13 @@ def analyze(df: pd.DataFrame, measure=None, category=None) -> dict:
 
 def load_dataset(file_name: str = "sales.csv") -> pd.DataFrame:
     """
-    Carica il dataset di esempio dalla cartella 'data' e lo passa per la stessa
-    pipeline dei file caricati dall'utente (`_clean_columns`): pulizia dei nomi
-    di colonna e rilevamento automatico delle colonne data.
+    Carica un dataset di esempio dalla cartella 'data'.
+
+    Passa per `read_any`, la STESSA funzione dei file caricati dall'utente:
+    riconoscimento del formato, controllo delle dimensioni, pulizia dei nomi di
+    colonna e rilevamento delle date. Prima leggeva direttamente con `read_csv`,
+    quindi un esempio in JSON o Excel non era apribile — e i due percorsi
+    potevano divergere proprio su ciò che il progetto promette di fare uguale.
     """
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     file_path = os.path.join(base_dir, "data", file_name)
@@ -692,4 +714,5 @@ def load_dataset(file_name: str = "sales.csv") -> pd.DataFrame:
             f"Errore: Il file {file_name} non è stato trovato in {os.path.dirname(file_path)}"
         )
 
-    return _clean_columns(pd.read_csv(file_path))
+    with open(file_path, "rb") as f:
+        return read_any(NamedBytesIO(f.read(), file_name))
