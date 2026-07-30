@@ -1,4 +1,5 @@
 import type { DatasetResponse } from "../api/types";
+import { Pannello } from "./Pannello";
 
 /**
  * La struttura del dataset: che tipo ha ogni colonna, quanti valori mancano,
@@ -25,9 +26,7 @@ function Mancanti({ percentuale }: { percentuale: number }) {
 
 export function Struttura({ dataset }: { dataset: DatasetResponse }) {
   return (
-    <details className="pannello">
-      <summary>Struttura delle colonne ({dataset.profile.length})</summary>
-
+    <Pannello titolo={`Struttura delle colonne (${dataset.profile.length})`}>
       <div className="tabella-contenitore" style={{ marginTop: 12 }}>
         <table>
           <thead>
@@ -58,6 +57,6 @@ export function Struttura({ dataset }: { dataset: DatasetResponse }) {
           </tbody>
         </table>
       </div>
-    </details>
+    </Pannello>
   );
 }
