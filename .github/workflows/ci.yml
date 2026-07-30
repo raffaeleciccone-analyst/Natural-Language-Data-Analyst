@@ -164,7 +164,11 @@ jobs:
       - name: Type-check, lint e build
         working-directory: frontend
         run: |
-          npx tsc --noEmit
+          # `npm run typecheck` = `tsc -b --noEmit`, NON `tsc --noEmit`: il
+          # tsconfig di Vite ha "files": [] e solo dei riferimenti, quindi la
+          # seconda forma esce con successo senza controllare un solo file.
+          # Sembra un controllo e non lo e'.
+          npm run typecheck
           npx oxlint src
           npm run build
 

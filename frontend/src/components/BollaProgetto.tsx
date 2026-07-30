@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ApiError, api } from "../api/client";
+import { api } from "../api/client";
+import { messaggioErrore } from "../api/useRichiesta";
 import { Testo } from "./Testo";
 
 /**
@@ -67,16 +68,21 @@ export function BollaProgetto() {
     document.addEventListener("keydown", suTasto);
     document.addEventListener("mousedown", suClic);
     campo.current?.focus();
+
+    // Il nodo si cattura ORA, non nel cleanup: quando il cleanup gira il ref
+    // potrebbe gia' puntare altrove, e si restituirebbe il focus all'elemento
+    // sbagliato (o a nulla).
+    const bolla = bottoneBolla.current;
+
     return () => {
       document.removeEventListener("keydown", suTasto);
       document.removeEventListener("mousedown", suClic);
+      // Il focus torna da dove era partito: senza, chi naviga da tastiera si
+      // ritroverebbe all'inizio del documento. Sta nel CLEANUP di questo effetto
+      // e non in un secondo effetto sulla stessa dipendenza: cosi' non scatta
+      // anche al primo montaggio, quando ruberebbe il focus a pannello chiuso.
+      bolla?.focus();
     };
-  }, [aperta]);
-
-  // Chiudendo, il focus torna da dove era partito: senza, chi naviga da tastiera
-  // si ritroverebbe all'inizio del documento.
-  useEffect(() => {
-    if (!aperta) bottoneBolla.current?.focus();
   }, [aperta]);
 
   async function chiedi(testo: string) {
@@ -89,7 +95,7 @@ export function BollaProgetto() {
       const r = await api.chiediAlProgetto(pulita);
       setStorico((s) => [{ domanda: pulita, risposta: r.answer, fonti: r.sources ?? [] }, ...s]);
     } catch (e) {
-      setErrore(e instanceof ApiError ? e.message : "Errore imprevisto.");
+      setErrore(messaggioErrore(e));
     } finally {
       setInCorso(false);
     }

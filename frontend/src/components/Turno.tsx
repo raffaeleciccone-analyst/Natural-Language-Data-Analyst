@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { AskResponse } from "../api/types";
+import { formattaNumero } from "../api/formato";
 import { Grafico } from "./Grafico";
 import { Tabella } from "./Tabella";
 import { Testo } from "./Testo";
@@ -32,12 +33,7 @@ function Valore({ turno }: { turno: AskResponse }) {
     return <Tabella righe={turno.value as Record<string, unknown>[]} massimo={15} />;
   }
   if (turno.value_kind === "scalar") {
-    const n = turno.value as number;
-    return (
-      <div className="valore-singolo">
-        {n.toLocaleString("it-IT", { maximumFractionDigits: 2 })}
-      </div>
-    );
+    return <div className="valore-singolo">{formattaNumero(turno.value)}</div>;
   }
   return <p>{String(turno.value)}</p>;
 }

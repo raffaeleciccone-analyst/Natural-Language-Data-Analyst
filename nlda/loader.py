@@ -201,6 +201,21 @@ def _check_dimensioni(df: pd.DataFrame) -> None:
             "Tieni solo le colonne che ti servono, oppure alza MAX_COLUMNS.")
 
 
+class NamedBytesIO(io.BytesIO):
+    """
+    `BytesIO` con un attributo `.name`.
+
+    `read_any` riconosce il formato dall'estensione, e un `BytesIO` normale non
+    espone un nome. Vive accanto a `read_any` perche' e' il suo contratto: le due
+    interfacce ne avevano una copia a testa, e un domani che servisse anche `.size`
+    o un mimetype la modifica raggiungerebbe una sola delle due.
+    """
+
+    def __init__(self, dati: bytes, nome: str):
+        super().__init__(dati)
+        self.name = nome
+
+
 def read_any(uploaded_file) -> pd.DataFrame:
     """
     Legge un file caricato dall'utente in un DataFrame, riconoscendo il formato
@@ -439,6 +454,27 @@ def dataset_signature(df: pd.DataFrame, source_label) -> tuple:
 def best_category(df: pd.DataFrame):
     """API pubblica: colonna categoriale con cardinalità utile per un raggruppamento."""
     return _best_category(df, category_columns(df))
+
+
+def date_columns(df: pd.DataFrame) -> list[str]:
+    """
+    Colonne utilizzabili come asse temporale.
+
+    Prima le vere colonne data (il loader converte gia' quelle riconoscibili in
+    lettura); se non ce n'e' nessuna, si ripiega sulle testuali che si lasciano
+    interpretare per oltre l'80% — capita su un dataset appena unito, dove le
+    colonne del secondo file non sono passate per `_maybe_parse_dates`.
+
+    ATTENZIONE al ripiego: si filtra sulle colonne NON numeriche e NON data, non su
+    `dtype == object`. Il loader produce `StringDtype`, quindi un confronto con
+    `object` non e' mai vero e il ripiego non scattava mai.
+    """
+    vere = [c for c in df.columns if column_kind(df[c]) == "data"]
+    if vere:
+        return vere
+    return [c for c in df.columns
+            if column_kind(df[c]) == "testo"
+            and to_datetime_quiet(df[c]).notna().mean() > 0.8]
 
 
 def category_columns(df: pd.DataFrame) -> list:

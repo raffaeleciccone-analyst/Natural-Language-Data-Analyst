@@ -298,3 +298,23 @@ def histogram(df, col, nbins: int = 40):
             font=dict(size=11, color=_THEME["secondary"]),
         )
     return apply_theme(fig)
+
+
+def try_fig(fn, *args, **kwargs):
+    """
+    Costruisce una figura, o None se qualcosa va storto.
+
+    Stava in `ui/session.py`, cioe' in un modulo che importa Streamlit: l'API non
+    poteva usarla, e infatti chiamava `histogram` senza rete — una colonna su cui
+    l'istogramma esplode dava 500 nell'API e un grafico mancante in Streamlit. Due
+    comportamenti per lo stesso guasto.
+
+    L'errore si registra ma non si mostra: un report a cui manca un grafico resta
+    leggibile, mentre una schermata d'errore al suo posto no. Resta diagnosticabile
+    nei log.
+    """
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:  # noqa: BLE001 - un grafico in meno non deve abbattere il report
+        log.warning("Figura non generata da %s: %s", getattr(fn, "__name__", fn), e)
+        return None

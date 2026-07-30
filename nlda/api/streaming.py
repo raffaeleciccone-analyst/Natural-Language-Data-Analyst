@@ -104,6 +104,13 @@ def trasmetti(service: AnalysisService, question: str, df, *,
         yield evento("step", {"message": passo})
 
     thread.join()
+    # Si lasciano andare thread e closure PRIMA della parte lenta: gli eventi
+    # `token` sono lo streaming della spiegazione, decine di secondi, e in tutto
+    # quel tempo la closure terrebbe in vita il DataFrame (piu' la copia filtrata,
+    # che nel magazzino non c'e'). Non era una perdita illimitata — alla fine del
+    # generatore si liberava — ma "tenuto troppo a lungo" moltiplicato per gli
+    # stream simultanei e' RAM vera.
+    del thread, lavora
 
     if "errore" in esito:
         log.error("stream_turno_fallito", extra={"errore": str(esito["errore"])})

@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
-import { ApiError, api } from "../api/client";
-import type { DatasetResponse, PeriodsResponse } from "../api/types";
+import { useState } from "react";
+import { api } from "../api/client";
+import { formattaNumero } from "../api/formato";
+import { useRichiesta } from "../api/useRichiesta";
+import type { DatasetResponse } from "../api/types";
 
 /**
  * Confronto di una misura tra periodi consecutivi.
@@ -21,61 +23,37 @@ function Variazione({ valore }: { valore: number | null | undefined }) {
   return (
     <span className={valore >= 0 ? "crescita" : "calo"}>
       {segno}
-      {valore.toLocaleString("it-IT", { maximumFractionDigits: 1 })}%
+      {valore.toFixed(1).replace(".", ",")}%
     </span>
   );
 }
 
 export function Periodi({ dataset, misura }: { dataset: DatasetResponse; misura: string }) {
-  const [colonneData, setColonneData] = useState<string[]>([]);
-  const [colonna, setColonna] = useState("");
+  const [scelta, setScelta] = useState("");
   const [freq, setFreq] = useState("trimestre");
-  const [dati, setDati] = useState<PeriodsResponse | null>(null);
-  const [errore, setErrore] = useState<string | null>(null);
   const [aperto, setAperto] = useState(false);
 
-  // Le colonne data si chiedono una volta per dataset. Fuori dall'apertura del
-  // pannello: servono a sapere SE mostrarlo, non solo a riempirlo.
-  useEffect(() => {
-    let annullato = false;
-    void api
-      .colonneData(dataset.dataset_id)
-      .then((c) => {
-        if (annullato) return;
-        setColonneData(c);
-        setColonna((prec) => (c.includes(prec) ? prec : (c[0] ?? "")));
-      })
-      .catch(() => {
-        if (!annullato) setColonneData([]);
-      });
-    return () => {
-      annullato = true;
-    };
-  }, [dataset.dataset_id]);
+  // Le colonne data si chiedono fuori dall'apertura del pannello: servono a
+  // sapere SE mostrarlo, non solo a riempirlo.
+  const { dati: colonneData } = useRichiesta(
+    () => api.colonneData(dataset.dataset_id),
+    [dataset.dataset_id],
+  );
+  const disponibili = colonneData ?? [];
+  // La colonna e' DERIVATA, non sincronizzata da un effetto: se la scelta non e'
+  // fra quelle disponibili (altro dataset, o primo render) vale la prima.
+  const colonna = disponibili.includes(scelta) ? scelta : (disponibili[0] ?? "");
 
-  useEffect(() => {
-    if (!aperto || !colonna || !misura) return;
-    let annullato = false;
-    setErrore(null);
-    void api
-      .periodi(dataset.dataset_id, colonna, misura, freq)
-      .then((r) => {
-        if (!annullato) setDati(r);
-      })
-      .catch((e: unknown) => {
-        if (!annullato) {
-          setErrore(e instanceof ApiError ? e.message : "Errore imprevisto.");
-          setDati(null);
-        }
-      });
-    return () => {
-      annullato = true;
-    };
-  }, [aperto, dataset.dataset_id, colonna, misura, freq]);
+  const { dati, errore } = useRichiesta(
+    aperto && colonna && misura
+      ? () => api.periodi(dataset.dataset_id, colonna, misura, freq)
+      : null,
+    [aperto, dataset.dataset_id, colonna, misura, freq],
+  );
 
   // Senza una colonna data il confronto non ha senso: si tace invece di mostrare
   // un pannello che non può funzionare.
-  if (!colonneData.length || !misura) return null;
+  if (!disponibili.length || !misura) return null;
 
   return (
     <details className="pannello" open={aperto} onToggle={(e) => setAperto(e.currentTarget.open)}>
@@ -84,8 +62,8 @@ export function Periodi({ dataset, misura }: { dataset: DatasetResponse; misura:
       <div className="controlli">
         <label>
           Colonna data
-          <select value={colonna} onChange={(e) => setColonna(e.target.value)}>
-            {colonneData.map((c) => (
+          <select value={colonna} onChange={(e) => setScelta(e.target.value)}>
+            {disponibili.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
@@ -121,7 +99,7 @@ export function Periodi({ dataset, misura }: { dataset: DatasetResponse; misura:
                 <tr key={r.period}>
                   <td>{r.period}</td>
                   <td className="numero">
-                    {r.value?.toLocaleString("it-IT", { maximumFractionDigits: 2 }) ?? "—"}
+                    {formattaNumero(r.value)}
                   </td>
                   <td className="numero">
                     <Variazione valore={r.change_pct} />

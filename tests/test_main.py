@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import main
-from nlda import views
+from nlda import charts, views
 from nlda.demo import DemoLimits
 from nlda.ui import session
 
@@ -165,7 +165,7 @@ def test_il_consumo_incrementa_entrambi_i_contatori(fake_st, consumo):
 
 # --- Robustezza del report -----------------------------------------------------
 def test_try_fig_restituisce_la_figura(fake_st):
-    assert session._try_fig(lambda x: x * 2, 21) == 42
+    assert charts.try_fig(lambda x: x * 2, 21) == 42
 
 
 def test_try_fig_ingoia_lerrore_e_restituisce_none(fake_st):
@@ -173,7 +173,7 @@ def test_try_fig_ingoia_lerrore_e_restituisce_none(fake_st):
     def esplode():
         raise ValueError("colonna assente")
 
-    assert session._try_fig(esplode) is None
+    assert charts.try_fig(esplode) is None
 
 
 # --- Caricamento del dataset ---------------------------------------------------

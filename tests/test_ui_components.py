@@ -1,7 +1,7 @@
 """
 Test dei componenti di presentazione.
 
-`build_kpis` è puro per costruzione (ritorna tuple, nessun effetto Streamlit): è la
+`build_kpis` (ora in `nlda.kpis`) è puro per costruzione: è la
 parte della UI che si può testare davvero, ed è anche quella che l'utente colpisce per
 prima: viene chiamata prima di qualsiasi altro rendering. Qui la copriamo soprattutto
 sui dataset DEGENERI (vuoti, colonne tutte-NaN), perché è lì che una card "Top ..."
@@ -20,9 +20,14 @@ import pandas as pd
 import pytest
 
 import nlda.ui_components as ui
+from nlda.kpis import build_kpis
 from nlda.loader import Grouped
 from nlda.results import ExecutionFailure, ExecutionSuccess
-from nlda.ui_components import build_kpis, render_linked_charts, render_result, render_value
+from nlda.ui_components import (
+    render_linked_charts,
+    render_result,
+    render_value,
+)
 
 
 @pytest.fixture

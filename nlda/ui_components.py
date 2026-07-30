@@ -15,13 +15,10 @@ from nlda.charts import to_chart
 from nlda.checks import claimed_missing_columns, columns_referenced, sanity_warnings
 from nlda.loader import monthly_trend
 from nlda.results import EXECUTED_OK, ExecutionFailure, ExecutionResult
-from nlda.ui_theme import PALETTE
 from nlda.utils import IT_NUM_FORMAT, fmt_num
 
 # Tacca colorata sotto i KPI: teal per tutte (coerenza), ma il KPI PRINCIPALE
 # (Totale) usa un teal più LUMINOSO, così risalta sugli altri.
-_TICK = PALETTE["accent"]   # accento standard (Media, Massimo, Top, conteggi)
-_TICK_MAIN = "#15b8a1"      # più brillante, riservato al Totale: esiste solo qui
 
 
 def answer_card(label: str, text: str, container=None) -> None:
@@ -70,56 +67,6 @@ def readout(col, label: str, value: str, sub: str = "",
         f"<div class='r-tick' style='--bar:{tick}'></div>{sub_html}</div>",
         unsafe_allow_html=True,
     )
-
-
-def _leader_kpi(label: str, ranking: pd.Series, fmt_sub):
-    """
-    Card 'Top ...' costruita dalla prima riga di una classifica, oppure None se la
-    classifica è VUOTA. Il caso vuoto è reale e raggiungibile dalla UI: un CSV con le
-    sole intestazioni, oppure una colonna categoriale con soli valori mancanti (il
-    groupby scarta i NaN). Senza questa guardia `ranking.index[0]` solleva IndexError
-    e Streamlit mostra la schermata d'errore al posto dell'app.
-    """
-    if ranking.empty:
-        return None
-    return (label, str(ranking.index[0]), fmt_sub(ranking.iloc[0]), _TICK, True)
-
-
-def build_kpis(df, sel_measure, sel_category, unit):
-    """
-    Costruisce le card KPI adattandosi ai dati: con una MISURA -> totale/media/
-    massimo/leader; SENZA misura -> conteggi. Ritorna una lista di tuple
-    (label, value, sub, tick, small). Nessun effetto Streamlit (facile da testare).
-    Su dataset vuoto non solleva: ripiega sulle card a conteggio.
-    """
-    def wu(v):  # accosta l'unità di misura, se indicata
-        return f"{fmt_num(v)} {unit}".strip() if unit else fmt_num(v)
-
-    record_kpi = ("Record", fmt_num(len(df)), "", _TICK, False)
-
-    kpis = []
-    if sel_measure:
-        s = df[sel_measure]
-        kpis.append((f"Totale {sel_measure}", wu(s.sum()), "", _TICK_MAIN, False))
-        kpis.append((f"Media {sel_measure}", wu(s.mean()), "", _TICK, False))
-        kpis.append((f"Massimo {sel_measure}", wu(s.max()), "", _TICK, False))
-        leader = None
-        if sel_category:
-            ranking = df.groupby(sel_category)[sel_measure].sum().sort_values(ascending=False)
-            leader = _leader_kpi(f"Top {sel_category}", ranking, wu)
-        # Senza categoria (o senza un leader calcolabile) la quarta card resta il conteggio
-        kpis.append(leader or record_kpi)
-    elif sel_category:  # nessuna misura: KPI a conteggi
-        vc = df[sel_category].value_counts()
-        kpis.append(record_kpi)
-        kpis.append((f"{sel_category} distinte", fmt_num(df[sel_category].nunique()), "", _TICK, False))
-        leader = _leader_kpi(f"Top {sel_category}", vc, lambda v: f"{fmt_num(v)} record")
-        if leader is not None:
-            kpis.append(leader)
-    else:
-        kpis.append(record_kpi)
-        kpis.append(("Colonne", str(df.shape[1]), "", _TICK, False))
-    return kpis
 
 
 def _clicked_category(point: dict):
