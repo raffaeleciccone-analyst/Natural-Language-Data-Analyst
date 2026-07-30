@@ -113,6 +113,20 @@ jobs:
           echo "HEALTHCHECK: $status"
           [ "$status" = "healthy" ]
 
+      - name: L'immagine serve ANCHE il frontend compilato
+        run: |
+          # Il frontend viene costruito dentro l'immagine (stage Node): se il
+          # build fallisse o `dist/` finisse nel posto sbagliato, l'API
+          # risponderebbe lo stesso e il difetto si vedrebbe solo aprendo il
+          # browser. Qui si controlla che la radice serva davvero la pagina.
+          docker exec nlda-ci python -c "
+          import urllib.request
+          html = urllib.request.urlopen('http://localhost:8000/', timeout=5).read().decode()
+          assert '<div id=\"root\"' in html, 'la radice non serve il frontend'
+          assert '/assets/' in html, 'la pagina non referenzia il bundle compilato'
+          print('frontend servito dal container')
+          "
+
       - name: La sandbox funziona dentro il container
         run: |
           docker exec nlda-ci python -c "
@@ -130,6 +144,45 @@ jobs:
       - name: Log del container se qualcosa è fallito
         if: failure()
         run: docker logs nlda-ci
+
+  frontend:
+    name: Frontend (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Installa le dipendenze
+        working-directory: frontend
+        run: npm ci
+
+      - name: Type-check, lint e build
+        working-directory: frontend
+        run: |
+          npx tsc --noEmit
+          npx oxlint src
+          npm run build
+
+      - name: Nessuna vulnerabilita' nelle dipendenze
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: I tipi TypeScript descrivono l'API di ADESSO
+        run: |
+          # Il file dei tipi e' generato e committato: puo' andare fuori sincrono
+          # con i modelli Pydantic senza che nessuno se ne accorga finche' non
+          # compila qualcuno. Qui si confronta con lo schema attuale.
+          pip install -e ".[api]"
+          python scripts/genera_tipi_ts.py --verifica
 
   # Il progetto esegue codice generato da un LLM: una CI che non guarda mai la
   # sicurezza sarebbe una contraddizione con la sua stessa ragione d'essere.

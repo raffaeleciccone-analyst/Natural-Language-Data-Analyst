@@ -1,7 +1,12 @@
 # Esecuzione locale con i limiti di sistema attivi.
 #
-#   docker compose up --build          avvia su http://localhost:8501
+#   docker compose up --build              interfaccia React  -> localhost:8000
+#   docker compose --profile streamlit up  interfaccia Streamlit -> localhost:8501
 #   GROQ_API_KEY=gsk_... docker compose up
+#
+# Due servizi dalla STESSA immagine: cambia solo il comando. E' la prova pratica
+# che il backend non conosce l'interfaccia — se la conoscesse, servirebbero due
+# immagini.
 #
 # Le opzioni di sicurezza qui sotto non sono decorative: dentro questo container
 # gira codice Python scritto da un modello linguistico. La validazione AST
@@ -14,7 +19,7 @@ services:
       # Restringi i provider installati se ti serve un'immagine più piccola:
       # args: { EXTRAS: openai }
     ports:
-      - "8501:8501"
+      - "8000:8000"
 
     environment:
       # Chiavi passate dall'ambiente dell'host, mai scritte nell'immagine.
@@ -49,4 +54,35 @@ services:
       # ~/.streamlit e fallisce con PermissionError all'avvio).
       - /home/app:size=16m,uid=10001,gid=10001,mode=0700
 
+    restart: unless-stopped
+
+  # L'interfaccia Streamlit, dalla stessa immagine e con gli stessi limiti.
+  # Sta dietro a un profilo: non parte se non la si chiede esplicitamente,
+  # perche' due server sullo stesso backend in locale servono di rado insieme.
+  streamlit:
+    profiles: ["streamlit"]
+    build:
+      context: .
+    command: >
+      streamlit run main.py --server.address=0.0.0.0 --server.port=8501
+    ports:
+      - "8501:8501"
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      ALLOW_INPROCESS_FALLBACK: "false"
+      EXEC_TIMEOUT: "12"
+      MEMORY_LIMIT_MB: "1500"
+    mem_limit: 2g
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+      - /home/app:size=16m,uid=10001,gid=10001,mode=0700
     restart: unless-stopped

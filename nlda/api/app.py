@@ -29,6 +29,7 @@ Che questo modulo sia corto è la prova che la stratificazione era vera: il lavo
 """
 import io
 import json
+from pathlib import Path
 from typing import Annotated, cast
 
 import pandas as pd
@@ -42,6 +43,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from nlda import charts, checks
 from nlda.agent import DataAgent
@@ -481,8 +483,46 @@ def create_app() -> FastAPI:
                             content=ErrorResponse(detail=str(exc.detail)).model_dump())
 
     app.include_router(router)
+    _monta_frontend(app)
     log.info("api_pronta", extra={"timeout_exec": settings.exec_timeout})
     return app
+
+
+# Il build di Vite. Sta fuori dal pacchetto Python perché è un artefatto di
+# compilazione, non sorgente: in sviluppo non esiste affatto (ci pensa il server
+# di Vite col suo proxy), e in produzione lo si costruisce prima di avviare.
+_STATICI = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+
+
+def _monta_frontend(app: FastAPI) -> None:
+    """
+    Serve il frontend compilato dalla stessa applicazione che serve l'API.
+
+    Perché un solo servizio invece di due: con un'origine sola non serve CORS, non
+    ci sono due deploy da tenere allineati, e l'indirizzo dell'API nel client resta
+    un percorso relativo — quindi nessuna variabile d'ambiente da configurare per
+    dirgli dove sta il backend.
+
+    Il montaggio avviene DOPO le rotte dell'API: la radice `/` cattura tutto ciò
+    che resta, e se venisse prima ingoierebbe anche `/api/...`.
+
+    Se `dist/` non esiste — sviluppo, o un'immagine costruita senza il passo di
+    build — non si monta nulla e non si solleva niente: l'API resta perfettamente
+    utilizzabile, ed è il modo in cui girano i test.
+    """
+    if not (_STATICI / "index.html").exists():
+        log.info("frontend_assente", extra={"percorso": str(_STATICI)})
+        return
+
+    # `html=True` serve `index.html` quando si chiede la RADICE, che è ciò che
+    # serve qui. Non è un ripiego universale: un percorso inventato riceve 404, e
+    # va bene — questa applicazione è una pagina sola, senza instradamento lato
+    # client, quindi non esistono altri indirizzi legittimi da recuperare. Il
+    # giorno in cui si aggiungessero delle rotte nel browser servirebbe una rotta
+    # jolly che rimanda a `index.html`; oggi sarebbe codice per un caso che non
+    # esiste, e maschererebbe i 404 veri.
+    app.mount("/", StaticFiles(directory=_STATICI, html=True), name="frontend")
+    log.info("frontend_montato", extra={"percorso": str(_STATICI)})
 
 
 app = create_app()
