@@ -28,6 +28,7 @@ Che questo modulo sia corto è la prova che la stratificazione era vera: il lavo
   backend fa fra `ExecutionFailure` ed eccezione.
 """
 import json
+import os
 from pathlib import Path
 from typing import Annotated, cast
 
@@ -39,6 +40,7 @@ from fastapi import (
     Header,
     HTTPException,
     Query,
+    Request,
     UploadFile,
 )
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -46,7 +48,7 @@ from fastapi.staticfiles import StaticFiles
 
 from nlda import charts, checks
 from nlda.agent import DataAgent
-from nlda.api import store
+from nlda.api import quota, store
 from nlda.api.models import (
     AskRequest,
     AskResponse,
@@ -115,6 +117,24 @@ _ERRORI = {
 router = APIRouter(prefix="/api", responses=_ERRORI)  # type: ignore[arg-type]
 
 MAX_UPLOAD_MB = 25   # lo stesso tetto della UI: un limite per interfaccia sarebbe una bugia
+
+# Il tetto di spesa della demo pubblica. Fuori dalla demo (`DEMO_MODE` assente)
+# non conta nulla e non costa nulla: `Quota.consuma` esce alla prima riga.
+_quota = quota.Quota(quota.limiti_da_ambiente())
+
+
+def _consuma_quota(request: Request, api_key: str | None) -> None:
+    """
+    Scala una richiesta dal budget della demo, o solleva 429 se è finito.
+
+    Chi porta la PROPRIA chiave non tocca il budget: sta spendendo il proprio
+    credito, e limitarlo sarebbe un limite senza scopo. L'app Streamlit non ha
+    questo caso perché in modalità demo nasconde del tutto il campo della chiave;
+    l'API non può nasconderlo, quindi lo tratta.
+    """
+    if api_key:
+        return
+    _quota.consuma(quota.visitatore(request))
 
 
 def _figura_json(fig) -> dict:
@@ -199,13 +219,43 @@ def _agente(provider: str | None, model: str | None, api_key: str | None) -> Dat
     cui l'app Streamlit non usa `st.cache_resource` per l'agente — la trappola non
     cambia solo perché cambia il framework.
     """
+    nome, modello = _scelta_modello(provider, model)
+    return DataAgent(provider=nome, model_name=modello, api_key=api_key or None)
+
+
+def _scelta_modello(provider: str | None, model: str | None) -> tuple[str, str | None]:
+    """
+    Provider e modello effettivi per questa richiesta.
+
+    `MODEL` descrive il modello del provider PREDEFINITO: applicarlo anche a un
+    provider scelto dal client vorrebbe dire mandare a Anthropic il nome di un
+    modello Groq, cioè un 404 che non spiega nulla. Per questo vale solo quando
+    la richiesta non ha scelto né l'uno né l'altro.
+    """
     nome = (provider or _provider_predefinito()).lower()
     if nome not in DEFAULT_MODELS:
         raise HTTPException(status_code=400, detail=f"Provider sconosciuto: '{nome}'.")
-    return DataAgent(provider=nome, model_name=model or None, api_key=api_key or None)
+    if not model and not provider:
+        model = os.getenv("MODEL", "").strip()
+    return nome, model or None
 
 
 def _provider_predefinito() -> str:
+    """
+    Il provider da usare quando il client non ne indica uno.
+
+    `PROVIDER` viene PRIMA dell'euristica, come nell'app Streamlit
+    (`pages.render_sidebar`), e per una ragione che si vede solo in deploy:
+    `available_providers()` elenca quelli che il progetto SUPPORTA, non quelli
+    raggiungibili. Senza la variabile la risposta era sempre "ollama" — corretta
+    in locale, sbagliata su un host dove Ollama non esiste, dove ogni domanda
+    falliva con un errore di connessione invece di usare la chiave configurata.
+    """
+    scelto = os.getenv("PROVIDER", "").strip().lower()
+    if scelto in DEFAULT_MODELS:
+        return scelto
+    if scelto:
+        log.warning("PROVIDER='%s' non e' un provider noto: si ignora.", scelto)
     disponibili = available_providers()
     return "ollama" if "ollama" in disponibili else disponibili[0]
 
@@ -217,8 +267,8 @@ def config() -> ConfigResponse:
         providers=[ProviderInfo(name=p, default_model=DEFAULT_MODELS[p],
                                 requires_api_key=p in REQUIRES_API_KEY)
                    for p in available_providers()],
-        demo_mode=False,
-        max_questions=0,
+        demo_mode=_quota.limiti.enabled,
+        max_questions=_quota.limiti.max_questions if _quota.limiti.enabled else 0,
         max_upload_mb=MAX_UPLOAD_MB,
         supported_extensions=list(SUPPORTED_EXTENSIONS),
         # Le stesse liste che usa l'app Streamlit: erano ribattute nel client.
@@ -386,7 +436,9 @@ def _risposta(turn: Turn, colonne, *, includi_spiegazione: bool = True) -> dict:
 
 
 @router.post("/ask", response_model=AskResponse, summary="Fai una domanda sui dati")
-def ask(req: AskRequest, x_api_key: str | None = Header(default=None)) -> AskResponse:
+def ask(req: AskRequest, request: Request,
+        x_api_key: str | None = Header(default=None)) -> AskResponse:
+    _consuma_quota(request, x_api_key)
     voce = _dataset(req.dataset_id)
     df, _ = _filtrato(voce.df, req.filtro)
     service = AnalysisService(_agente(req.provider, req.model, x_api_key))
@@ -395,7 +447,8 @@ def ask(req: AskRequest, x_api_key: str | None = Header(default=None)) -> AskRes
 
 
 @router.post("/ask/stream", summary="La stessa domanda, trasmessa mentre accade")
-def ask_stream(req: AskRequest, x_api_key: str | None = Header(default=None)):
+def ask_stream(req: AskRequest, request: Request,
+               x_api_key: str | None = Header(default=None)):
     """
     Server-Sent Events: avanzamento, risultato, poi la spiegazione a pezzi.
 
@@ -447,8 +500,9 @@ def _testo_insight(dataset_id: str, measure: str | None,
 
 @router.post("/dataset/{dataset_id}/overview", response_model=OverviewResponse,
              summary="La sintesi in prosa del report")
-def overview(dataset_id: str, measure: str | None = None, category: str | None = None,
-             unit: str = "", x_api_key: str | None = Header(default=None),
+def overview(dataset_id: str, request: Request, measure: str | None = None,
+             category: str | None = None, unit: str = "",
+             x_api_key: str | None = Header(default=None),
              provider: str | None = None, model: str | None = None) -> OverviewResponse:
     """
     Il pezzo che il report React non aveva e quello Streamlit si', cioe' la
@@ -462,15 +516,18 @@ def overview(dataset_id: str, measure: str | None = None, category: str | None =
     I numeri li ha gia' calcolati Pandas: al modello arriva `insights["text"]`, e
     il prompt gli vieta di calcolarne altri.
     """
+    # Prima si guarda se c'e' qualcosa da riassumere, poi si scala la quota: una
+    # sintesi che non parte non deve costare al visitatore una domanda.
     testo = _testo_insight(dataset_id, measure, category, unit)
     if testo is None:
         return OverviewResponse(text=None)
+    _consuma_quota(request, x_api_key)
     return OverviewResponse(text=_agente(provider, model, x_api_key).overview(testo))
 
 
 @router.post("/dataset/{dataset_id}/executive-report", response_model=ExecutiveReportResponse,
              summary="Il report esecutivo in Markdown")
-def executive_report(dataset_id: str, measure: str | None = None,
+def executive_report(dataset_id: str, request: Request, measure: str | None = None,
                      category: str | None = None, unit: str = "",
                      x_api_key: str | None = Header(default=None),
                      provider: str | None = None,
@@ -495,6 +552,7 @@ def executive_report(dataset_id: str, measure: str | None = None,
         # e senza il modello riceverebbe un prompt vuoto.
         raise HTTPException(status_code=400,
                             detail="Questo dataset non offre nulla da riassumere.")
+    _consuma_quota(request, x_api_key)
     return ExecutiveReportResponse(
         markdown=_agente(provider, model, x_api_key).executive_report(testo))
 
@@ -502,10 +560,12 @@ def executive_report(dataset_id: str, measure: str | None = None,
 # --- Domande sul progetto -----------------------------------------------------
 @router.post("/project-qa", response_model=ProjectQaResponse,
              summary="Fai una domanda sul progetto, con fonti")
-def project_qa(req: ProjectQaRequest,
+def project_qa(req: ProjectQaRequest, request: Request,
                x_api_key: str | None = Header(default=None)) -> ProjectQaResponse:
-    provider = get_provider(req.provider or _provider_predefinito(),
-                            model_name=req.model, api_key=x_api_key)
+    # Stessa quota della chat sui dati: e' la stessa spesa, sullo stesso credito.
+    _consuma_quota(request, x_api_key)
+    nome, modello = _scelta_modello(req.provider, req.model)
+    provider = get_provider(nome, model_name=modello, api_key=x_api_key)
     testo, fonti = project_answer(provider, req.question)
     return ProjectQaResponse(answer=testo, sources=[f.citazione for f in fonti])
 
