@@ -71,4 +71,30 @@ class ExecutionFailure:
         return self.kind in ("syntax", "runtime")
 
 
+# Cosa può farci l'UTENTE, per ogni causa. Il `message` di un fallimento descrive
+# il guasto ("uso di 'open' non consentito"); questo dice come uscirne.
+#
+# Sta qui, accanto a `FailureKind` da cui deriva già `retryable`, e non nel
+# componente che lo mostra: viveva solo nel client React, quindi la stessa
+# sandbox che rifiutava lo stesso codice dava un consiglio in un'interfaccia e
+# il testo grezzo nell'altra.
+ADVICE: dict[str, str] = {
+    "security": "La richiesta produrrebbe codice non consentito dalla sandbox. "
+                "Riformulala come domanda sui dati.",
+    "syntax": "Il modello non è riuscito a produrre codice valido. "
+              "Prova a essere più specifico.",
+    "runtime": "Il codice è stato eseguito ma è fallito sui dati: "
+               "forse una colonna non esiste con quel nome.",
+    "timeout": "L'elaborazione ha superato il tempo massimo. "
+               "Prova a restringere la domanda.",
+    "provider": "Il modello non è raggiungibile. Controlla la configurazione e riprova.",
+    "internal": "L'ambiente di esecuzione isolato non è disponibile.",
+}
+
+
+def advice_for(kind: str) -> str:
+    """Il consiglio per una causa, o una frase neutra per una causa ignota."""
+    return ADVICE.get(kind, "La richiesta non è andata a buon fine.")
+
+
 ExecutionResult = ExecutionSuccess | ExecutionFailure

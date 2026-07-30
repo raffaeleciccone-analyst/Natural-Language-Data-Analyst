@@ -29,19 +29,13 @@ import { Testo } from "./Testo";
  * usabile, e sono la ragione concreta per cui un frontend vero non è un lusso.
  */
 
-const ESEMPI = [
-  "Come funziona la sandbox di sicurezza?",
-  "Come evitate che l'AI inventi i numeri?",
-  "Che design pattern sono stati usati?",
-];
-
 interface Scambio {
   domanda: string;
   risposta: string;
   fonti: string[];
 }
 
-export function BollaProgetto() {
+export function BollaProgetto({ esempi }: { esempi: string[] }) {
   const [aperta, setAperta] = useState(false);
   const [domanda, setDomanda] = useState("");
   const [storico, setStorico] = useState<Scambio[]>([]);
@@ -150,7 +144,7 @@ export function BollaProgetto() {
 
             {storico.length === 0 && !inCorso && !errore && (
               <div className="esempi">
-                {ESEMPI.map((e) => (
+                {esempi.map((e) => (
                   <button key={e} className="esempio" onClick={() => void chiedi(e)}>
                     {e}
                   </button>

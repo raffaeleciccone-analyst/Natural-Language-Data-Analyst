@@ -16,12 +16,14 @@
  *    pagina, e questa è un'app che esegue codice generato da un modello.
  */
 import type {
+  ConfigResponse,
   DatasetResponse,
   DistinctResponse,
   ErrorResponse,
   ExportRequest,
   ExportResponse,
   FiltroSpec,
+  OverviewResponse,
   PeriodsResponse,
   ProjectQaResponse,
   ReportResponse,
@@ -98,6 +100,9 @@ function json(corpo: unknown, apiKey?: string): RequestInit {
 }
 
 export const api = {
+  /** Cosa permette questa installazione: provider, limiti, suggerimenti. */
+  config: () => richiesta<ConfigResponse>("/config"),
+
   /** Carica un file. `FormData` imposta da sé il Content-Type col boundary. */
   caricaFile: (file: File) => {
     const corpo = new FormData();
@@ -148,6 +153,21 @@ export const api = {
   },
 
   esporta: (corpo: ExportRequest) => richiesta<ExportResponse>("/export", json(corpo)),
+
+  /**
+   * La sintesi in prosa del report. Rotta a parte, come in Streamlit: e' l'unica
+   * cosa che aspetta il modello, e nel report farebbe aspettare anche i numeri.
+   */
+  sintesi: (datasetId: string, opzioni: { measure?: string; category?: string; unit?: string }) => {
+    const q = new URLSearchParams();
+    if (opzioni.measure) q.set("measure", opzioni.measure);
+    if (opzioni.category) q.set("category", opzioni.category);
+    if (opzioni.unit) q.set("unit", opzioni.unit);
+    return richiesta<OverviewResponse>(
+      `/dataset/${encodeURIComponent(datasetId)}/overview?${q.toString()}`,
+      { method: "POST", headers: intestazioniJson() },
+    );
+  },
 
   chiediAlProgetto: (question: string, apiKey?: string) =>
     richiesta<ProjectQaResponse>("/project-qa", json({ question }, apiKey)),

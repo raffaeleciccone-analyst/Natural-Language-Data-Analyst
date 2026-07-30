@@ -15,8 +15,6 @@ import type { DatasetResponse } from "../api/types";
  * prima, e scrivere 0% sarebbe una bugia comoda.
  */
 
-const FREQUENZE = ["mese", "trimestre", "anno"];
-
 function Variazione({ valore }: { valore: number | null | undefined }) {
   if (valore === null || valore === undefined) return <span className="vuoto">—</span>;
   const segno = valore > 0 ? "+" : "";
@@ -28,7 +26,15 @@ function Variazione({ valore }: { valore: number | null | undefined }) {
   );
 }
 
-export function Periodi({ dataset, misura }: { dataset: DatasetResponse; misura: string }) {
+export function Periodi({
+  dataset,
+  misura,
+  frequenze,
+}: {
+  dataset: DatasetResponse;
+  misura: string;
+  frequenze: string[];
+}) {
   const [scelta, setScelta] = useState("");
   const [freq, setFreq] = useState("trimestre");
   const [aperto, setAperto] = useState(false);
@@ -73,7 +79,7 @@ export function Periodi({ dataset, misura }: { dataset: DatasetResponse; misura:
         <label>
           Periodo
           <select value={freq} onChange={(e) => setFreq(e.target.value)}>
-            {FREQUENZE.map((f) => (
+            {frequenze.map((f) => (
               <option key={f} value={f}>
                 {f}
               </option>
