@@ -172,6 +172,12 @@ export function BollaProgetto({ esempi }: { esempi: string[] }) {
         </div>
       )}
 
+      {/* L'etichetta accanto al pallino: da sola, un'icona non dice a cosa
+          serve, e chi non ci clicca sopra per curiosita' non scopre mai che il
+          progetto risponde a domande su se stesso. Sparisce quando il pannello
+          e' aperto, dove il titolo lo dice gia'. */}
+      {!aperta && <span className="bolla-etichetta">Domande sul progetto?</span>}
+
       <button
         ref={bottoneBolla}
         className="bolla"

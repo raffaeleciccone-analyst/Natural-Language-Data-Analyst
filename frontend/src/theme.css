@@ -43,6 +43,50 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* ===== Tema scuro ===========================================================
+   Il rail e' scuro in entrambi i temi — e' la sua identita' — quindi qui
+   cambiano solo i colori della PAGINA: sfondo, superfici, testo e bordi. Le
+   variabili del rail restano quelle, e i componenti non sanno che il tema
+   esiste: chiedono `--surface` e ricevono la tinta giusta.
+
+   Due selettori e non uno: `data-tema` e' la scelta esplicita dell'utente e
+   deve vincere sul sistema, in entrambe le direzioni — anche per rimettere il
+   chiaro su un computer configurato in scuro. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="chiaro"]) {
+    --page: #14181d;
+    --surface: #1b2027;
+    --surface2: #21272f;
+    --border: #2b323b;
+    --strong: #3a434e;
+    --ink: #e2e8ee;
+    --ink2: #9aa6b3;
+    --muted: #75818e;
+    --accent: #2bb3a3;
+    --deep: #46c9b8;
+    --tint: #1d3330;
+  }
+}
+
+:root[data-tema="scuro"] {
+  --page: #14181d;
+  --surface: #1b2027;
+  --surface2: #21272f;
+  --border: #2b323b;
+  --strong: #3a434e;
+  --ink: #e2e8ee;
+  --ink2: #9aa6b3;
+  --muted: #75818e;
+  --accent: #2bb3a3;
+  --deep: #46c9b8;
+  --tint: #1d3330;
+}
+
+/* Dice al browser di che tinta sono i controlli nativi: senza, le caselle di
+   spunta e le barre di scorrimento restano chiare su fondo scuro. */
+:root[data-tema="scuro"] { color-scheme: dark; }
+:root[data-tema="chiaro"] { color-scheme: light; }
+
 * { box-sizing: border-box; }
 
 body {
@@ -59,6 +103,64 @@ body {
   display: grid;
   grid-template-columns: var(--rail-larghezza) minmax(0, 1fr);
   min-height: 100vh;
+}
+
+/* Rail chiuso: la colonna sparisce e il contenuto prende tutta la finestra. */
+.impaginazione.rail-chiuso { grid-template-columns: 0 minmax(0, 1fr); }
+
+/* Il comando di apertura sta fuori dal rail, altrimenti si chiuderebbe con lui.
+   Segue il bordo del rail e resta al suo posto mentre la pagina scorre. */
+.interruttore-rail {
+  position: fixed;
+  top: 14px;
+  left: calc(var(--rail-larghezza) - 13px);
+  z-index: 30;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--rail-line);
+  border-radius: 50%;
+  background: var(--rail2);
+  color: var(--rail-ink);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: left 0.18s ease, background 0.18s ease;
+}
+
+.impaginazione.rail-chiuso .interruttore-rail { left: 12px; }
+.interruttore-rail:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.rail-testata {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.interruttore-tema {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--rail-line);
+  border-radius: 8px;
+  background: var(--rail2);
+  color: var(--rail-ink);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.interruttore-tema:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Chi ha chiesto meno movimento non deve vedere il rail scivolare. */
+@media (prefers-reduced-motion: reduce) {
+  .interruttore-rail { transition: none; }
 }
 
 .rail {
@@ -119,8 +221,11 @@ body {
 }
 
 .spazio-lavoro {
-  padding: 28px 34px 90px;
-  max-width: 1500px;
+  /* Nessun `max-width`: su uno schermo largo restavano due bande vuote ai lati
+     mentre grafici e chat stavano stretti. Il limite alla lunghezza della riga
+     serve al TESTO, e lo mette gia' la colonna della sintesi; imporlo all'intera
+     area di lavoro faceva pagare a tabelle e grafici un vincolo che non e' loro. */
+  padding: 28px clamp(20px, 2.6vw, 44px) 90px;
   min-width: 0;
 }
 
@@ -303,6 +408,10 @@ td.numero {
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
+
+/* L'intestazione segue la sua colonna: con i numeri a destra e il titolo a
+   sinistra si legge una tabella con le etichette sfalsate rispetto ai dati. */
+th.numero { text-align: right; }
 
 tr:last-child td { border-bottom: 0; }
 
@@ -846,4 +955,61 @@ button.tenue:hover:not(:disabled) {
   background: var(--tint);
   border-color: var(--accent);
   color: var(--deep);
+}
+
+/* ===== Etichetta accanto alla bolla ========================================= */
+.bolla-etichetta {
+  position: absolute;
+  right: 62px;
+  bottom: 13px;
+  white-space: nowrap;
+  background: var(--surface);
+  color: var(--ink2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 0.8rem;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 10%);
+  pointer-events: none;   /* il bersaglio del clic resta il pallino */
+}
+
+/* Su schermo stretto la bolla e' gia' vicina al bordo: l'etichetta uscirebbe. */
+@media (max-width: 560px) {
+  .bolla-etichetta { display: none; }
+}
+
+/* ===== Rail: separazione dei gruppi =========================================
+   Il rail era un elenco continuo di controlli tutti uguali. Le etichette ora
+   dividono in blocchi leggibili, e il primo controllo di ogni blocco non si
+   stacca dalla sua etichetta. */
+.rail h1 { font-size: 0.98rem; }
+
+.rail .etichetta { margin-top: 18px; }
+
+.rail .etichetta::before {
+  content: "";
+  display: block;
+  height: 1px;
+  background: var(--rail-line);
+  margin: 0 0 14px;
+  opacity: 0.7;
+}
+
+/* Il primo gruppo non ha bisogno di una riga che lo separi dal titolo. */
+.rail .etichetta:first-of-type::before { display: none; }
+
+/* Dentro i pannelli richiudibili la riga separerebbe controlli gia' raggruppati
+   dal bordo del pannello. */
+details.pannello-rail .etichetta::before { display: none; }
+
+.rail button.secondario {
+  width: 100%;
+  background: var(--rail2);
+  color: var(--rail-ink);
+  border: 1px solid var(--rail-line);
+}
+
+.rail button.secondario:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: #fff;
 }

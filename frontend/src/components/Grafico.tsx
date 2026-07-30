@@ -1,4 +1,5 @@
 import { Suspense, lazy } from "react";
+import { useTema } from "../useTema";
 
 /**
  * Una figura Plotly che arriva dall'API già costruita e già tematizzata.
@@ -24,6 +25,35 @@ import { Suspense, lazy } from "react";
  */
 const ALTEZZA = 300;
 
+/** Colori degli assi in tema scuro: la griglia guida l'occhio, non compete. */
+const ASSE_SCURO = { gridcolor: "#2b323b", linecolor: "#3a434e", zerolinecolor: "#3a434e" };
+
+/**
+ * Il layout della figura, adattato al tema.
+ *
+ * Gli assi si FONDONO invece di essere sostituiti: `xaxis` del backend porta il
+ * titolo della colonna, il formato dei tick e a volte la scala logaritmica.
+ * Sovrascriverlo con i soli colori avrebbe tolto il titolo agli assi — un
+ * grafico piu' scuro e meno leggibile di quello che sostituiva.
+ */
+function conTema(layout: Record<string, unknown>, scuro: boolean): Record<string, unknown> {
+  if (!scuro) return layout;
+  const asse = (chiave: string) => ({
+    ...((layout[chiave] as object | undefined) ?? {}),
+    ...ASSE_SCURO,
+  });
+  return {
+    ...layout,
+    // Trasparente: il colore lo mette il pannello sotto, cosi' resta un valore
+    // solo da tenere allineato al tema invece di due.
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { ...((layout.font as object | undefined) ?? {}), color: "#9aa6b3" },
+    xaxis: asse("xaxis"),
+    yaxis: asse("yaxis"),
+  };
+}
+
 const PlotlyVero = lazy(async () => {
   const [{ default: createPlotlyComponent }, { default: Plotly }] = await Promise.all([
     import("react-plotly.js/factory"),
@@ -46,6 +76,8 @@ export function Grafico({
    */
   onCategoria?: (valore: string) => void;
 }) {
+  const tema = useTema();
+
   return (
     <div className="pannello-grafico">
       <h3>{titolo}</h3>
@@ -54,14 +86,33 @@ export function Grafico({
           <PlotlyVero
             data={(figura.data as never) ?? []}
             layout={{
-              ...((figura.layout as object) ?? {}),
+              // Il backend decide i colori dei DATI — sono gli stessi per le due
+              // interfacce, ed e' il motivo per cui `charts.py` li conosce. La
+              // SUPERFICIE su cui sono disegnati la decide chi conosce il tema,
+              // cioe' il client: senza, in tema scuro restavano due rettangoli
+              // bianchi in mezzo alla pagina.
+              ...conTema((figura.layout as Record<string, unknown>) ?? {}, tema === "scuro"),
               autosize: true,
               // L'altezza la comanda il contenitore, non la figura: una figura che
               // porta la propria altezza sposterebbe il layout appena arriva.
               height: ALTEZZA,
               margin: { l: 55, r: 18, t: 10, b: 45 },
             }}
-            config={{ displayModeBar: false, responsive: true }}
+            config={{
+              // Come in Streamlit, che mostra la barra strumenti di Plotly al
+              // passaggio del mouse: zoom, pan, selezione e "scarica come PNG".
+              // Toglierla aveva reso i grafici delle immagini, mentre il punto di
+              // Plotly e' che si possano interrogare — e in un'analisi lo zoom su
+              // un periodo e' spesso la domanda successiva.
+              displayModeBar: "hover",
+              displaylogo: false,
+              // Il ritaglio dell'istantanea non serve qui e occupa spazio nella
+              // barra; il resto (zoom, pan, reset, PNG) resta.
+              modeBarButtonsToRemove: ["lasso2d", "select2d"],
+              toImageButtonOptions: { format: "png", scale: 2 },
+              responsive: true,
+              locale: "it",
+            }}
             style={{ width: "100%", height: ALTEZZA }}
             useResizeHandler
             onClick={
