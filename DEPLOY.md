@@ -1,13 +1,77 @@
-# Deploy della demo pubblica (per il manutentore)
+# Deploy delle demo pubbliche (per il manutentore)
 
-Istruzioni per pubblicare l'app su **Streamlit Community Cloud**, così chiunque può
-provarla dal browser senza installare nulla. Questo file è per chi mantiene il
-progetto, non per gli utenti finali.
+Il progetto ha **due interfacce sullo stesso backend**, e si pubblicano in due
+posti diversi perché hanno bisogni diversi:
 
-## Passi
+| Interfaccia | Cosa serve | Dove |
+|---|---|---|
+| **React + API FastAPI** | un host che sappia far girare un container | [Render](#1-interfaccia-react--api-render) |
+| **Streamlit** | `streamlit run main.py` | [Streamlit Community Cloud](#2-interfaccia-streamlit-streamlit-cloud) |
+
+Streamlit Cloud **non** può servire l'interfaccia React: sa avviare solo
+`streamlit run`, non un processo arbitrario. Ecco perché due host.
+
+> ⚠️ **Prima di pubblicare, leggi [Il tetto di spesa](#il-tetto-di-spesa).** Un
+> deploy pubblico gira con *la tua* chiave: senza `DEMO_MODE` la paghi tu, per
+> chiunque passi.
+
+---
+
+## 1. Interfaccia React + API (Render)
+
+La configurazione sta in [`render.yaml`](render.yaml), versionata accanto al
+codice che descrive. Non è per eleganza: la configurazione che vive solo in un
+pannello web non è rivedibile, non è ripristinabile e non si sa chi l'ha cambiata.
+
+### Passi
+
+1. Vai su <https://dashboard.render.com> e accedi con GitHub.
+2. **New → Blueprint** → scegli questo repo. Render legge `render.yaml` e propone
+   il servizio già configurato.
+3. L'unico valore da inserire a mano è **`GROQ_API_KEY`** (in `render.yaml` è
+   marcato `sync: false` proprio perché un file versionato è pubblico quanto il
+   repo).
+4. **Apply**. Il primo build richiede qualche minuto: compila il frontend con
+   Vite e poi costruisce l'immagine Python.
+5. Copia l'URL ottenuto e mettilo in cima al [`README.md`](README.md).
+
+### Cosa aspettarsi dal piano gratuito
+
+- **512 MB di RAM.** Bastano: l'immagine usa ~100 MB a riposo e ~130 MB con un
+  dataset da 10.000 righe caricato e il report calcolato (misurato con
+  `docker stats`).
+- **Si spegne dopo 15 minuti di inattività.** La prima visita dopo una pausa
+  aspetta il riavvio (~1 minuto). È il compromesso del piano gratuito, non un
+  problema dell'app.
+- **Il disco è effimero.** Va bene: i dataset caricati vivono già solo in memoria
+  (`nlda/api/store.py`), con scadenza a un'ora.
+
+### Verificare il container prima di pubblicarlo
+
+Vale la pena farlo in locale: gli errori di deploy sono i più lenti da diagnosticare
+a distanza.
+
+```bash
+docker build -t nlda .
+docker run --rm -p 8000:8000 \
+  -e DEMO_MODE=true -e DEMO_MAX_QUESTIONS=2 \
+  -e PROVIDER=groq -e MODEL=llama-3.3-70b-versatile \
+  -e GROQ_API_KEY=gsk_... \
+  nlda
+```
+
+Poi su <http://localhost:8000>: la pagina React deve comparire, `/api/health`
+rispondere `{"status":"ok"}`, e la **terza** domanda tornare `429`.
+
+Per provare una porta diversa — è ciò che fa Render — basta `-e PORT=9999` e
+pubblicare quella: il `HEALTHCHECK` la segue.
+
+---
+
+## 2. Interfaccia Streamlit (Streamlit Cloud)
 
 1. Vai su <https://share.streamlit.io> e accedi con GitHub.
-2. **New app** → seleziona questo repo, branch `main`, file `main.py`.
+2. **New app** → questo repo, branch `main`, file `main.py`.
 3. In **Advanced settings → Secrets** incolla la configurazione
    (vedi [`.streamlit/secrets.toml.example`](.streamlit/secrets.toml.example)):
    ```toml
@@ -18,44 +82,75 @@ progetto, non per gli utenti finali.
    MODEL = "llama-3.3-70b-versatile"
    GROQ_API_KEY = "gsk_..."
    ```
-4. **Deploy**. In modalità demo l'app usa la chiave dei secrets, nasconde i campi
-   sensibili e applica **due** limiti: uno per sessione e un tetto
-   giornaliero condiviso, che è quello che protegge davvero il credito
-   (il limite per sessione si azzera aprendo una scheda nuova).
-5. Copia il link pubblico ottenuto e inseriscilo in cima al `README.md`
-   (riga commentata `▶️ **Prova la demo:** <URL>`).
+4. **Deploy**, poi copia il link nel `README.md`.
 
-## Costi e chiave
+Le variabili hanno **gli stessi nomi** dell'API di proposito: un secondo
+vocabolario per la stessa regola vorrebbe dire configurare due volte lo stesso
+deploy, e accorgersi dalla bolletta di averne dimenticata una.
+
+---
+
+## Il tetto di spesa
+
+Un deploy pubblico usa una chiave del manutentore. Senza limiti, ogni visitatore
+ne spende il credito — e non serve malafede: bastano dieci curiosi.
+
+`DEMO_MODE=true` attiva **due** limiti, che servono a cose diverse:
+
+- **Per visitatore** (`DEMO_MAX_QUESTIONS`) — evita che uno solo esaurisca la
+  giornata di tutti. Da solo non protegge nulla: lato Streamlit basta una scheda
+  nuova, lato API basta un altro indirizzo IP.
+- **Giornaliero condiviso** (`DEMO_MAX_DAILY`) — **è il tetto vero.** Vale su
+  tutte le richieste del processo e si azzera ogni giorno, così una giornata
+  storta non brucia il credito e domani la demo è di nuovo viva.
+
+Nessuno dei due ferma un abuso determinato: per quello servirebbe un'identità,
+che una demo pubblica non ha. Servono a contenere il costo, ed è quello che
+dichiarano di fare.
+
+**Due limiti noti, dichiarati perché non si scoprano dal conto del provider:**
+
+- Il contatore vive **in memoria del processo**. Con più repliche ognuna ha il
+  proprio tetto, quindi la spesa massima si moltiplica per il numero di repliche.
+  Per una singola istanza — la configurazione di `render.yaml` — è corretto.
+- Lato API il "visitatore" è **un indirizzo IP**, letto da `X-Forwarded-For`.
+  Dietro NAT molte persone lo condividono, e chi ne cambia uno riparte da zero.
+  È il motivo per cui il tetto che conta è quello giornaliero, che nessuna
+  intestazione può spostare.
+
+Chi porta la **propria** chiave API non tocca il budget: sta spendendo il proprio
+credito. In modalità demo l'interfaccia React lo dice esplicitamente al posto del
+menu del modello, e quella Streamlit nasconde del tutto i campi sensibili.
+
+### Costi e chiave
 
 - 💡 **Gratis (consigliato)**: **Groq** ha un tier gratuito affidabile (senza carta)
   da <https://console.groq.com/keys> — inferenza veloce su modelli Llama.
-- Alternative: **Gemini** (`gemini-2.0-flash`, free tier se disponibile sul tuo
-  account) da <https://aistudio.google.com/apikey>; a pagamento `gpt-4o-mini`
-  (OpenAI) o `claude-haiku-4-5` (Anthropic) con un **tetto di spesa** sul provider.
-- La chiave va **solo** nei Secrets di Streamlit Cloud, mai nel repo.
-- Ollama non è disponibile sul cloud (gira solo in locale).
+- Alternative: **Gemini** (`gemini-2.0-flash`) da <https://aistudio.google.com/apikey>;
+  a pagamento `gpt-4o-mini` (OpenAI) o `claude-haiku-4-5` (Anthropic), con un
+  **tetto di spesa** impostato sul provider.
+- La chiave va **solo** nei secret dell'host, mai nel repo.
+- Ollama non è disponibile sul cloud: gira solo in locale.
 
-## Deploy con Docker (qualsiasi host)
+Con `LOG_FORMAT=json` ogni turno emette una riga strutturata con latenza, token e
+costo stimato; **`python scripts/analyze_logs.py <file>`** la riepiloga. Serve a
+sapere quanto è costata davvero una settimana di demo, invece di dedurlo.
 
-Streamlit Community Cloud è comodo ma non permette di scegliere i limiti di
-sistema. Su una VM o un PaaS che accetti container:
+---
 
-```bash
-GROQ_API_KEY=gsk_... docker compose up -d --build
-```
-
-L'immagine espone un `HEALTHCHECK` su `/_stcore/health`, quindi orchestratori e
-load balancer sanno quando l'app è pronta.
-
-## Sicurezza per un deploy pubblico
+## Sicurezza di un deploy pubblico
 
 Il codice generato è validato staticamente (allowlist di nodi AST) ed eseguito in
-un sottoprocesso dedicato con timeout, che restituisce al padre solo JSON. In
-modalità demo c'è anche un limite di domande per sessione.
+un sottoprocesso dedicato con timeout, che restituisce al padre solo JSON.
 
 Il sottoprocesso però è una barriera *di processo*: gira come lo stesso utente
-dell'app, sullo stesso filesystem. Per un uso pubblico con **dati non fidati** il
-deploy in container è la configurazione consigliata, perché aggiunge ciò che il
-codice applicativo non può darsi da solo: filesystem in sola lettura, utente non
-privilegiato, capability rimosse, tetto di RAM e di processi. Vedi
-`docker-compose.yml`.
+dell'app, sullo stesso filesystem. Con **dati non fidati** — ed è la definizione
+di una demo pubblica — il container è la configurazione da usare, perché aggiunge
+ciò che il codice applicativo non può darsi da solo: filesystem in sola lettura,
+utente non privilegiato, capability rimosse, tetto di RAM e di processi. Vedi
+[`docker-compose.yml`](docker-compose.yml) e il commento in testa al
+[`Dockerfile`](Dockerfile).
+
+`ALLOW_INPROCESS_FALLBACK=false` (già in `render.yaml`) chiude l'ultima porta: se
+il sottoprocesso non è avviabile l'esecuzione **si blocca** invece di ripiegare
+in-process, che non ha né timeout né tetto di memoria. Fallire chiuso.
