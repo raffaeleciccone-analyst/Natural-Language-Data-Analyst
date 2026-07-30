@@ -35,9 +35,16 @@ const PlotlyVero = lazy(async () => {
 export function Grafico({
   titolo,
   figura,
+  onCategoria,
 }: {
   titolo: string;
   figura?: Record<string, unknown> | null;
+  /**
+   * Chiamata col valore dell'elemento cliccato. La si passa solo alla
+   * classifica: è l'unico grafico in cui un elemento CORRISPONDE a una
+   * categoria, quindi l'unico in cui cliccare ha un significato ovvio.
+   */
+  onCategoria?: (valore: string) => void;
 }) {
   return (
     <div className="pannello-grafico">
@@ -57,6 +64,18 @@ export function Grafico({
             config={{ displayModeBar: false, responsive: true }}
             style={{ width: "100%", height: ALTEZZA }}
             useResizeHandler
+            onClick={
+              onCategoria &&
+              ((e) => {
+                const punto = e.points?.[0] as { x?: unknown; y?: unknown } | undefined;
+                // Le barre orizzontali portano la categoria su `y`, quelle
+                // verticali su `x`: `charts._make_bars_readable` sceglie
+                // l'orientamento in base alla lunghezza delle etichette, quindi
+                // qui non si può dare per scontato quale dei due sia.
+                const valore = typeof punto?.y === "string" ? punto.y : punto?.x;
+                if (typeof valore === "string") onCategoria(valore);
+              })
+            }
           />
         </Suspense>
       ) : (
