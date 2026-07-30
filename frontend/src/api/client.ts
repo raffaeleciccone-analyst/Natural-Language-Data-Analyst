@@ -157,7 +157,12 @@ export const api = {
     return richiesta<DatasetResponse>("/dataset", { method: "POST", body: corpo });
   },
 
-  caricaEsempio: () => richiesta<DatasetResponse>("/dataset/demo", { method: "POST" }),
+  /** Un dataset di esempio. Senza nome, il primo disponibile. */
+  caricaEsempio: (nome?: string) =>
+    richiesta<DatasetResponse>(
+      `/dataset/demo${nome ? `?nome=${encodeURIComponent(nome)}` : ""}`,
+      { method: "POST" },
+    ),
 
   report: (
     datasetId: string,

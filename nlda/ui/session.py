@@ -19,6 +19,7 @@ import streamlit as st
 
 from nlda.agent import DataAgent
 from nlda.demo import DemoLimits
+from nlda.demo_data import trova as trova_demo
 from nlda.loader import NamedBytesIO, load_dataset, read_any
 from nlda.log import get_logger
 
@@ -37,6 +38,7 @@ class SidebarConfig:
     api_key: str
     explain: bool
     uploaded_file: object | None
+    demo_dataset: str = ""   # nome nel catalogo di `nlda.demo_data`, se non c'e' un upload
 
 
 # --- Lettura della configurazione ---------------------------------------------
@@ -132,8 +134,8 @@ def load_uploaded_cached(name: str, data: bytes) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def load_default_cached() -> pd.DataFrame:
-    return load_dataset()
+def load_default_cached(file_name: str = "sales.csv") -> pd.DataFrame:
+    return load_dataset(file_name)
 
 
 def get_agent(provider: str, model_name: str, api_key: str) -> DataAgent:
@@ -152,8 +154,14 @@ def get_agent(provider: str, model_name: str, api_key: str) -> DataAgent:
     return st.session_state["_agent"]
 
 
-def load_dataframe(uploaded_file):
-    """Carica il file dell'utente o il dataset di esempio. Ritorna (df, etichetta)."""
+def load_dataframe(uploaded_file, esempio: str | None = None):
+    """
+    Carica il file dell'utente o un dataset di esempio. Ritorna (df, etichetta).
+
+    `esempio` e' il NOME di un dataset del catalogo (`nlda.demo_data`), lo stesso
+    che usa l'API: le due interfacce offrono gli stessi esempi perche' leggono lo
+    stesso elenco, non perche' qualcuno si ricorda di aggiornarne due.
+    """
     if uploaded_file is not None:
         try:
             return load_uploaded_cached(uploaded_file.name, uploaded_file.getvalue()), \
@@ -161,8 +169,11 @@ def load_dataframe(uploaded_file):
         except Exception as e:  # noqa: BLE001 — file dell'utente: qualunque errore va mostrato
             st.error(f"Errore nel caricamento del file: {e}")
             return None, None
+    scelto = trova_demo(esempio)
+    if scelto is None:
+        return None, None
     try:
-        return load_default_cached(), "Dataset di default (Superstore Sales)"
+        return load_default_cached(scelto.file), f"Esempio · {scelto.etichetta}"
     except FileNotFoundError:
         return None, None
 

@@ -86,7 +86,7 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    df_full, source_label = load_dataframe(config.uploaded_file)
+    df_full, source_label = load_dataframe(config.uploaded_file, config.demo_dataset)
     if df_full is None:
         st.info("Carica un file CSV dalla barra laterale per iniziare.")
         st.stop()
