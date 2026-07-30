@@ -74,7 +74,19 @@ from nlda.service import AnalysisService
 from nlda.ui_components import build_kpis
 
 log = get_logger(__name__)
-router = APIRouter(prefix="/api")
+
+# Le risposte d'errore si DICHIARANO, non solo si producono. Il gestore più in
+# basso le formatta tutte allo stesso modo, ma FastAPI mette nello schema OpenAPI
+# soltanto i tipi che vede citati in una rotta: senza questa dichiarazione
+# `ErrorResponse` non finiva nello schema, quindi non finiva nei tipi TypeScript —
+# e il frontend si sarebbe trovato senza tipo proprio per la forma che incontra a
+# ogni chiamata andata storta.
+_ERRORI = {
+    400: {"model": ErrorResponse, "description": "Richiesta non valida"},
+    404: {"model": ErrorResponse, "description": "Dataset non trovato o scaduto"},
+    413: {"model": ErrorResponse, "description": "File troppo grande"},
+}
+router = APIRouter(prefix="/api", responses=_ERRORI)  # type: ignore[arg-type]
 
 MAX_UPLOAD_MB = 25   # lo stesso tetto della UI: un limite per interfaccia sarebbe una bugia
 
