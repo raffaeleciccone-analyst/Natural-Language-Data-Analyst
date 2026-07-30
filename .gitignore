@@ -31,3 +31,12 @@ Thumbs.db
 .coverage.*
 coverage.xml
 htmlcov/
+
+# --- Frontend (Node) ---
+# node_modules si ricostruisce da package-lock.json: committarlo significherebbe
+# migliaia di file e un repo che nessuno clona volentieri. Il LOCK invece si
+# committa, ed e' cio' che rende riproducibile l'installazione.
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
