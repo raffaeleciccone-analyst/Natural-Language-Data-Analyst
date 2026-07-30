@@ -512,3 +512,131 @@ button.collegamento:hover { background: none; color: var(--accent); }
 @media (max-width: 1250px) {
   .colonne { grid-template-columns: 1fr; }
 }
+
+/* ===== Bolla "Chiedi al progetto" ==========================================
+   Il pallino fisso in basso a destra e il pannello che ci si apre sopra.
+   In React il posizionamento è banale — il markup è nostro. Nella versione
+   Streamlit richiedeva un marker invisibile, un `st.container()` dedicato e un
+   `:has()` ristretto al figlio diretto, perché altrimenti diventava fissa
+   l'intera pagina. */
+.bolla-contenitore {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+button.bolla {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  font-size: 1.35rem;
+  padding: 0;
+  box-shadow: 0 6px 20px rgba(13, 138, 125, 0.42);
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+
+button.bolla:hover { transform: scale(1.06); }
+button.bolla:focus-visible { outline: 3px solid var(--tint); outline-offset: 2px; }
+
+.bolla-pannello {
+  width: min(400px, calc(100vw - 44px));
+  max-height: min(560px, calc(100vh - 130px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(20, 30, 40, 0.18);
+  padding: 14px 16px;
+  animation: comparsa 0.14s ease-out;
+}
+
+@keyframes comparsa {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+.bolla-pannello header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--display);
+}
+
+.bolla-pannello form {
+  display: flex;
+  gap: 7px;
+  margin: 10px 0 4px;
+}
+
+.bolla-pannello input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--strong);
+  border-radius: 9px;
+  padding: 8px 11px;
+  font-family: var(--sans);
+  font-size: 0.86rem;
+}
+
+.bolla-pannello input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--tint);
+}
+
+.bolla-pannello button[type="submit"] { padding: 8px 14px; font-size: 0.85rem; }
+
+/* Solo il CORPO scorre, non il pannello: il campo domanda resta sempre
+   raggiungibile senza risalire. */
+.bolla-corpo {
+  overflow-y: auto;
+  margin-top: 6px;
+  scrollbar-width: thin;
+}
+
+.scambio {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  margin-top: 10px;
+  font-size: 0.88rem;
+}
+
+.scambio .domanda {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+.scambio p { margin: 0 0 6px; }
+
+.scambio summary { cursor: pointer; }
+
+ul.fonti {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+ul.fonti li { margin: 3px 0; }
+
+/* Codice inline dentro le risposte del modello. */
+.scambio code,
+.riquadro code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--tint);
+  color: var(--deep);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+
+.scambio p:last-child, .riquadro p:last-child { margin-bottom: 0; }

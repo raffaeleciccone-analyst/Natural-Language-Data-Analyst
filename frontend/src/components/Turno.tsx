@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { AskResponse } from "../api/types";
 import { Grafico } from "./Grafico";
 import { Tabella } from "./Tabella";
+import { Testo } from "./Testo";
 
 /**
  * Un turno di conversazione: domanda, risposta e tutto ciò che permette di
@@ -58,7 +59,7 @@ export function Turno({ turno }: { turno: AskResponse }) {
           {turno.answer && (
             <div className="riquadro">
               <div className="r-etichetta">Risposta</div>
-              <div>{turno.answer}</div>
+              <Testo>{turno.answer}</Testo>
             </div>
           )}
 
