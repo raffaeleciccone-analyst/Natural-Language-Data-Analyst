@@ -138,6 +138,20 @@ jobs:
           print('frontend servito dal container')
           "
 
+      - name: "\"Chiedi al progetto\" trova la documentazione"
+        run: |
+          # Le fonti sono file .md del repo, e una fonte assente NON e' fatale:
+          # l'app risponde con quello che ha. Ottima scelta, con un effetto
+          # collaterale — se il Dockerfile smette di copiarli, la funzione muore
+          # in silenzio e risponde "non trovo nulla" a qualunque domanda.
+          docker exec nlda-ci python -c "
+          from nlda.project_qa import base_di_conoscenza, cerca
+          frammenti = base_di_conoscenza()
+          assert len(frammenti) > 50, f'base di conoscenza quasi vuota: {len(frammenti)} frammenti'
+          assert cerca('Come funziona la sandbox di sicurezza?'), 'nessun risultato per una domanda nota'
+          print(f'base di conoscenza: {len(frammenti)} frammenti')
+          "
+
       - name: La sandbox funziona dentro il container
         run: |
           docker exec nlda-ci python -c "

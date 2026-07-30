@@ -79,6 +79,14 @@ COPY --chown=app:app .streamlit ./.streamlit
 # Il frontend compilato, dove `nlda/api/app.py` lo cerca.
 COPY --from=frontend --chown=app:app /fe/dist ./frontend/dist
 
+# La base di conoscenza di "Chiedi al progetto" (`nlda/project_qa.py:FONTI`).
+# Senza, nel container la ricerca non trovava NULLA e ogni domanda riceveva
+# "non trovo nulla nella documentazione": una fonte assente è trattata come non
+# fatale — giustamente, perché il resto dell'app funziona — quindi il difetto si
+# annunciava solo con sei warning nei log che nessuno guardava.
+COPY --chown=app:app README.md ARCHITECTURE.md THREAT_MODEL.md VALUE.md DEPLOY.md ./
+COPY --chown=app:app docs/DOCUMENTAZIONE_TECNICA.md ./docs/
+
 USER app
 # 8501 = interfaccia Streamlit, 8000 = API + frontend React. Due interfacce
 # sullo stesso backend: si sceglie quale avviare col comando, non ricostruendo
