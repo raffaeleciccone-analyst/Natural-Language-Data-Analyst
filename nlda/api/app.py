@@ -42,7 +42,7 @@ from fastapi import (
     Query,
     UploadFile,
 )
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from nlda import charts, checks
@@ -70,6 +70,7 @@ from nlda.api.models import (
     ReportResponse,
     ValueKind,
 )
+from nlda.api.streaming import trasmetti
 from nlda.config import settings
 from nlda.export import conversation_to_markdown
 from nlda.loader import (
@@ -328,24 +329,64 @@ def _valore_serializzabile(value: object) -> tuple[object, ValueKind]:
     return str(value), "text"
 
 
+def _risposta(turn: Turn, colonne, *, includi_spiegazione: bool = True) -> dict:
+    """
+    Il `Turn` del dominio tradotto nella forma che l'API espone.
+
+    Estratta perche' la usano DUE strade: la risposta unica e quella a pezzi. Se
+    ognuna costruisse la propria, le due comincerebbero a differire — ed e' il
+    tipo di divergenza che si nota solo quando un client ne usa una e si aspetta
+    l'altra.
+    """
+    if not isinstance(turn.result, ExecutionSuccess):
+        return AskResponse(ok=False, question=turn.question, code=turn.code,
+                           failure_kind=turn.result.kind,
+                           message=turn.result.message).model_dump()
+
+    valore, tipo = _valore_serializzabile(turn.result.value)
+    return AskResponse(
+        ok=True, question=turn.question, code=turn.code,
+        answer=turn.explanation if includi_spiegazione else None,
+        value=valore, value_kind=tipo,
+        figure=_figura_json(turn.result.fig) if turn.result.fig is not None else None,
+        columns_used=checks.columns_referenced(turn.code, colonne),
+        warnings=checks.sanity_warnings(turn.result.value),
+    ).model_dump()
+
+
 @router.post("/ask", response_model=AskResponse, summary="Fai una domanda sui dati")
 def ask(req: AskRequest, x_api_key: str | None = Header(default=None)) -> AskResponse:
     voce = _dataset(req.dataset_id)
     df = _filtrato(voce.df, req.filtro)
     service = AnalysisService(_agente(req.provider, req.model, x_api_key))
     turn = service.answer(req.question, df, explain=req.explain, unit=req.unit)
+    return AskResponse(**_risposta(turn, df.columns))
 
-    if not isinstance(turn.result, ExecutionSuccess):
-        return AskResponse(ok=False, question=turn.question, code=turn.code,
-                           failure_kind=turn.result.kind, message=turn.result.message)
 
-    valore, tipo = _valore_serializzabile(turn.result.value)
-    return AskResponse(
-        ok=True, question=turn.question, code=turn.code, answer=turn.explanation,
-        value=valore, value_kind=tipo,
-        figure=_figura_json(turn.result.fig) if turn.result.fig is not None else None,
-        columns_used=checks.columns_referenced(turn.code, df.columns),
-        warnings=checks.sanity_warnings(turn.result.value),
+@router.post("/ask/stream", summary="La stessa domanda, trasmessa mentre accade")
+def ask_stream(req: AskRequest, x_api_key: str | None = Header(default=None)):
+    """
+    Server-Sent Events: avanzamento, risultato, poi la spiegazione a pezzi.
+
+    Il RISULTATO arriva prima della spiegazione, quindi tabella e grafico
+    compaiono appena esistono invece di aspettare la prosa — che e' la parte
+    lenta. Dettagli del protocollo in `nlda.api.streaming`.
+    """
+    voce = _dataset(req.dataset_id)
+    df = _filtrato(voce.df, req.filtro)
+    service = AnalysisService(_agente(req.provider, req.model, x_api_key))
+
+    eventi = trasmetti(
+        service, req.question, df, unit=req.unit,
+        verso_json=lambda turn, includi_spiegazione: _risposta(
+            turn, df.columns, includi_spiegazione=includi_spiegazione),
+    )
+    return StreamingResponse(
+        eventi,
+        media_type="text/event-stream",
+        # Senza, un proxy puo' bufferizzare la risposta e consegnarla tutta
+        # insieme alla fine: lo streaming resterebbe tale solo sulla carta.
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
