@@ -20,9 +20,11 @@ import type {
   DatasetResponse,
   DistinctResponse,
   ErrorResponse,
+  ExecutiveReportResponse,
   ExportRequest,
   ExportResponse,
   FiltroSpec,
+  JoinRequest,
   OverviewResponse,
   PeriodsResponse,
   ProjectQaResponse,
@@ -99,6 +101,51 @@ function json(corpo: unknown, apiKey?: string): RequestInit {
   return { method: "POST", headers: intestazioniJson(apiKey), body: JSON.stringify(corpo) };
 }
 
+/**
+ * Cosa serve a una chiamata che passa dal modello: su quali colonne scrivere, e
+ * con quale motore.
+ *
+ * `apiKey` sta qui insieme alle altre ma NON finisce nella query string: la
+ * costruzione della coda la salta apposta, e va in un header. Una chiave in un
+ * URL finisce nei log del server e nella cronologia del browser.
+ *
+ * `Motore` da solo e' quel che serve alla chat, che le colonne non le sceglie.
+ */
+export interface Motore {
+  provider?: string;
+  model?: string;
+  apiKey?: string;
+}
+
+export interface OpzioniProsa extends Motore {
+  measure?: string;
+  category?: string;
+  unit?: string;
+}
+
+/** Solo i campi valorizzati: un `measure=` vuoto direbbe al backend di scegliere
+ *  una misura chiamata "", invece di lasciarlo decidere. */
+function coda(opzioni: Record<string, string | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [chiave, valore] of Object.entries(opzioni)) if (valore) q.set(chiave, valore);
+  return q.toString();
+}
+
+/** Le due rotte che scrivono prosa hanno la stessa forma: stesso lettore. */
+function prosa<T>(percorso: string, o: OpzioniProsa): Promise<T> {
+  const q = coda({
+    measure: o.measure,
+    category: o.category,
+    unit: o.unit,
+    provider: o.provider,
+    model: o.model,
+  });
+  return richiesta<T>(`${percorso}?${q}`, {
+    method: "POST",
+    headers: intestazioniJson(o.apiKey),
+  });
+}
+
 export const api = {
   /** Cosa permette questa installazione: provider, limiti, suggerimenti. */
   config: () => richiesta<ConfigResponse>("/config"),
@@ -121,18 +168,19 @@ export const api = {
       filtro?: FiltroSpec | null;
     } = {},
   ) => {
-    const q = new URLSearchParams();
-    if (opzioni.measure) q.set("measure", opzioni.measure);
-    if (opzioni.category) q.set("category", opzioni.category);
-    if (opzioni.unit) q.set("unit", opzioni.unit);
-    if (opzioni.filtro) {
-      q.set("filter_column", opzioni.filtro.column);
-      // Ripetuto una volta per valore: e' il modo in cui FastAPI legge una lista.
-      opzioni.filtro.values.forEach((v) => q.append("filter_values", v));
-    }
-    const coda = q.toString();
+    const q = new URLSearchParams(
+      coda({
+        measure: opzioni.measure,
+        category: opzioni.category,
+        unit: opzioni.unit,
+        filter_column: opzioni.filtro?.column,
+      }),
+    );
+    // Ripetuto una volta per valore: e' il modo in cui FastAPI legge una lista.
+    if (opzioni.filtro) opzioni.filtro.values.forEach((v) => q.append("filter_values", v));
+    const stringa = q.toString();
     return richiesta<ReportResponse>(
-      `/dataset/${encodeURIComponent(datasetId)}/report${coda ? `?${coda}` : ""}`,
+      `/dataset/${encodeURIComponent(datasetId)}/report${stringa ? `?${stringa}` : ""}`,
     );
   },
 
@@ -158,16 +206,21 @@ export const api = {
    * La sintesi in prosa del report. Rotta a parte, come in Streamlit: e' l'unica
    * cosa che aspetta il modello, e nel report farebbe aspettare anche i numeri.
    */
-  sintesi: (datasetId: string, opzioni: { measure?: string; category?: string; unit?: string }) => {
-    const q = new URLSearchParams();
-    if (opzioni.measure) q.set("measure", opzioni.measure);
-    if (opzioni.category) q.set("category", opzioni.category);
-    if (opzioni.unit) q.set("unit", opzioni.unit);
-    return richiesta<OverviewResponse>(
-      `/dataset/${encodeURIComponent(datasetId)}/overview?${q.toString()}`,
-      { method: "POST", headers: intestazioniJson() },
-    );
-  },
+  sintesi: (datasetId: string, opzioni: OpzioniProsa) =>
+    prosa<OverviewResponse>(`/dataset/${encodeURIComponent(datasetId)}/overview`, opzioni),
+
+  /**
+   * Il report esecutivo in Markdown. A differenza della sintesi si CHIEDE: costa
+   * una chiamata al modello e non a tutti serve.
+   */
+  reportEsecutivo: (datasetId: string, opzioni: OpzioniProsa) =>
+    prosa<ExecutiveReportResponse>(
+      `/dataset/${encodeURIComponent(datasetId)}/executive-report`,
+      opzioni,
+    ),
+
+  /** Unisce due dataset gia' caricati: il risultato e' un dataset NUOVO. */
+  unisci: (corpo: JoinRequest) => richiesta<DatasetResponse>("/dataset/join", json(corpo)),
 
   chiediAlProgetto: (question: string, apiKey?: string) =>
     richiesta<ProjectQaResponse>("/project-qa", json({ question }, apiKey)),

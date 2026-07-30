@@ -1,4 +1,5 @@
 import { api } from "../api/client";
+import type { OpzioniProsa } from "../api/client";
 import { useRichiesta } from "../api/useRichiesta";
 import { Testo } from "./Testo";
 
@@ -18,25 +19,14 @@ import { Testo } from "./Testo";
  * Il segnaposto ha l'altezza del testo che arriverà: quando compare non spinge in
  * basso ciò che l'utente sta già leggendo.
  */
-export function Sintesi({
-  datasetId,
-  measure,
-  category,
-  unit,
-}: {
-  datasetId: string;
-  measure?: string | null;
-  category?: string | null;
-  unit?: string;
-}) {
+export function Sintesi({ datasetId, opzioni }: { datasetId: string; opzioni: OpzioniProsa }) {
   const { dati, errore, inCorso } = useRichiesta(
-    () =>
-      api.sintesi(datasetId, {
-        measure: measure ?? undefined,
-        category: category ?? undefined,
-        unit,
-      }),
-    [datasetId, measure, category, unit],
+    () => api.sintesi(datasetId, opzioni),
+    // I campi uno per uno e non `opzioni`: l'oggetto e' ricostruito a ogni
+    // render del genitore, quindi come dipendenza cambierebbe sempre e la
+    // sintesi si rigenererebbe all'infinito.
+    [datasetId, opzioni.measure, opzioni.category, opzioni.unit,
+     opzioni.provider, opzioni.model, opzioni.apiKey],
   );
 
   // Un guasto qui non merita un riquadro rosso: i numeri ci sono tutti, manca
