@@ -108,6 +108,11 @@ export interface ErrorResponse {
   kind?: string;
 }
 
+/** Il report esecutivo in Markdown: cinque sezioni, pronte da scaricare. */
+export interface ExecutiveReportResponse {
+  markdown: string;
+}
+
 export interface ExportRequest {
   turns: ExportTurn[];
   dataset_label?: string;

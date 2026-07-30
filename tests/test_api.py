@@ -632,3 +632,57 @@ def test_la_sintesi_ha_una_rotta_propria(client, csv_bytes, monkeypatch):
     assert r.json()["text"] == "Le vendite crescono da Nord a Sud."
     # L'unita' arriva al modello: senza, la inventerebbe.
     assert "€" in agente.overview.call_args.args[0]
+
+
+def test_il_report_esecutivo_ha_una_rotta_propria(client, csv_bytes, monkeypatch):
+    """L'ultima funzione che solo Streamlit aveva: cinque sezioni in Markdown."""
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    agente = MagicMock()
+    agente.executive_report.return_value = "## Executive Summary\nCresce."
+    monkeypatch.setattr("nlda.api.app.DataAgent", lambda **k: agente)
+
+    r = client.post(f"/api/dataset/{d['dataset_id']}/executive-report", params={"unit": "€"})
+    assert r.status_code == 200
+    assert r.json()["markdown"].startswith("## Executive Summary")
+    assert "€" in agente.executive_report.call_args.args[0]
+
+
+def test_la_sintesi_e_il_report_partono_dagli_stessi_numeri(client, csv_bytes, monkeypatch):
+    """
+    Due prodotti diversi, un solo ingresso (`_testo_insight`): se divergessero,
+    la pagina mostrerebbe una sintesi e un report che si contraddicono.
+    """
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    agente = MagicMock()
+    agente.overview.return_value = "sintesi"
+    agente.executive_report.return_value = "## Executive Summary"
+    monkeypatch.setattr("nlda.api.app.DataAgent", lambda **k: agente)
+
+    parametri = {"unit": "€", "measure": "Vendite", "category": "Regione"}
+    client.post(f"/api/dataset/{d['dataset_id']}/overview", params=parametri)
+    client.post(f"/api/dataset/{d['dataset_id']}/executive-report", params=parametri)
+
+    assert agente.overview.call_args.args[0] == agente.executive_report.call_args.args[0]
+
+
+def test_senza_nulla_da_riassumere_le_due_rotte_si_comportano_diversamente(
+        client, csv_bytes, monkeypatch):
+    """
+    La sintesi tace (`text: null`), il report esecutivo risponde 400.
+
+    La sintesi arriva da sola e un silenzio si spiega; il report lo si e'
+    CHIESTO, e un pulsante che non fa nulla sembrerebbe rotto.
+
+    Il caso si costruisce svuotando `analyze`, non con un dataset senza numeri:
+    su un dataset vero un testo c'e' sempre (almeno il conteggio delle righe),
+    quindi un CSV di sole stringhe non basterebbe a raggiungere il ramo.
+    """
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    monkeypatch.setattr("nlda.api.app.DataAgent", lambda **k: MagicMock())
+    monkeypatch.setattr("nlda.api.app.analyze", lambda *a, **k: {})
+
+    assert client.post(f"/api/dataset/{d['dataset_id']}/overview").json()["text"] is None
+
+    r = client.post(f"/api/dataset/{d['dataset_id']}/executive-report")
+    assert r.status_code == 400
+    assert "riassumere" in r.json()["detail"]
