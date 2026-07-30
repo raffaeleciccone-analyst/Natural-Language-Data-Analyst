@@ -29,6 +29,14 @@ class ProviderInfo(BaseModel):
     requires_api_key: bool = Field(description="Se serve una chiave per usarlo")
 
 
+class DemoDataset(BaseModel):
+    """Un dataset di esempio offerto da questa installazione."""
+
+    name: str
+    label: str
+    description: str
+
+
 class ConfigResponse(BaseModel):
     """Cosa questa installazione permette di fare. Il frontend la legge all'avvio."""
 
@@ -43,6 +51,9 @@ class ConfigResponse(BaseModel):
     frequencies: list[str] = Field(
         default_factory=list,
         description="Frequenze accettate dal confronto tra periodi")
+    demo_datasets: list[DemoDataset] = Field(
+        default_factory=list,
+        description="Dataset di esempio PRESENTI: l'elenco riflette il disco, non un catalogo")
 
 
 # --- Dataset ------------------------------------------------------------------

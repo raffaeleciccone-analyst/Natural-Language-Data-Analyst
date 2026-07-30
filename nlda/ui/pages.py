@@ -13,6 +13,7 @@ import streamlit as st
 from nlda.agent import DataAgent
 from nlda.charts import apply_theme, corr_heatmap, histogram, px, to_chart, try_fig
 from nlda.demo import DemoLimits
+from nlda.demo_data import disponibili as demo_disponibili
 from nlda.export import conversation_to_markdown
 from nlda.kpis import build_kpis
 from nlda.loader import (
@@ -88,8 +89,21 @@ def render_sidebar_config(limits: DemoLimits) -> SidebarConfig:
             help="Formati supportati: CSV, Excel (.xlsx/.xls), JSON.",
         )
 
+        # L'elenco riflette i file presenti, non un catalogo: un esempio che non
+        # e' stato scaricato non deve comparire come opzione che poi fallisce.
+        # Con un solo dataset il selettore non serve e non si disegna.
+        esempi = demo_disponibili()
+        demo = esempi[0].nome if esempi else ""
+        if uploaded_file is None and len(esempi) > 1:
+            scelto = st.selectbox(
+                "Dataset di esempio", esempi, format_func=lambda d: d.etichetta,
+                help="Oppure carica un tuo file qui sopra.",
+            )
+            demo = scelto.nome
+            st.caption(scelto.descrizione)
+
     return SidebarConfig(provider=provider, model_name=model_name, api_key=api_key,
-                         explain=explain, uploaded_file=uploaded_file)
+                         explain=explain, uploaded_file=uploaded_file, demo_dataset=demo)
 
 
 def render_join(left: pd.DataFrame, left_label: str):

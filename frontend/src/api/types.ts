@@ -72,6 +72,8 @@ export interface ConfigResponse {
   project_questions?: string[];
   /** Frequenze accettate dal confronto tra periodi */
   frequencies?: string[];
+  /** Dataset di esempio PRESENTI: l'elenco riflette il disco, non un catalogo */
+  demo_datasets?: DemoDataset[];
 }
 
 /** Esito del caricamento: l'identificativo e tutto ciò che serve a impostare il report. */
@@ -92,6 +94,13 @@ export interface DatasetResponse {
   suggested_unit: string;
   /** Domande d'esempio costruite sulle colonne di QUESTO dataset */
   example_questions?: string[];
+}
+
+/** Un dataset di esempio offerto da questa installazione. */
+export interface DemoDataset {
+  name: string;
+  label: string;
+  description: string;
 }
 
 /** Valori distinti di una colonna: servono a costruire il filtro. */

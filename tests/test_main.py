@@ -192,18 +192,40 @@ def test_file_illeggibile_mostra_un_errore_e_non_solleva(fake_st, monkeypatch):
     fake_st.error.assert_called_once()
 
 
-def test_dataset_di_default_quando_non_ci_sono_upload(fake_st, monkeypatch):
+def test_dataset_di_esempio_quando_non_ci_sono_upload(fake_st, monkeypatch):
     import pandas as pd
-    monkeypatch.setattr(session, "load_default_cached", lambda: pd.DataFrame({"a": [1]}))
+    monkeypatch.setattr(session, "load_default_cached", lambda _f: pd.DataFrame({"a": [1]}))
 
     df, etichetta = session.load_dataframe(None)
 
-    assert etichetta == "Dataset di default (Superstore Sales)"
+    # L'etichetta nomina il dataset scelto: con piu' di un esempio, "di default"
+    # non direbbe piu' QUALE si sta guardando.
+    assert etichetta == "Esempio · Vendite (Superstore)"
     assert len(df) == 1
 
 
-def test_dataset_di_default_mancante_non_solleva(fake_st, monkeypatch):
-    def assente():
+def test_l_esempio_richiesto_per_nome_vince_sul_primo(fake_st, monkeypatch):
+    import pandas as pd
+    chiesti = []
+
+    def finto(file_name):
+        chiesti.append(file_name)
+        return pd.DataFrame({"a": [1]})
+
+    monkeypatch.setattr(session, "load_default_cached", finto)
+    _, etichetta = session.load_dataframe(None, "films")
+
+    assert chiesti == ["films.json"]
+    assert "Film" in etichetta
+
+
+def test_un_esempio_sconosciuto_non_ripiega_in_silenzio(fake_st):
+    """Dare un dataset diverso da quello chiesto e' peggio che non darne nessuno."""
+    assert session.load_dataframe(None, "inesistente") == (None, None)
+
+
+def test_dataset_di_esempio_mancante_non_solleva(fake_st, monkeypatch):
+    def assente(_file_name):
         raise FileNotFoundError("data/sales.csv")
 
     monkeypatch.setattr(session, "load_default_cached", assente)
