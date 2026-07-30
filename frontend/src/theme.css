@@ -1,0 +1,396 @@
+/*
+ * Tema "strumento di misura", la stessa identità visiva dell'app Streamlit.
+ *
+ * La palette è quella di `nlda/ui_theme.py` (PALETTE): rail scuro, workspace
+ * freddo, un solo accento teal usato con parsimonia. Restano allineate a mano —
+ * sono cinque colori, e una generazione automatica costerebbe più di quanto
+ * eviti. Se un giorno divergessero, la fonte è il file Python.
+ *
+ * DIFFERENZA CHE CONTA rispetto al CSS di Streamlit: là si combatteva contro un
+ * DOM altrui, con selettori `[data-testid]` che non sono API pubbliche. Qui il
+ * markup è nostro, quindi le classi sono nostre e stabili.
+ */
+
+:root {
+  /* Palette (fonte: nlda/ui_theme.py) */
+  --page: #f2f4f6;
+  --surface: #ffffff;
+  --surface2: #f7f9fb;
+  --border: #e4e8ec;
+  --strong: #d5dbe1;
+  --ink: #1b1f24;
+  --ink2: #586471;
+  --muted: #8b97a3;
+  --accent: #0d8a7d;
+  --deep: #0a6b61;
+  --tint: #e3f0ee;
+  --rail: #191d23;
+  --rail2: #20262e;
+  --rail-ink: #d6dde4;
+  --rail-soft: #8a95a1;
+  --rail-line: #2b323b;
+
+  --sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --display: "Space Grotesk", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+
+  --rail-larghezza: 19rem;
+  --raggio: 12px;
+
+  font-family: var(--sans);
+  color: var(--ink);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+}
+
+/* ===== Struttura ============================================================
+   Griglia a due colonne: il rail ha una larghezza FISSA dichiarata qui, quindi
+   esiste alla sua misura definitiva dal primo frame. È il difetto che rendeva
+   instabile la versione Streamlit — lì la barra nasceva a 300px e si allargava
+   quando arrivava il nostro stile, spostando tutto il contenuto. */
+.impaginazione {
+  display: grid;
+  grid-template-columns: var(--rail-larghezza) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.rail {
+  background: var(--rail);
+  border-right: 1px solid var(--rail-line);
+  color: var(--rail-ink);
+  padding: 22px 20px 40px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.rail h1 {
+  font-family: var(--display);
+  font-size: 1.02rem;
+  color: #fff;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+
+.rail .sottotitolo {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  color: var(--rail-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 26px;
+}
+
+.rail .etichetta {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rail-soft);
+  display: block;
+  margin: 20px 0 7px;
+}
+
+.rail select,
+.rail input[type="text"] {
+  width: 100%;
+  background: var(--rail2);
+  border: 1px solid var(--rail-line);
+  color: var(--rail-ink);
+  border-radius: 9px;
+  padding: 9px 11px;
+  font-family: var(--sans);
+  font-size: 0.88rem;
+}
+
+.rail select:focus,
+.rail input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.spazio-lavoro {
+  padding: 28px 34px 90px;
+  max-width: 1500px;
+  min-width: 0;
+}
+
+/* ===== Testata ===== */
+.titolo {
+  font-family: var(--display);
+  font-size: clamp(1.7rem, 1.2rem + 1.4vw, 2.4rem);
+  letter-spacing: -0.02em;
+  margin: 0 0 4px;
+}
+
+.sottotitolo-pagina {
+  color: var(--ink2);
+  font-size: 0.9rem;
+  margin: 0 0 22px;
+}
+
+.sezione {
+  font-family: var(--display);
+  font-size: 1.05rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin: 30px 0 12px;
+}
+
+/* Il motivo "scala di misura": la firma del tema. */
+.scala {
+  height: 8px;
+  margin: 26px 0 4px;
+  background-image: repeating-linear-gradient(90deg, var(--strong) 0 1px, transparent 1px 8px);
+}
+
+/* ===== KPI ==================================================================
+   `min-height` sulla card e `grid-auto-rows` sulla riga: lo spazio esiste prima
+   del contenuto, quindi quando i numeri arrivano non spingono nulla. */
+.griglia-kpi {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+  grid-auto-rows: 140px;
+}
+
+.kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--raggio);
+  padding: 20px 16px 18px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(20, 30, 40, 0.04);
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.kpi .k-etichetta {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink2);
+}
+
+/* Stessa tecnica del tema Streamlit: la dimensione dipende dalla larghezza della
+   card (cqi) E dalla lunghezza del valore (--vfs, calcolato da chi rende). */
+.kpi .k-valore {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: min(1.9rem, calc(var(--vfs, 14) * 1cqi));
+  letter-spacing: -0.03em;
+  margin-top: 10px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kpi .k-tacca {
+  height: 5px;
+  width: 48px;
+  margin: 14px auto 0;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.kpi .k-sotto {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 10px;
+  min-height: 1.1em; /* c'è sempre, anche vuoto: le card restano pari */
+}
+
+/* ===== Riquadri ===== */
+.riquadro {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--raggio);
+  padding: 14px 16px;
+  margin: 4px 0 14px;
+}
+
+.riquadro .r-etichetta {
+  font-family: var(--mono);
+  color: var(--deep);
+  font-weight: 600;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 8px;
+}
+
+.riquadro ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.riquadro li { margin: 4px 0; }
+
+/* ===== Grafici e tabelle ====================================================
+   L'altezza è dichiarata PRIMA che la figura esista: senza, il grafico compare e
+   spinge in basso tutto il resto — che è esattamente il salto che ci ha fatto
+   riscrivere l'interfaccia. */
+.griglia-grafici {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.pannello-grafico {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--raggio);
+  padding: 12px 14px;
+  min-height: 340px;
+}
+
+.pannello-grafico h3 {
+  font-family: var(--display);
+  font-size: 0.92rem;
+  margin: 0 0 8px;
+  color: var(--ink);
+}
+
+.tabella-contenitore {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.86rem;
+}
+
+th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink2);
+  background: var(--surface2);
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+td.numero {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+tr:last-child td { border-bottom: 0; }
+
+/* ===== Stati ================================================================
+   Lo scheletro occupa lo stesso spazio del contenuto che sostituirà. È l'idea
+   che l'interfaccia Streamlit non poteva applicare, perché le altezze le
+   decideva il framework al momento del disegno. */
+@keyframes pulsazione {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.scheletro {
+  background: var(--strong);
+  border-radius: 8px;
+  animation: pulsazione 1.4s ease-in-out infinite;
+}
+
+.avviso {
+  background: #fff8e6;
+  border: 1px solid #f0dca8;
+  color: #6b5312;
+  border-radius: 10px;
+  padding: 10px 13px;
+  font-size: 0.86rem;
+  margin: 10px 0;
+}
+
+.errore {
+  background: #fdeceb;
+  border: 1px solid #f3bfbb;
+  color: #8a231c;
+  border-radius: 10px;
+  padding: 10px 13px;
+  font-size: 0.88rem;
+  margin: 10px 0;
+}
+
+.vuoto {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* ===== Controlli ===== */
+button {
+  font-family: var(--display);
+  font-weight: 600;
+  border-radius: 10px;
+  border: 0;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  background: var(--accent);
+  color: #fff;
+  transition: background 0.12s ease;
+}
+
+button:hover:not(:disabled) { background: var(--deep); }
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+button.secondario {
+  background: transparent;
+  color: var(--rail-ink);
+  border: 1px solid var(--rail-line);
+  width: 100%;
+}
+
+button.secondario:hover:not(:disabled) {
+  background: var(--rail2);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.didascalia {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+/* ===== Schermi stretti ======================================================
+   Il rail passa sopra il contenuto invece di restare una colonna: sotto i 900px
+   toglierebbe troppa larghezza a ciò che conta. */
+@media (max-width: 900px) {
+  .impaginazione { grid-template-columns: 1fr; }
+  .rail {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--rail-line);
+  }
+  .spazio-lavoro { padding: 20px 16px 70px; }
+}
