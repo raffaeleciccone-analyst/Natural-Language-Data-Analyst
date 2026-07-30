@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ApiError, api } from "../api/client";
-import type { AskResponse, DatasetResponse } from "../api/types";
+import type { AskResponse, DatasetResponse, FiltroSpec } from "../api/types";
 import { Turno, TurnoInAttesa } from "./Turno";
 
 /**
@@ -31,10 +31,12 @@ export function Chat({
   dataset,
   unita,
   provider,
+  filtro,
 }: {
   dataset: DatasetResponse;
   unita: string;
   provider?: string;
+  filtro?: FiltroSpec | null;
 }) {
   const [domanda, setDomanda] = useState("");
   const [storico, setStorico] = useState<AskResponse[]>([]);
@@ -53,6 +55,9 @@ export function Chat({
         question: pulita,
         unit: unita,
         provider: provider ?? null,
+        // La domanda vale sul sottoinsieme filtrato: altrimenti la pagina
+        // mostrerebbe i numeri di una parte e risponderebbe sul totale.
+        filtro: filtro ?? null,
       });
       setStorico((s) => [risposta, ...s]);
     } catch (e) {
@@ -63,6 +68,31 @@ export function Chat({
     } finally {
       setInCorso(null);
     }
+  }
+
+  async function esporta() {
+    // Il Markdown lo compone il backend (`nlda.export`), lo stesso modulo che
+    // serve l'app Streamlit: comporlo qui sarebbe un secondo formato destinato a
+    // divergere dal primo alla prima modifica.
+    const r = await api.esporta({
+      dataset_label: dataset.label,
+      turns: storico
+        .slice()
+        .reverse()
+        .map((t) => ({
+          question: t.question,
+          code: t.code,
+          answer: t.answer ?? null,
+          value_preview: t.value === null || t.value === undefined ? "" : String(t.value),
+        })),
+    });
+    const url = URL.createObjectURL(new Blob([r.markdown], { type: "text/markdown" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "conversazione.md";
+    a.click();
+    // Senza revoca, il Blob resta in memoria finche' la pagina e' aperta.
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -87,6 +117,14 @@ export function Chat({
           {inCorso ? "Sto analizzando…" : "Invia"}
         </button>
       </form>
+
+      {storico.length > 0 && (
+        <div className="azioni">
+          <button className="tenue" onClick={() => void esporta()}>
+            ⬇ Scarica la conversazione (.md)
+          </button>
+        </div>
+      )}
 
       {errore && <div className="errore">{errore}</div>}
 

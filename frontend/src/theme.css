@@ -640,3 +640,113 @@ ul.fonti li { margin: 3px 0; }
 }
 
 .scambio p:last-child, .riquadro p:last-child { margin-bottom: 0; }
+
+/* ===== Filtro nel rail ===== */
+.valori-filtro {
+  max-height: 190px;
+  overflow-y: auto;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--rail2);
+  border: 1px solid var(--rail-line);
+  border-radius: 9px;
+  scrollbar-width: thin;
+}
+
+.valori-filtro label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.84rem;
+  padding: 3px 0;
+  cursor: pointer;
+}
+
+.valori-filtro input[type="checkbox"] { accent-color: var(--accent); }
+
+.filtro-attivo {
+  background: var(--tint);
+  border: 1px solid var(--accent);
+  color: var(--deep);
+  border-radius: 9px;
+  padding: 7px 11px;
+  font-size: 0.84rem;
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ===== Pannelli richiudibili ===== */
+details.pannello {
+  border: 1px solid var(--border);
+  border-radius: var(--raggio);
+  background: var(--surface);
+  padding: 12px 15px;
+  margin: 16px 0;
+}
+
+details.pannello summary {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink2);
+  cursor: pointer;
+}
+
+details.pannello .controlli {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+details.pannello .controlli label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink2);
+}
+
+details.pannello select {
+  border: 1px solid var(--strong);
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-family: var(--sans);
+  font-size: 0.86rem;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.crescita { color: var(--deep); font-weight: 600; }
+.calo { color: #a8332a; font-weight: 600; }
+
+/* ===== Barra delle azioni ===== */
+.azioni {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+button.tenue {
+  background: var(--surface);
+  color: var(--ink2);
+  border: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 7px 13px;
+}
+
+button.tenue:hover:not(:disabled) {
+  background: var(--tint);
+  border-color: var(--accent);
+  color: var(--deep);
+}
