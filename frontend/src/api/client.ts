@@ -20,7 +20,13 @@ import type {
   AskResponse,
   ConfigResponse,
   DatasetResponse,
+  DistinctResponse,
   ErrorResponse,
+  ExportRequest,
+  ExportResponse,
+  FiltroSpec,
+  JoinRequest,
+  PeriodsResponse,
   ProjectQaResponse,
   ReportResponse,
 } from "./types";
@@ -94,16 +100,49 @@ export const api = {
 
   caricaEsempio: () => richiesta<DatasetResponse>("/dataset/demo", { method: "POST" }),
 
-  report: (datasetId: string, opzioni: { measure?: string; category?: string; unit?: string } = {}) => {
+  report: (
+    datasetId: string,
+    opzioni: {
+      measure?: string;
+      category?: string;
+      unit?: string;
+      filtro?: FiltroSpec | null;
+    } = {},
+  ) => {
     const q = new URLSearchParams();
     if (opzioni.measure) q.set("measure", opzioni.measure);
     if (opzioni.category) q.set("category", opzioni.category);
     if (opzioni.unit) q.set("unit", opzioni.unit);
+    if (opzioni.filtro) {
+      q.set("filter_column", opzioni.filtro.column);
+      // Ripetuto una volta per valore: e' il modo in cui FastAPI legge una lista.
+      opzioni.filtro.values.forEach((v) => q.append("filter_values", v));
+    }
     const coda = q.toString();
     return richiesta<ReportResponse>(
       `/dataset/${encodeURIComponent(datasetId)}/report${coda ? `?${coda}` : ""}`,
     );
   },
+
+  /** Valori distinti di una colonna: servono a costruire il filtro. */
+  distinti: (datasetId: string, column: string) =>
+    richiesta<DistinctResponse>(
+      `/dataset/${encodeURIComponent(datasetId)}/distinct?column=${encodeURIComponent(column)}`,
+    ),
+
+  colonneData: (datasetId: string) =>
+    richiesta<string[]>(`/dataset/${encodeURIComponent(datasetId)}/date-columns`),
+
+  periodi: (datasetId: string, dateColumn: string, measure: string, freq: string) => {
+    const q = new URLSearchParams({ date_column: dateColumn, measure, freq });
+    return richiesta<PeriodsResponse>(
+      `/dataset/${encodeURIComponent(datasetId)}/periods?${q.toString()}`,
+    );
+  },
+
+  unisci: (corpo: JoinRequest) => richiesta<DatasetResponse>("/dataset/join", json(corpo)),
+
+  esporta: (corpo: ExportRequest) => richiesta<ExportResponse>("/export", json(corpo)),
 
   chiedi: (richiestaDomanda: AskRequest, apiKey?: string) =>
     richiesta<AskResponse>("/ask", json(richiestaDomanda, apiKey)),

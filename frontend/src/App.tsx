@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "./api/client";
-import type { DatasetResponse, ReportResponse } from "./api/types";
+import type { DatasetResponse, FiltroSpec, ReportResponse } from "./api/types";
 import { BollaProgetto } from "./components/BollaProgetto";
 import { Chat } from "./components/Chat";
+import { Filtro } from "./components/Filtro";
 import { Grafico } from "./components/Grafico";
 import { Kpi, KpiScheletro } from "./components/Kpi";
+import { Periodi } from "./components/Periodi";
 import { Tabella } from "./components/Tabella";
 import "./theme.css";
 
@@ -24,6 +26,7 @@ export default function App() {
   const [unita, setUnita] = useState("");
   const [caricamento, setCaricamento] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
+  const [filtro, setFiltro] = useState<FiltroSpec | null>(null);
   const inputFile = useRef<HTMLInputElement>(null);
 
   /** Percorso comune al caricamento di un file e del dataset di esempio. */
@@ -53,7 +56,12 @@ export default function App() {
     let annullato = false;
     setErrore(null);
     api
-      .report(dataset.dataset_id, { measure: misura, category: categoria, unit: unita })
+      .report(dataset.dataset_id, {
+        measure: misura,
+        category: categoria,
+        unit: unita,
+        filtro,
+      })
       .then((r) => {
         // Una risposta che arriva DOPO che l'utente ha già cambiato misura
         // sovrascriverebbe quella giusta con una vecchia: la si scarta.
@@ -65,7 +73,7 @@ export default function App() {
     return () => {
       annullato = true;
     };
-  }, [dataset, misura, categoria, unita]);
+  }, [dataset, misura, categoria, unita, filtro]);
 
   const inAttesa = caricamento || (dataset !== null && report === null && !errore);
   const fig = (nome: string) =>
@@ -135,6 +143,8 @@ export default function App() {
               placeholder="es. €, kg, %"
               onChange={(e) => setUnita(e.target.value)}
             />
+
+            <Filtro dataset={dataset} filtro={filtro} onCambia={setFiltro} />
           </>
         )}
       </aside>
@@ -146,6 +156,18 @@ export default function App() {
             ? `${dataset.label} — ${dataset.rows.toLocaleString("it-IT")} righe · ${dataset.columns} colonne`
             : "Carica un file per iniziare, oppure usa il dataset di esempio."}
         </p>
+
+        {filtro && (
+          <div className="filtro-attivo">
+            <span>
+              Filtro attivo: <strong>{filtro.column}</strong> ={" "}
+              {filtro.values.join(", ")}
+            </span>
+            <button className="tenue" onClick={() => setFiltro(null)}>
+              Togli il filtro
+            </button>
+          </div>
+        )}
 
         {errore && <div className="errore">{errore}</div>}
 
@@ -201,6 +223,12 @@ export default function App() {
               </>
             ) : null}
 
+            {/* `dataset &&` e non `dataset!`: questo blocco si disegna anche
+                mentre il file sta caricando, quando `dataset` e' ancora null.
+                L'asserzione di non-nullita' zittiva il compilatore proprio sul
+                caso che capita davvero, e il componente esplodeva a runtime. */}
+            {dataset && <Periodi dataset={dataset} misura={misura} />}
+
             <h2 className="sezione">Anteprima dei dati</h2>
             {report ? (
               <Tabella righe={report.preview} massimo={10} />
@@ -209,7 +237,7 @@ export default function App() {
             )}
               </div>
 
-              {dataset && <Chat dataset={dataset} unita={unita} />}
+              {dataset && <Chat dataset={dataset} unita={unita} filtro={filtro} />}
             </div>
           </>
         )}
