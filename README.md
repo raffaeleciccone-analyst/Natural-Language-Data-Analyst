@@ -2,82 +2,100 @@
 
 [![CI](https://github.com/raffaeleciccone-analyst/Natural-Language-Data-Analyst/actions/workflows/ci.yml/badge.svg)](https://github.com/raffaeleciccone-analyst/Natural-Language-Data-Analyst/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+[![React 19 + TypeScript](https://img.shields.io/badge/react-19%20%2B%20TS-149eca.svg)](frontend/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-*Analista di dati AI-powered che interroghi in linguaggio naturale.*
+**Interroga i tuoi dati in linguaggio naturale.** Fai una domanda — *"Qual è il
+mese con più vendite?"* — e un modello LLM la traduce in codice Pandas, che l'app
+esegue in una sandbox. Ottieni il risultato, un grafico Plotly e una risposta che
+interpreta i numeri.
 
-> ▶️ **Prova la demo: https://natural-language-data-analyst-v1.streamlit.app/**
->
-> 📄 **Perché questo progetto:** [VALUE.md](VALUE.md) · le decisioni in
-> [ARCHITECTURE.md](ARCHITECTURE.md) · la sicurezza in [THREAT_MODEL.md](THREAT_MODEL.md)
+**I numeri li calcola Pandas; l'AI si limita a raccontarli.**
 
-Interroga i tuoi dati in **linguaggio naturale**. Fai una domanda — ad esempio
-*"Qual è il mese con più vendite?"* oppure *"Mostrami le vendite per regione"* —
-e un modello LLM la traduce in codice Pandas, che l'app esegue in una sandbox.
-Ottieni il **risultato**, un **grafico Plotly interattivo** e una **risposta
-testuale** che interpreta i numeri.
+<table>
+<tr>
+<td width="50%">
 
-Al caricamento di un dataset ricevi inoltre un **report iniziale automatico**:
-KPI, statistiche, classifiche, andamento temporale, **correlazioni** tra le
-misure e **insight automatici** — con una sintesi in linguaggio naturale e un
-**report esecutivo** scaricabile. Tutti i numeri sono calcolati in Pandas; l'AI
-si limita a raccontarli.
+### ▶️ Prova la demo
 
-## Anteprima
+**[Interfaccia React](https://nlda.onrender.com)** · *da sostituire con l'URL di Render*
 
-![Report iniziale sui dati](docs/preview-report.png)
-![Risposta a una domanda, con grafico](docs/preview-answer.png)
+**[Interfaccia Streamlit](https://natural-language-data-analyst-v1.streamlit.app/)**
 
-*Screenshot reali della [demo](https://natural-language-data-analyst-v1.streamlit.app/)
-(provider Groq · llama-3.3-70b). In alto i KPI e il report automatico; a destra una
-domanda in linguaggio naturale con la risposta testuale e il grafico generati.*
+*Due interfacce, un solo backend.*
 
-## Funzionalità
+</td>
+<td width="50%">
 
-- **Domande in linguaggio naturale** → codice Pandas generato dall'LLM →
-  **grafici Plotly interattivi** e tabelle di dettaglio.
-- **Multi-provider LLM**: Ollama (locale, senza API key), Groq, Anthropic,
-  OpenAI, Gemini. Il provider e il modello si scelgono dalla barra laterale.
-- **Formati supportati**: CSV, Excel (.xlsx/.xls) e JSON. L'app si adatta allo
-  schema del file caricato: rileva tipi, date e colonne "misura" in automatico,
-  e passa lo schema reale al modello a ogni domanda.
-- **Report iniziale automatico** con KPI, statistiche, classifiche e andamento
-  temporale, più una panoramica testuale generata dall'AI.
-- **Correlazioni e distribuzioni**: heatmap delle correlazioni tra le misure
-  (con le coppie più forti) e istogramma della misura selezionata.
-- **Insight automatici**: quota del leader, crescita di periodo, variazione
-  recente e outlier — **numeri calcolati in Pandas**, non dedotti dall'AI.
-- **Report esecutivo** generabile con un click (Executive Summary, Key Insights,
-  Recommendations, Risks, Next Steps) e **scaricabile in Markdown**.
-- **Grafici collegati (click-to-filter)**: nel report, cliccando una barra della
-  classifica l'andamento temporale si filtra sulla categoria selezionata.
-- **Confronto tra periodi**: aggrega una misura per mese, trimestre o anno con la
-  **variazione percentuale** sul periodo precedente — dalla sezione dedicata o
-  chiedendolo in una domanda (lo stesso motore deterministico alimenta entrambi).
-- **Filtro persistente**: restringi l'intera analisi a un sottoinsieme (es. una
-  regione) da un controllo nella barra laterale; resta attivo tra le domande e
-  vale per report, KPI, confronto e chat.
-- **Join tra due dataset**: carica un secondo file e uniscilo al primo su una
-  coppia di chiavi; report e domande valgono poi sui dati uniti.
-- **Esporta la conversazione** in Markdown: ogni turno con domanda, risultato,
-  spiegazione e il **codice Pandas generato**.
-- **Risposta testuale in streaming** a ogni domanda: l'AI interpreta il risultato
-  calcolato e risponde citando i numeri chiave, con l'effetto typewriter mentre
-  scrive (dove il provider lo supporta; altrimenti compare l'intera risposta).
-- **Unità di misura opzionale**: puoi indicarla dalla barra laterale; per le
-  misure economiche senza unità indicata viene usato il dollaro come standard.
-- **Esecuzione sicura**: il codice generato è validato staticamente con una
-  **allowlist di nodi AST** (tutto ciò che non serve a un'espressione Pandas è
-  rifiutato per costruzione) ed eseguito in un **sottoprocesso dedicato con
-  timeout**, che restituisce al processo padre solo dati inerti. In container
-  si aggiunge l'isolamento dal sistema.
+### 📄 Approfondisci
+
+**[Perché questo progetto](VALUE.md)** · il problema e il valore
+
+**[Architettura](ARCHITECTURE.md)** · le decisioni e i loro trade-off
+
+**[Modello di minaccia](THREAT_MODEL.md)** · superfici, mitigazioni, rischi residui
+
+**[Documentazione tecnica](docs/DOCUMENTAZIONE_TECNICA.md)** · modulo per modulo
+
+</td>
+</tr>
+</table>
+
+![Interfaccia React: KPI, anteprima dei dati e report](docs/preview-react-report.png)
+![Interfaccia React: sintesi dell'AI e risposta a una domanda](docs/preview-react-answer.png)
+
+*Interfaccia React, screenshot reali. In alto i KPI e l'anteprima del file; sotto,
+a sinistra la sintesi scritta dall'AI sui numeri calcolati da Pandas, a destra una
+domanda con la risposta e la tabella che l'ha prodotta.*
+
+<details>
+<summary>Gli stessi dati nell'interfaccia Streamlit</summary>
+
+![Report Streamlit](docs/preview-report.png)
+![Risposta a una domanda in Streamlit](docs/preview-answer.png)
+
+</details>
+
+---
+
+## Cosa sa fare
+
+| | |
+|---|---|
+| **Domande in linguaggio naturale** | La domanda diventa codice Pandas, che viene eseguito: risultato, grafico interattivo e risposta testuale **in streaming**. |
+| **Report automatico** | KPI, statistiche, classifiche, andamento nel tempo, correlazioni e distribuzioni — appena carichi un file, senza chiedere nulla. |
+| **Insight automatici** | Quota del leader, crescita di periodo, variazione recente e outlier: **calcolati in Pandas**, non dedotti dall'AI. |
+| **Report esecutivo** | Cinque sezioni pronte da presentare (Summary, Insights, Recommendations, Risks, Next Steps), scaricabili in Markdown. |
+| **Filtro globale** | Restringi l'intera analisi a un sottoinsieme: vale per report, KPI, confronto e domande. Cliccare una barra della classifica lo imposta. |
+| **Confronto tra periodi** | Una misura per mese, trimestre o anno con la variazione sul periodo precedente — dalla sezione dedicata o chiedendolo a parole. |
+| **Unione di due file** | Carica un secondo dataset e uniscilo al primo su una coppia di chiavi; da lì in poi report e domande valgono sui dati uniti. |
+| **Esporta la conversazione** | Ogni turno in Markdown, **codice Pandas generato compreso**. |
+| **Multi-provider LLM** | Ollama (locale, senza chiave), Groq, Anthropic, OpenAI, Gemini. Gli SDK sono opzionali: si installa solo quello che serve. |
+| **Chiedi al progetto** | Una modalità che risponde sul progetto stesso citando le fonti, con recupero TF-IDF sui documenti del repo. |
+
+**Formati**: CSV, Excel (`.xlsx`/`.xls`), JSON. Tipi, date e colonne "misura"
+vengono rilevati da soli, e lo schema reale finisce nel prompt a ogni domanda.
+
+## Le due interfacce
+
+Lo stesso backend, servito a due frontend diversi. Non è una vetrina: è la prova
+che la stratificazione dichiarata era vera — `nlda/api/app.py` non contiene
+logica, solo traduzione da e verso JSON.
+
+| | **React + FastAPI** | **Streamlit** |
+|---|---|---|
+| Dove | `frontend/` + `nlda/api/` | `main.py` + `nlda/ui/` |
+| Avvio | `uvicorn nlda.api.app:app` | `streamlit run main.py` |
+| Porta | 8000 | 8501 |
+| Punti forti | controllo pieno del rendering, nessuno scatto della pagina durante il caricamento, risposta in streaming | zero codice di interfaccia, ideale per iterare in fretta |
+
+Sono avviabili **dalla stessa immagine Docker**: cambia il comando, non
+l'immagine.
 
 ## Esecuzione in locale
 
-### 1. Requisiti
-- **Python 3.12+** e **git**
+### 1. Installazione
 
-### 2. Installazione
 ```bash
 git clone https://github.com/raffaeleciccone-analyst/Natural-Language-Data-Analyst.git
 cd Natural-Language-Data-Analyst
@@ -86,43 +104,74 @@ python -m venv .venv
 # Windows:  .venv\Scripts\activate
 # macOS/Linux:  source .venv/bin/activate
 
-pip install -e ".[all]"
+pip install -e ".[all,api]"
 ```
 
-Gli SDK dei provider sono **opzionali**: `[all]` li installa tutti, ma puoi
-prendere solo quello che ti serve — `".[ollama]"`, `".[openai]"` (copre anche
-Groq), `".[anthropic]"`, `".[gemini]"`. L'app parte comunque: l'import di ogni
-SDK avviene solo quando scegli quel provider.
+`[all]` installa gli SDK di tutti i provider, `[api]` FastAPI e uvicorn. Puoi
+prendere solo ciò che ti serve — `".[ollama]"`, `".[openai]"` (copre anche Groq),
+`".[anthropic]"`, `".[gemini]"`: l'import di ogni SDK avviene solo quando scegli
+quel provider.
 
-### 3. Scegli un modello LLM *(serve un LLM per generare le analisi)*
+### 2. Un modello LLM
 
-**Opzione A — Ollama in locale (gratuito, nessuna API key)**
-1. Installa Ollama da <https://ollama.com>
-2. Scarica il modello: `ollama pull qwen2.5:3b`
-3. È già il provider predefinito.
+**Ollama in locale** (gratuito, nessuna chiave) — installalo da
+<https://ollama.com>, poi `ollama pull qwen2.5:3b`. È già il provider predefinito.
 
-**Opzione B — Provider cloud (API key)**
-- Scegli Groq, Anthropic, OpenAI o Gemini dalla barra laterale e incolla la tua
-  API key (oppure copia `.env.example` in `.env` e inseriscila lì).
-- Groq offre una chiave gratuita (senza carta) su <https://console.groq.com/keys>.
+**Oppure un provider cloud** — scegli Groq, Anthropic, OpenAI o Gemini
+dall'interfaccia e incolla la chiave (o mettila in `.env`, copiando
+`.env.example`). Groq ne offre una gratuita senza carta su
+<https://console.groq.com/keys>.
 
-### 4. Avvia
+### 3. Avvia
+
 ```bash
-streamlit run main.py
+# Interfaccia React (richiede il frontend compilato: vedi sotto)
+uvicorn nlda.api.app:app --reload          # http://localhost:8000
+
+# Interfaccia Streamlit
+streamlit run main.py                      # http://localhost:8501
 ```
-L'app si apre nel browser su <http://localhost:8501>.
+
+<details>
+<summary><b>Sviluppare il frontend React</b></summary>
+
+Serve **Node 20+**. In sviluppo girano due processi: Vite serve la pagina con
+l'hot reload e inoltra `/api` a uvicorn.
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173, con /api verso :8000
+```
+
+Per la versione compilata (quella che uvicorn serve da solo su `:8000`):
+
+```bash
+npm run build      # produce frontend/dist
+```
+
+I tipi TypeScript dell'API **si generano dallo schema OpenAPI**, non si scrivono
+a mano:
+
+```bash
+python scripts/genera_tipi_ts.py             # rigenera frontend/src/api/types.ts
+python scripts/genera_tipi_ts.py --verifica  # fallisce se sono disallineati (gira in CI)
+```
+
+Così un campo rinominato nel backend rompe il *type-check* del frontend invece di
+rompersi in produzione.
+
+</details>
 
 ## Docker
 
 ```bash
 GROQ_API_KEY=gsk_... docker compose up --build
 ```
-L'app è su <http://localhost:8501>. Senza chiave parte comunque: puoi puntare a
-un Ollama in locale o inserire la chiave dalla barra laterale.
 
 Il container non serve solo alla portabilità: **è ciò che dà alla sandbox
-l'isolamento dal sistema**. La validazione AST decide cosa il codice generato
-può *dire*, il container decide cosa può *fare*. In `docker-compose.yml`:
+l'isolamento dal sistema**. La validazione AST decide cosa il codice generato può
+*dire*, il container decide cosa può *fare*. In `docker-compose.yml`:
 
 - filesystem **in sola lettura** (le sole aree scrivibili sono tmpfs volatili);
 - utente **non privilegiato** (uid 10001) e **tutte le capability rimosse**;
@@ -130,132 +179,153 @@ può *dire*, il container decide cosa può *fare*. In `docker-compose.yml`:
 - `ALLOW_INPROCESS_FALLBACK=false`: fail-closed, l'esecuzione si blocca invece
   di degradare a una sandbox più debole.
 
-Chiude anche il residuo che l'AST non può coprire: una chiamata di libreria che
-fa I/O al proprio interno (`px.data.gapminder()`) non è visibile al validatore,
-ma resta confinata dal container.
+Chiude anche il residuo che l'AST non può coprire: una chiamata di libreria che fa
+I/O al proprio interno (`px.data.gapminder()`) non è visibile al validatore, ma
+resta confinata dal container.
 
-## Usare i tuoi dati
+Una sola immagine, due interfacce:
 
-All'avvio è già caricato un **dataset di esempio** (`data/sales.csv`, vendite
-Superstore). Per usare i tuoi dati, carica un file CSV, Excel o JSON dalla barra
-laterale: l'app rileva colonne, tipi e date automaticamente e adatta report,
-KPI e domande al nuovo schema. Dalla sezione "Report" puoi scegliere la misura
-e la categoria su cui basare KPI e classifiche; da "Filtro" restringi tutta
-l'analisi a un sottoinsieme, e da "Unisci un secondo dataset" incroci due file
-su una coppia di chiavi.
+```bash
+docker run -p 8000:8000 nlda                                    # React + API (default)
+docker run -p 8501:8501 nlda streamlit run main.py \
+  --server.address=0.0.0.0 --server.port=8501                   # Streamlit
+```
+
+## Sicurezza
+
+> 🛡️ Il **modello di minaccia completo** — superfici d'attacco, mitigazioni e
+> *rischi residui dichiarati* — è in **[THREAT_MODEL.md](THREAT_MODEL.md)**.
+
+Il cuore: il codice generato dall'LLM non è fidato, e il progetto lo tratta come
+tale in tre strati indipendenti.
+
+1. **Analisi statica in allowlist.** Il validatore ammette solo la manciata di
+   nodi AST che servono a un'espressione Pandas. Tutto il resto è rifiutato *per
+   costruzione* — `import`, `def`, `class`, `with`, `try`, `global`, `del`,
+   `async`, walrus, `match` — compresi i costrutti che il linguaggio aggiungerà
+   in futuro. Una denylist andrebbe aggiornata a ogni versione di Python; questa
+   no.
+2. **Barriera di processo.** L'esecuzione avviene in un sottoprocesso dedicato
+   con timeout, che restituisce al padre **solo JSON** — mai `pickle`. Il padre
+   non ricostruisce nulla scelto dal processo che ha appena eseguito codice non
+   fidato: se un domani la sandbox venisse forzata, questa barriera regge invece
+   di cadere insieme a essa.
+3. **Confine di container.** È l'unico strato che dà un vero isolamento dal
+   sistema — vedi [Docker](#docker).
+
+<details>
+<summary><b>Il dettaglio degli altri controlli</b></summary>
+
+- **Whitelist di builtin** minimale nell'ambiente di esecuzione.
+- Sui nodi ammessi valgono regole mirate: niente attributi privati/dunder,
+  niente metodi di I/O (`to_*`/`read_*`/`write_*` su file o rete, con una
+  whitelist di convertitori puri in memoria), niente esecuzione dinamica
+  (`eval`, `exec`, `query`, `format`).
+- **Namespace d'esecuzione protetto**: l'allowlist controlla i *tipi di nodo*,
+  non quale oggetto una catena di attributi raggiunge — da `px`/`pd`/`go` si
+  arriverebbe a `os`/`subprocess` traversando i sottomoduli (`px.np.f2py`,
+  `px.data.os`). Per questo sono esposti tramite un wrapper che nega l'accesso ai
+  sottomoduli, e resta tale anche via alias.
+- **Limite di memoria del worker** con `RLIMIT_AS`. *Limite noto:* esiste solo su
+  POSIX; **su Windows il modulo `resource` non c'è, quindi il worker è contenuto
+  dal solo timeout**. Nel container il worker gira su Linux, quindi il cap torna
+  attivo anche su host Windows.
+- **Fail-closed opzionale**: se il sottoprocesso non è avviabile l'esecuzione
+  ripiega in-process (senza timeout né cap di memoria). In deploy pubblico si
+  disattiva con `ALLOW_INPROCESS_FALLBACK=false`.
+- I valori di esempio inseriti nel prompt sono **sanitizzati**, per mitigare la
+  prompt injection dai file caricati.
+- La **chiave API non viene mai salvata**: viaggia in un header per la singola
+  richiesta, non entra nel magazzino, non compare nei log, non torna in nessuna
+  risposta. Nel frontend resta nello stato del componente e non in
+  `localStorage`, che qualunque script della pagina potrebbe leggere.
+
+</details>
 
 ## Architettura
 
-> 📐 Per **le decisioni di design e i loro trade-off** (perché allowlist e non
-> denylist, perché il canale di ritorno è solo JSON, perché l'esito è un tipo…),
-> vedi **[ARCHITECTURE.md](ARCHITECTURE.md)**. Qui sotto la mappa dei moduli.
-
-```
-main.py                    entry-point Streamlit sottile: configura la pagina e chiama main()
-nlda/ui/pages.py           sezioni della pagina (sidebar, KPI, report, confronto, filtro, join, chat)
-nlda/ui/session.py         plumbing UI: secret, quota demo, cache, caricamento e join dei dati
-nlda/service.py            orchestrazione del turno (domanda → codice → esito → spiegazione)
-nlda/agent.py              traduzione domanda → codice Pandas (adattata allo schema)
-nlda/prompts/              i system prompt versionati (con golden a protezione)
-nlda/sandbox/validator.py  allowlist di nodi AST: decide se il codice è ammissibile
-nlda/sandbox/runner.py     esecuzione nel sottoprocesso e canale di ritorno JSON
-nlda/sandbox/pool.py       riserva calda di worker (toglie il costo d'avvio dal percorso critico)
-nlda/charts.py             figure Plotly e loro aspetto
-nlda/periods.py            confronto tra periodi (mese/trimestre/anno) con variazione %
-nlda/export.py             esportazione della conversazione in Markdown
-nlda/loader.py             lettura multi-formato, profilo del dataset, analisi automatica
-nlda/ui_components.py      componenti di presentazione Streamlit (card, tabelle, grafici)
-nlda/results.py            esito tipizzato dell'esecuzione (successo / fallimento con causa)
-nlda/pricing.py            stima del costo in USD di una chiamata (token → prezzo)
-nlda/sanitize.py           difesa dai dati non fidati che finiscono nel prompt
-nlda/errors.py             gerarchia di eccezioni applicative
-nlda/demo.py               quota della demo pubblica
-nlda/providers/            astrazione multi-LLM (ollama, groq, anthropic, openai, gemini)
-nlda/config.py             configurazione centralizzata (timeout, sandbox, retry, log) da env
-nlda/log.py                logging strutturato JSON con correlation-id e costo
-scripts/                   favicon, registrazione del corpus, smoke ed eval
-tests/                     suite pytest (con focus sulla sandbox di sicurezza)
-```
+> 📐 Per **le decisioni e i loro trade-off** (perché allowlist e non denylist,
+> perché il canale di ritorno è solo JSON, perché l'esito è un tipo) vedi
+> **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 Il flusso di una domanda: l'agente costruisce un prompt con lo schema reale del
 dataset (nomi **e** valori delle colonne, sanitizzati), il provider LLM genera il
 codice, l'executor lo valida con l'allowlist AST e lo esegue in un sottoprocesso
-dedicato con timeout; se fallisce per un motivo correggibile il codice viene
-rigenerato e ritentato, altrimenti il turno si chiude subito. Il risultato (dati
-e/o figura) torna all'interfaccia insieme a un riepilogo usato dall'AI per la
-risposta testuale.
+con timeout; se fallisce per un motivo correggibile il codice viene rigenerato e
+ritentato, altrimenti il turno si chiude. Il risultato torna all'interfaccia
+insieme al riepilogo che l'AI usa per la risposta testuale.
 
-## Sicurezza
+```
+nlda/                      il backend — non sa quale interfaccia lo stia usando
+├─ service.py              orchestrazione del turno (domanda → codice → esito → spiegazione)
+├─ agent.py                traduzione domanda → codice Pandas, adattata allo schema
+├─ prompts/                i system prompt versionati (con golden a protezione)
+├─ providers/              astrazione multi-LLM (ollama, groq, anthropic, openai, gemini)
+├─ sandbox/
+│  ├─ validator.py         allowlist di nodi AST: decide se il codice è ammissibile
+│  ├─ runner.py            esecuzione nel sottoprocesso e canale di ritorno JSON
+│  └─ pool.py              riserva calda di worker (toglie l'avvio dal percorso critico)
+├─ loader.py               lettura multi-formato, profilo del dataset, analisi automatica
+├─ kpis.py                 costruzione dei KPI del report
+├─ views.py                filtro e unione di dataset (funzioni pure)
+├─ charts.py               figure Plotly e loro aspetto
+├─ periods.py              confronto tra periodi con variazione %
+├─ project_qa.py           "Chiedi al progetto": recupero TF-IDF sui documenti del repo
+├─ suggestions.py          domande di esempio e frequenze, condivise dalle due interfacce
+├─ export.py               esportazione della conversazione in Markdown
+├─ results.py              esito tipizzato dell'esecuzione (successo / fallimento con causa)
+├─ sanitize.py             difesa dai dati non fidati che finiscono nel prompt
+├─ pricing.py              stima del costo in USD di una chiamata (token → prezzo)
+├─ demo.py                 quota della demo pubblica
+├─ config.py               configurazione centralizzata da variabili d'ambiente
+└─ log.py                  logging strutturato JSON con correlation-id e costo
 
-> 🛡️ Per il **modello di minaccia completo** (superfici d'attacco, mitigazioni e
-> *rischi residui* dichiarati, confini di fiducia) vedi **[THREAT_MODEL.md](THREAT_MODEL.md)**.
+nlda/api/                  interfaccia HTTP — traduzione da e verso JSON, nessuna logica
+├─ app.py                  le rotte
+├─ models.py               i modelli Pydantic da cui nascono i tipi TypeScript
+├─ streaming.py            Server-Sent Events: avanzamento, risultato, testo a pezzi
+├─ store.py                magazzino in memoria dei dataset (impronta del contenuto, LRU + TTL)
+└─ quota.py                tetto di spesa della demo pubblica
 
-- **Whitelist di builtin** minimale nell'ambiente di esecuzione.
-- **Analisi statica AST in allowlist**: il validatore ammette solo la manciata di
-  nodi che servono a un'espressione Pandas (assegnazioni, chiamate, operatori,
-  slice, comprehension, lambda). Tutto il resto è rifiutato *per costruzione* —
-  `import`, `def`, `class`, `with`, `try`, `global`, `del`, `async`, walrus,
-  `match` — compresi i costrutti che il linguaggio aggiungerà in futuro.
-- Sui nodi ammessi valgono poi regole mirate: niente attributi privati/dunder,
-  niente metodi di I/O (`to_*`/`read_*`/`write_*` su file o rete, con una
-  whitelist di convertitori puri in memoria), niente esecuzione dinamica
-  (`eval`, `exec`, `query`, `format`).
-- **Namespace d'esecuzione protetto**: l'allowlist AST controlla i *tipi di nodo*,
-  non quale oggetto una catena di attributi raggiunge — da `px`/`pd`/`go` si
-  arriverebbe a `os`/`subprocess` per traversata dei sottomoduli (`px.np.f2py`,
-  `px.data.os`). Per questo `pd`/`px`/`go` sono esposti al codice generato tramite
-  un wrapper che nega l'accesso ai *sottomoduli*, chiudendo la traversata (e resta
-  tale anche via alias).
-- **Sottoprocesso dedicato** con timeout: barriera di processo attorno al codice
-  generato dall'LLM. È una barriera *di processo*, non di sistema: il worker
-  gira come lo stesso utente dell'app. L'isolamento dal sistema lo aggiunge il
-  container (vedi [Docker](#docker)).
-- **Canale di ritorno non eseguibile**: il worker restituisce al processo padre
-  soltanto JSON (dati inerti), mai oggetti serializzati con `pickle`. Il padre non
-  ricostruisce quindi nulla di scelto dal processo che ha appena eseguito codice
-  non fidato: se un domani la sandbox venisse forzata, la barriera di processo
-  regge invece di cadere insieme a essa.
-- **Limite di memoria del worker** tramite `RLIMIT_AS`. *Limite noto:* è
-  disponibile solo su POSIX (Linux/macOS); **su Windows il modulo `resource` non
-  esiste, quindi il worker è contenuto dal solo timeout**, non da un cap di RAM.
-  Eseguire l'app nel container chiude anche questo: dentro il container il
-  worker gira su Linux, quindi il cap torna attivo anche su host Windows.
-- **Fail-closed opzionale**: se il sottoprocesso non è avviabile, l'esecuzione
-  ripiega in-process (senza timeout né cap memoria). In deploy pubblico si
-  disattiva il ripiego con `ALLOW_INPROCESS_FALLBACK=false`, così l'app blocca
-  l'esecuzione invece di degradare la sandbox.
-- I valori di esempio delle celle inseriti nel prompt sono **sanitizzati** per
-  mitigare la prompt injection da file caricati.
+frontend/src/              interfaccia React — nessuna decisione sui dati, solo resa
+├─ App.tsx                 lo stato della schermata e la sua composizione
+├─ api/client.ts           unico punto in cui si parla con il backend
+├─ api/types.ts            GENERATO dallo schema OpenAPI: non modificare a mano
+└─ components/             KPI, grafici, tabelle, filtro, chat, pannelli
+
+main.py + nlda/ui/         interfaccia Streamlit
+scripts/                   generazione dei tipi, favicon, corpus, smoke, eval, analisi log
+tests/                     suite pytest (con focus sulla sandbox di sicurezza)
+```
 
 ## Sviluppo e qualità
 
 ```bash
-pip install -e ".[all,dev]"
-pytest        # test (inclusi i test di sicurezza sul validatore AST)
-ruff check .  # lint
-mypy nlda main.py  # type-check
+pip install -e ".[all,api,dev]"
+pytest                          # test, inclusi quelli di sicurezza sul validatore
+ruff check .                    # lint
+mypy nlda main.py               # type-check
+cd frontend && npm run typecheck && npx oxlint src
 ```
 
-Le dipendenze vivono in `pyproject.toml`. `requirements.txt` resta solo come
-manifest di deploy: Streamlit Community Cloud installa esclusivamente da lì.
-
-### Come si verifica un'app che dipende da un modello
+<details>
+<summary><b>Come si verifica un'app che dipende da un modello</b></summary>
 
 Un test che sostituisce l'LLM con un finto non tocca né il testo del prompt né la
-forma reale delle risposte: è un punto cieco in cui i difetti passano con la
-suite verde. Qui la verifica è a strati, dal più deterministico al più incerto.
+forma reale delle risposte: è un punto cieco in cui i difetti passano con la suite
+verde. Qui la verifica è a strati, dal più deterministico al più incerto.
 
 | Strato | Cosa garantisce | Dove |
 |---|---|---|
 | **Golden dei prompt** | nessuna modifica accidentale al testo delle istruzioni | `tests/test_prompt_contract.py` |
-| **Contratti prompt ↔ runtime** | ciò che il prompt promette esiste, e il codice che insegna supera la nostra sandbox | idem |
-| **Property/fuzz sul validatore** | migliaia di espressioni generate: nessun codice *accettato* accede a `__`/import/I-O (hypothesis) | `tests/test_validator_fuzz.py` |
+| **Contratti prompt ↔ runtime** | ciò che il prompt promette esiste, e il codice che insegna supera la sandbox | idem |
+| **Property/fuzz sul validatore** | migliaia di espressioni generate: nessun codice *accettato* accede a `__`/import/I-O | `tests/test_validator_fuzz.py` |
 | **Corpus rigiocato** | risposte reali registrate attraversano l'intera pipeline in modo deterministico | `tests/test_corpus_replay.py` |
 | **Smoke** | con un modello vero, ogni domanda produce un risultato valido | `scripts/smoke.py` |
 | **Eval** | le risposte sono *corrette*, non solo eseguibili | `scripts/eval.py` |
 
 ```bash
-pytest                                      # i primi tre strati, in CI
+pytest                                      # i primi quattro strati, in CI
 python scripts/smoke.py                     # richiede un modello raggiungibile
 python scripts/eval.py                      # punteggio di correttezza
 python scripts/record_corpus.py             # rigenera il corpus registrato
@@ -267,30 +337,43 @@ particolare è una **misura**, non un test: il punteggio dipende dal modello e
 oscilla. Serve a confrontare provider e ad accorgersi se un cambio al prompt
 peggiora le risposte.
 
-Ogni push esegue in CI (GitHub Actions, `.github/workflows/ci.yml`):
+</details>
+
+Ogni push esegue in CI (`.github/workflows/ci.yml`):
 
 - **test** sulle tre versioni supportate (3.12, 3.13, 3.14);
-- **lint e type-check** (ruff, mypy);
+- **lint e type-check** su Python (ruff, mypy) e TypeScript (tsc, oxlint);
 - **immagine Docker**: build, avvio e verifica che l'HEALTHCHECK diventi sano e
   che la sandbox funzioni dentro il container;
 - **sicurezza**: `pip-audit` sulle dipendenze e `bandit` sul codice.
 
-I parametri di runtime sono centralizzati in `nlda/config.py` e sovrascrivibili da
-variabile d'ambiente, tra cui: `EXEC_TIMEOUT`, `MEMORY_LIMIT_MB`,
-`ALLOW_INPROCESS_FALLBACK`, `LLM_REQUEST_TIMEOUT`, `LLM_MAX_RETRIES`, `LOG_LEVEL`,
-`LOG_FORMAT` (`text` o `json`: il formato `json` emette una riga strutturata per
-evento, con `turn_id`, latenza, token e costo stimato, pronta per un aggregatore
-di log), `MAX_ROWS` e `MAX_COLUMNS` (limiti sul file caricato: sono soglie di
-usabilita', non di memoria — oltre, ogni domanda richiede piu' di un secondo).
+<details>
+<summary><b>Configurazione da variabili d'ambiente</b></summary>
+
+I parametri di runtime sono centralizzati in `nlda/config.py`:
+
+| Variabile | A cosa serve |
+|---|---|
+| `EXEC_TIMEOUT` | secondi concessi al codice generato |
+| `MEMORY_LIMIT_MB` | tetto di RAM del worker (solo POSIX) |
+| `ALLOW_INPROCESS_FALLBACK` | `false` = fallisci chiuso invece di degradare la sandbox |
+| `LLM_REQUEST_TIMEOUT`, `LLM_MAX_RETRIES` | timeout e ritentativi verso il provider |
+| `MAX_ROWS`, `MAX_COLUMNS` | limiti sul file caricato: soglie di *usabilità*, non di memoria |
+| `LOG_LEVEL`, `LOG_FORMAT` | `json` emette una riga strutturata per evento, con `turn_id`, latenza, token e costo stimato |
+| `PROVIDER`, `MODEL` | quale modello usare quando il client non lo specifica |
+| `DEMO_MODE`, `DEMO_MAX_QUESTIONS`, `DEMO_MAX_DAILY` | quota della demo pubblica (vedi [DEPLOY.md](DEPLOY.md)) |
 
 Con `LOG_FORMAT=json`, **`python scripts/analyze_logs.py <file>`** riepiloga i log
-(tasso di successo, costo, percentili di latenza, esiti per causa, token): chiudere
-il cerchio dell'osservabilità — non basta loggare, i log vanno letti.
+(tasso di successo, costo, percentili di latenza, esiti per causa, token):
+chiudere il cerchio dell'osservabilità — non basta loggare, i log vanno letti.
+
+</details>
 
 ## Deploy
 
-Per pubblicare l'app (inclusa la modalità demo con limite di domande) vedi
-[DEPLOY.md](DEPLOY.md).
+Le due interfacce si pubblicano su host diversi — Render per React+API,
+Streamlit Cloud per l'altra. Istruzioni, tetto di spesa e limiti dichiarati in
+**[DEPLOY.md](DEPLOY.md)**.
 
 ## Licenza
 
