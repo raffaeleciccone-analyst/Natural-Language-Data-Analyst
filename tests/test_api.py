@@ -1,0 +1,256 @@
+"""
+Test dell'API HTTP.
+
+Nessuna rete verso un modello: le rotte che chiamano l'LLM ricevono un agente
+finto. Cio' che si verifica e' il CONTRATTO — forma della risposta, codici di
+stato, e soprattutto la distinzione fra "errore del servizio" (4xx/5xx) ed
+"esito negativo dell'operazione" (200 con ok:false), che e' la scelta di
+progetto piu' facile da rompere per distrazione.
+"""
+import io
+import json
+from unittest.mock import MagicMock
+
+import pandas as pd
+import pytest
+from fastapi.testclient import TestClient
+
+from nlda.api import store
+from nlda.api.app import app
+from nlda.results import ExecutionFailure, ExecutionSuccess
+from nlda.service import Turn
+
+
+@pytest.fixture
+def client():
+    store.magazzino.svuota()
+    return TestClient(app)
+
+
+@pytest.fixture
+def csv_bytes() -> bytes:
+    return (b"Regione,Vendite,Data\n"
+            b"Nord,100,2024-01-15\n"
+            b"Sud,200,2024-02-15\n"
+            b"Nord,150,2024-03-15\n"
+            b"Sud,250,2024-04-15\n")
+
+
+# --- Servizio -----------------------------------------------------------------
+def test_health(client):
+    r = client.get("/api/health")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
+
+
+def test_config_elenca_i_provider(client):
+    r = client.get("/api/config")
+    assert r.status_code == 200
+    j = r.json()
+    assert j["providers"], "almeno un provider deve essere disponibile"
+    assert {"name", "default_model", "requires_api_key"} <= set(j["providers"][0])
+    assert "csv" in j["supported_extensions"]
+
+
+def test_lo_schema_openapi_si_genera(client):
+    """Se lo schema non si genera, il frontend non puo' derivarne i tipi."""
+    r = client.get("/openapi.json")
+    assert r.status_code == 200
+    percorsi = r.json()["paths"]
+    for atteso in ["/api/config", "/api/dataset", "/api/ask", "/api/project-qa"]:
+        assert atteso in percorsi
+
+
+# --- Dataset ------------------------------------------------------------------
+def test_carica_un_csv(client, csv_bytes):
+    r = client.post("/api/dataset",
+                    files={"file": ("vendite.csv", csv_bytes, "text/csv")})
+    assert r.status_code == 200
+    j = r.json()
+    assert j["rows"] == 4 and j["columns"] == 3
+    assert "Vendite" in j["measures"]
+    assert j["suggested_measure"] == "Vendite"
+    assert j["dataset_id"]
+
+
+def test_lo_stesso_file_non_occupa_due_volte_la_memoria(client, csv_bytes):
+    file = {"file": ("vendite.csv", csv_bytes, "text/csv")}
+    primo = client.post("/api/dataset", files=file).json()
+    secondo = client.post("/api/dataset",
+                          files={"file": ("vendite.csv", csv_bytes, "text/csv")}).json()
+    assert primo["dataset_id"] == secondo["dataset_id"]
+    assert len(store.magazzino) == 1
+
+
+def test_la_percentuale_di_mancanti_e_un_numero(client):
+    """Non la stringa formattata di `profile()`: un client non deve parsificare."""
+    dati = b"A,B\n1,\n2,x\n"
+    j = client.post("/api/dataset", files={"file": ("m.csv", dati, "text/csv")}).json()
+    per_nome = {c["name"]: c for c in j["profile"]}
+    assert isinstance(per_nome["B"]["missing_pct"], (int, float))
+    assert per_nome["B"]["missing_pct"] == pytest.approx(50.0)
+
+
+def test_un_file_illeggibile_da_400_non_500(client):
+    r = client.post("/api/dataset",
+                    files={"file": ("rotto.xlsx", b"non e' un excel", "application/vnd.ms-excel")})
+    assert r.status_code == 400
+    assert "detail" in r.json()
+
+
+def test_dataset_di_esempio(client):
+    j = client.post("/api/dataset/demo").json()
+    assert j["rows"] > 1000
+    assert j["suggested_measure"]
+
+
+# --- Report -------------------------------------------------------------------
+def test_report(client, csv_bytes):
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    r = client.get(f"/api/dataset/{d['dataset_id']}/report")
+    assert r.status_code == 200
+    j = r.json()
+    assert len(j["kpis"]) >= 1
+    assert j["kpis"][0]["value"], "il valore arriva gia' formattato"
+    assert len(j["preview"]) == 4
+
+
+def test_il_report_e_serializzabile_in_json(client):
+    """
+    Le figure Plotly contengono array numpy e i DataFrame contengono NaN e
+    Timestamp: nessuno dei due e' JSON valido senza conversione. E' il difetto che
+    ha rotto questa rotta la prima volta.
+    """
+    d = client.post("/api/dataset/demo").json()
+    r = client.get(f"/api/dataset/{d['dataset_id']}/report")
+    assert r.status_code == 200
+    testo = r.text
+    assert "NaN" not in testo, "NaN letterale non e' JSON valido"
+    json.loads(testo)   # deve rileggersi
+
+
+def test_report_di_un_dataset_inesistente_da_404(client):
+    r = client.get("/api/dataset/inventato/report")
+    assert r.status_code == 404
+    assert "ricaricalo" in r.json()["detail"]
+
+
+# --- Domande ------------------------------------------------------------------
+def _finto_servizio(monkeypatch, turn: Turn):
+    servizio = MagicMock()
+    servizio.answer.return_value = turn
+    monkeypatch.setattr("nlda.api.app.AnalysisService", lambda _a: servizio)
+    monkeypatch.setattr("nlda.api.app.DataAgent", lambda **k: MagicMock())
+    return servizio
+
+
+def test_ask_riuscita(client, csv_bytes, monkeypatch):
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    _finto_servizio(monkeypatch, Turn(
+        question="totale?", code="risultato = df['Vendite'].sum()",
+        result=ExecutionSuccess(fig=None, value=700, summary="700"),
+        explanation="Il totale è 700."))
+
+    r = client.post("/api/ask", json={"dataset_id": d["dataset_id"], "question": "totale?"})
+    assert r.status_code == 200
+    j = r.json()
+    assert j["ok"] is True
+    assert j["value"] == 700 and j["value_kind"] == "scalar"
+    assert j["answer"] == "Il totale è 700."
+    assert "Vendite" in j["columns_used"], "le colonne toccate fanno parte della risposta"
+
+
+def test_un_fallimento_non_e_un_errore_http(client, csv_bytes, monkeypatch):
+    """
+    Un codice rifiutato dalla sandbox e' un ESITO, non un guasto del servizio:
+    200 con ok:false e la CAUSA in failure_kind. Se diventasse un 500, un client
+    non saprebbe distinguerlo da un servizio rotto — e ritenterebbe.
+    """
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    _finto_servizio(monkeypatch, Turn(
+        question="apri un file", code="open('/etc/passwd')",
+        result=ExecutionFailure("security", "uso di 'open' non consentito")))
+
+    r = client.post("/api/ask", json={"dataset_id": d["dataset_id"], "question": "apri un file"})
+    assert r.status_code == 200
+    j = r.json()
+    assert j["ok"] is False
+    assert j["failure_kind"] == "security"
+    assert "open" in j["message"]
+
+
+def test_ask_restituisce_una_tabella_serializzabile(client, csv_bytes, monkeypatch):
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    tabella = pd.DataFrame({"Regione": ["Nord", "Sud"], "Vendite": [250.0, float("nan")]})
+    _finto_servizio(monkeypatch, Turn(
+        question="per regione", code="risultato = df.groupby('Regione')['Vendite'].sum()",
+        result=ExecutionSuccess(fig=None, value=tabella, summary="")))
+
+    j = client.post("/api/ask",
+                    json={"dataset_id": d["dataset_id"], "question": "per regione"}).json()
+    assert j["value_kind"] == "table"
+    assert j["value"][0]["Regione"] == "Nord"
+    assert j["value"][1]["Vendite"] is None, "NaN deve diventare null, non 'NaN'"
+
+
+def test_ask_su_dataset_inesistente_da_404(client):
+    r = client.post("/api/ask", json={"dataset_id": "boh", "question": "totale?"})
+    assert r.status_code == 404
+
+
+def test_una_domanda_vuota_e_respinta_dalla_validazione(client, csv_bytes):
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    r = client.post("/api/ask", json={"dataset_id": d["dataset_id"], "question": ""})
+    assert r.status_code == 422
+
+
+def test_provider_sconosciuto_da_400(client, csv_bytes):
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    r = client.post("/api/ask", json={"dataset_id": d["dataset_id"],
+                                      "question": "x", "provider": "inventato"})
+    assert r.status_code == 400
+
+
+# --- Domande sul progetto -----------------------------------------------------
+def test_project_qa_cita_le_fonti(client, monkeypatch):
+    from nlda.project_qa import Frammento
+    monkeypatch.setattr("nlda.api.app.get_provider", lambda *a, **k: MagicMock())
+    monkeypatch.setattr("nlda.api.app.project_answer",
+                        lambda p, q: ("La sandbox usa una allowlist.",
+                                      [Frammento("Documentazione tecnica", "8. La sandbox", "…")]))
+    r = client.post("/api/project-qa", json={"question": "come funziona la sandbox?"})
+    assert r.status_code == 200
+    j = r.json()
+    assert j["answer"].startswith("La sandbox")
+    assert j["sources"] == ["Documentazione tecnica — 8. La sandbox"]
+
+
+# --- Magazzino ----------------------------------------------------------------
+def test_il_magazzino_sfratta_il_meno_usato():
+    m = store.MagazzinoDataset(capienza=2)
+    for i in range(3):
+        m.aggiungi(f"k{i}", pd.DataFrame({"a": [i]}), f"f{i}")
+    assert len(m) == 2
+    assert m.prendi("k0") is None, "il piu' vecchio e' stato sfrattato"
+    assert m.prendi("k2") is not None
+
+
+def test_il_magazzino_scade():
+    m = store.MagazzinoDataset(ttl=-1)   # gia' scaduto in partenza
+    m.aggiungi("k", pd.DataFrame({"a": [1]}), "f")
+    assert m.prendi("k") is None
+
+
+def test_l_impronta_dipende_solo_dal_contenuto():
+    a = store.impronta(b"stessi byte", "nome.csv")
+    b = store.impronta(b"stessi byte", "nome.csv")
+    c = store.impronta(b"altri byte", "nome.csv")
+    assert a == b and a != c
+
+
+def test_il_file_caricato_conserva_il_nome_per_il_formato():
+    """`read_any` riconosce il formato dall'estensione: il wrapper deve esporla."""
+    from nlda.api.app import _FileConNome
+    f = _FileConNome(b"a,b\n1,2\n", "dati.csv")
+    assert f.name == "dati.csv"
+    assert isinstance(f, io.BytesIO)
