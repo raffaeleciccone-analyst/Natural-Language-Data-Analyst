@@ -318,6 +318,70 @@ def console_css() -> str:
               color: {c['deep']}; font-family: var(--mono); font-size: 0.8rem;
           }}
 
+          /* ===== BOLLA "CHIEDI AL PROGETTO" =====================================
+             Il pattern del pallino che fluttua in basso a destra e si apre in un
+             riquadro di chat. Si ottiene con `st.popover` — che è nativo, quindi
+             gestisce già apertura, chiusura e posizionamento del pannello — reso
+             circolare e ancorato al viewport da qui.
+             ⚠️ Perché `st.popover` e non un componente HTML custom: il popover
+             SOPRAVVIVE al rerun che segue l'invio della domanda (verificato), e un
+             pannello costruito a mano in HTML non potrebbe contenere widget
+             Streamlit — quindi né il campo di testo né la risposta.
+             ⚠️ Il selettore scende per FIGLIO diretto fino al contenitore
+             dell'elemento, e non è un dettaglio: `:has()` matcha OGNI antenato che
+             contiene il marker, quindi con il semplice `:has(.bolla-progetto)`
+             diventava `position: fixed` anche il blocco che avvolge l'intera pagina
+             — larga 1369px, ancorata in basso a destra. Perché il selettore possa
+             essere ristretto così, `render_project_chat` avvolge la bolla in un
+             `st.container()` proprio: senza, il blocco più vicino al marker È
+             quello della pagina, e non c'è selettore che possa distinguerli. */
+          [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .bolla-progetto) {{
+              position: fixed !important; bottom: 22px !important; right: 22px !important;
+              top: auto !important; left: auto !important;
+              z-index: 1001; width: 56px !important; min-width: 56px !important;
+              gap: 0 !important; padding: 0 !important;
+          }}
+          /* Il marker è solo un'ancora per il CSS: non deve occupare spazio. */
+          [data-testid="stElementContainer"]:has(.bolla-progetto) {{ display: none !important; }}
+
+          /* Lo stile del pulsante può usare il discendente semplice: nella pagina
+             c'è un solo popover, e la larghezza del selettore qui non fa danni —
+             al contrario del posizionamento sopra, dove risaliva fino al blocco
+             della pagina intera. */
+          [data-testid="stVerticalBlock"]:has(.bolla-progetto) [data-testid="stPopoverButton"] {{
+              width: 56px !important; height: 56px !important; min-height: 56px !important;
+              padding: 0 !important; border-radius: 50% !important;
+              background: {c['accent']} !important; border: 0 !important;
+              color: #ffffff !important; font-size: 1.35rem !important;
+              box-shadow: 0 6px 20px rgba(13,138,125,.42) !important;
+              display: flex !important; align-items: center !important;
+              justify-content: center !important;
+              transition: transform .12s ease, background .12s ease !important;
+          }}
+          [data-testid="stVerticalBlock"]:has(.bolla-progetto) [data-testid="stPopoverButton"]:hover {{
+              background: {c['deep']} !important; transform: scale(1.06) !important;
+          }}
+          /* Via la freccetta del select: la bolla deve leggersi come un pulsante di
+             chat, non come un menu a tendina. */
+          [data-testid="stVerticalBlock"]:has(.bolla-progetto)
+              [data-testid="stPopoverButton"] [data-testid="stIconMaterial"] {{ display: none !important; }}
+          [data-testid="stVerticalBlock"]:has(.bolla-progetto)
+              [data-testid="stPopoverButton"] p {{ margin: 0 !important; line-height: 1 !important; }}
+
+          /* Il pannello: nativo 320px, troppo stretto per una conversazione. Con
+             `max-height` in vh il riquadro non esce mai dallo schermo su un
+             portatile, e il contenuto scorre al suo interno. */
+          [data-testid="stPopoverBody"] {{
+              width: min(400px, calc(100vw - 44px)) !important;
+              max-width: min(400px, calc(100vw - 44px)) !important;
+              max-height: min(560px, calc(100vh - 130px)) !important;
+              overflow-y: auto !important; border-radius: 14px !important;
+              border: 1px solid {c['border']} !important;
+              box-shadow: 0 12px 40px rgba(20,30,40,.18) !important;
+          }}
+          [data-testid="stPopoverBody"] h3 {{ font-size: 1rem !important; margin-top: 0 !important; }}
+          [data-testid="stPopoverBody"] [data-testid="stChatMessage"] {{ padding: 2px 8px !important; }}
+
           /* ===== SCHERMI PICCOLI (portatili) =====================================
              Il tema nasce su un monitor grande: due colonne affiancate, ciascuna con
              il proprio scroll. Su un portatile quel disegno si ritorce contro, e le
