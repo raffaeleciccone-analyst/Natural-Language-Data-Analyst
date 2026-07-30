@@ -768,6 +768,34 @@ details.pannello-rail .didascalia { color: var(--rail-soft); font-size: 0.7rem; 
 
 details.pannello-rail button { width: 100%; margin-top: 10px; }
 
+/* L'avviso della demo pubblica: dice qual è il limite, prima che lo si scopra
+   sbattendoci contro a metà di una domanda. */
+.nota-demo {
+  margin-top: 22px;
+  padding: 11px 13px;
+  border: 1px solid var(--rail-line);
+  border-left: 3px solid var(--accent);
+  border-radius: 9px;
+  background: var(--rail2);
+}
+
+.nota-demo strong {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  margin-bottom: 5px;
+}
+
+.nota-demo p {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--rail-soft);
+}
+
 .crescita { color: var(--deep); font-weight: 600; }
 .calo { color: #a8332a; font-weight: 600; }
 

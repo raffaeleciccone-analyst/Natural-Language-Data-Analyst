@@ -32,6 +32,22 @@ export function Modello({
 }) {
   if (!config?.providers.length) return null;
 
+  // Nella demo pubblica il modello NON si sceglie: le richieste passano dalla
+  // chiave del manutentore, e un menu che promette cinque provider mentre uno
+  // solo ha una chiave configurata è un'interfaccia che mente. Si dice invece
+  // qual è il limite, che è l'unica cosa che al visitatore serva sapere.
+  if (config.demo_mode) {
+    return (
+      <div className="nota-demo">
+        <strong>Demo pubblica</strong>
+        <p>
+          {config.max_questions} domande a testa, con un tetto giornaliero condiviso. Clona il
+          repo per uso illimitato e per usare un modello locale.
+        </p>
+      </div>
+    );
+  }
+
   const attivo = config.providers.find((p) => p.name === motore.provider) ?? config.providers[0];
 
   return (
