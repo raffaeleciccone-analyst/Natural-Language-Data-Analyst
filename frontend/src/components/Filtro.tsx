@@ -24,7 +24,14 @@ export function Filtro({
   filtro: FiltroSpec | null;
   onCambia: (f: FiltroSpec | null) => void;
 }) {
-  const [colonna, setColonna] = useState("");
+  // La colonna la COMANDA il filtro quando c'è, e lo stato locale solo quando non
+  // c'è. Tenerla in uno stato indipendente lasciava il rail su "nessun filtro"
+  // mentre la pagina era filtrata da un clic sulla classifica: due verità nella
+  // stessa schermata, cioè proprio il difetto che questo componente esiste per
+  // evitare. Lo stato locale serve al solo caso che il filtro non sa esprimere —
+  // colonna scelta, nessun valore ancora spuntato.
+  const [colonnaScelta, setColonnaScelta] = useState("");
+  const colonna = filtro?.column ?? colonnaScelta;
 
   // I valori si chiedono all'API invece di ricavarli dall'anteprima: quella e' di
   // dieci righe, e un filtro costruito su quelle mostrerebbe solo i valori che
@@ -51,7 +58,7 @@ export function Filtro({
       <select
         value={colonna}
         onChange={(e) => {
-          setColonna(e.target.value);
+          setColonnaScelta(e.target.value);
           onCambia(null); // cambiando colonna, la selezione precedente non vale più
         }}
       >
