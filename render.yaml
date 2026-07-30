@@ -16,12 +16,15 @@ services:
     plan: free
     region: frankfurt        # il più vicino a un pubblico europeo
     healthCheckPath: /api/health
-    # Solo il provider cloud della demo: 'all' installerebbe gli SDK di cinque
-    # provider — quattro dei quali il deploy non userà mai — allungando il build
-    # e la superficie di dipendenze per nulla. `openai` copre anche Groq, che
-    # espone un'API compatibile.
-    dockerBuildArgs:
-      EXTRAS: openai,api
+    # Nota: il Dockerfile accetta `--build-arg EXTRAS=openai,api` per installare
+    # il solo SDK che il deploy usa, ma i Blueprint di Render NON sanno passare
+    # build argument — non esiste un campo per farlo, né qui né nella console. Si
+    # usa quindi il default del Dockerfile (`all,api`), che installa gli SDK di
+    # tutti i provider.
+    #
+    # Costa qualche minuto di build in più e nulla a runtime: l'import di ogni SDK
+    # avviene solo quando quel provider viene scelto, e i 99 MB a riposo misurati
+    # sull'immagine sono già quelli con questo default.
     envVars:
       # --- Demo pubblica: il tetto di spesa ---
       # Senza questi, l'API risponde a chiunque usando la chiave qui sotto, e a

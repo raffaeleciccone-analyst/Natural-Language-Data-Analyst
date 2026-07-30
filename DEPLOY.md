@@ -30,7 +30,8 @@ pannello web non è rivedibile, non è ripristinabile e non si sa chi l'ha cambi
    il servizio già configurato.
 3. L'unico valore da inserire a mano è **`GROQ_API_KEY`** (in `render.yaml` è
    marcato `sync: false` proprio perché un file versionato è pubblico quanto il
-   repo).
+   repo). Render lo chiede **solo alla creazione**: se in seguito va cambiato, si
+   modifica dalla pagina *Environment* del servizio, non da qui.
 4. **Apply**. Il primo build richiede qualche minuto: compila il frontend con
    Vite e poi costruisce l'immagine Python.
 5. Copia l'URL ottenuto e mettilo in cima al [`README.md`](README.md).
