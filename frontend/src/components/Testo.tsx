@@ -1,17 +1,19 @@
 import { Fragment, type ReactNode } from "react";
 
 /**
- * Rende il Markdown MINIMO che i modelli producono: grassetto e codice inline.
+ * Rende il Markdown MINIMO che i modelli producono: titoli, elenchi, grassetto e
+ * codice inline.
  *
  * ## Perché non una libreria
  *
- * `react-markdown` e simili fanno molto di più — titoli, tabelle, link, HTML
- * grezzo — e ognuna di quelle cose è superficie che qui non serve: i prompt del
- * progetto chiedono esplicitamente «Markdown minimo: grassetto per i termini
- * chiave, elenchi solo se la risposta è davvero un elenco, niente titoli».
- * Trenta righe coprono ciò che arriva davvero, e non aggiungono un albero di
- * dipendenze a un progetto che ha appena tolto quattro vulnerabilità per non
- * averne.
+ * `react-markdown` e simili fanno molto di più — tabelle, link, immagini, HTML
+ * grezzo — e ognuna di quelle cose è superficie che qui non serve. Quaranta
+ * righe coprono ciò che arriva davvero, e non aggiungono un albero di dipendenze
+ * a un progetto che ha appena tolto quattro vulnerabilità per non averne.
+ *
+ * I titoli servono al solo report esecutivo: il suo prompt chiede cinque sezioni
+ * con intestazione, mentre chat e sintesi hanno il vincolo opposto («niente
+ * titoli»). Senza, i `##` si leggevano come cancelletti in mezzo al testo.
  *
  * ## Perché è sicuro per costruzione
  *
@@ -69,6 +71,17 @@ export function Testo({ children }: { children: string }) {
       return;
     }
     chiudiElenco();
+
+    const titolo = /^(#{1,4})\s+(.*)$/.exec(pulita);
+    if (titolo) {
+      // `#` diventa h2, non h1: l'h1 è il titolo della pagina, e un testo
+      // generato dal modello non deve competere con esso — né nell'aspetto né
+      // per chi naviga con uno screen reader.
+      const Tag = `h${Math.min(titolo[1].length + 1, 5)}` as "h2" | "h3" | "h4" | "h5";
+      blocchi.push(<Tag key={`h-${i}`}>{inline(titolo[2], `h-${i}`)}</Tag>);
+      return;
+    }
+
     if (pulita) {
       blocchi.push(<p key={`p-${i}`}>{inline(pulita, `p-${i}`)}</p>);
     }
