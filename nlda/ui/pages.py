@@ -234,6 +234,11 @@ def render_report(df: pd.DataFrame, insights: dict, sel_measure, unit: str):
     st.subheader("Report iniziale sui dati")
 
     slot_sintesi = st.empty()
+    # Lo spazio si prenota SUBITO. `st.empty()` da solo ha altezza zero: quando la
+    # sintesi arriva — secondi dopo, a pagina ormai ferma — spinge in basso tutto
+    # quello che l'utente sta leggendo. Con l'altezza riservata il testo compare
+    # dentro un riquadro che c'era già.
+    slot_sintesi.markdown("<div class='sintesi-slot'></div>", unsafe_allow_html=True)
 
     # Insight automatici (numeri calcolati in Pandas, non dedotti dall'AI).
     # Via answer_card: il testo è HTML-escaped, così un valore di cella ostile
@@ -285,7 +290,10 @@ def fill_overview(slot, agent: DataAgent, insights: dict, unit: str,
         if explain and insights.get("text"):
             # Segnale immediato nello spazio riservato: la pagina è già leggibile,
             # e qui si dice che manca solo questo pezzo.
-            slot.caption("L'AI sta preparando la sintesi dei dati…")
+            slot.markdown(
+                "<div class='sintesi-slot'><p class='attesa-sintesi'>"
+                "L'AI sta preparando la sintesi dei dati…</p></div>",
+                unsafe_allow_html=True)
             st.session_state.overview_text = agent.overview(with_unit(insights["text"], unit))
         else:
             st.session_state.overview_text = None

@@ -61,22 +61,35 @@ def console_css() -> str:
              viene stirata alla sua altezza — così sotto la chat non resta mezza
              colonna vuota. Vale anche per KPI e coppie di grafici (già di pari altezza). */
           [data-testid="stHorizontalBlock"] {{ align-items: flex-start; }}
-          /* Scroll indipendente delle due colonne SENZA st.container(height=...):
-             quello resettava lo scroll a ogni rerun (un expander sembrava non aprirsi).
-             Qui l'overflow sta sul div STABILE della colonna, che il browser conserva
-             tra i rerun: cliccare un expander lo apre e lo scroll resta dov'è. Il marker
-             .scrollcol identifica le due colonne giuste (KPI e grafici NON scrollano).
-             I 470px sono l'intestazione a tutta larghezza (titolo, KPI, anteprima,
-             righello) misurata su schermo grande. Da soli erano una trappola: su un
-             portatile con viewport alto 621px lasciavano alle colonne 151px, una
-             fessura. Il `max(...)` garantisce comunque il 58% dell'altezza dello
-             schermo; sotto la soglia del blocco responsive in fondo al file le
-             colonne smettono del tutto di scrollare e si impilano. */
-          [data-testid="stColumn"]:has(.scrollcol) {{
-              max-height: max(58vh, calc(100vh - 470px)); overflow-y: auto; overflow-x: hidden;
-              padding-right: 10px; scrollbar-width: thin;
-          }}
+          /* UNA SOLA BARRA DI SCORRIMENTO — scelta del 30/07/2026.
+             Le due colonne avevano uno scroll indipendente (`max-height` +
+             `overflow-y` sul div stabile della colonna). Era gradevole sul monitor
+             grande, ma metteva in pagina TRE aree che reagiscono alla rotella —
+             pagina, colonna report, sidebar — e quale delle tre si muove dipende da
+             dove sta il puntatore, senza che nulla lo indichi. Scorrere diventava
+             imprevedibile: il difetto d'uso più segnalato di questa interfaccia.
+             Ora scorre solo la pagina. Il marker `.scrollcol` resta nel DOM ma non
+             ha più regole: toglierlo da `main.py` è una modifica separata, e un
+             marker senza CSS non fa nulla di male.
+             ⚠️ Questa modifica va INSIEME alle altezze riservate qui sotto. La
+             colonna a scorrimento assorbiva al proprio interno la crescita tardiva
+             del contenuto (grafici, sintesi AI): senza di essa quella crescita
+             sposta la pagina, e il salto lo vede l'utente. Misurato: sul portatile,
+             dove le colonne erano già impilate e quindi senza quella protezione, il
+             CLS era 0.70 — «scarso» inizia a 0.25. */
           [data-testid="stElementContainer"]:has(.scrollcol) {{ display: none !important; }}
+
+          /* ===== ALTEZZE RISERVATE (contro lo spostamento del layout) ============
+             Tutto ciò che arriva DOPO il primo disegno deve occupare il suo posto
+             fin da subito, altrimenti spinge in basso ciò che l'utente sta già
+             leggendo. Vale soprattutto per la sintesi AI, che arriva secondi dopo:
+             è il salto più fastidioso, perché avviene quando la pagina sembrava
+             ormai ferma. */
+          .sintesi-slot {{ min-height: 132px; }}
+          .attesa-sintesi {{ font-family: var(--mono); font-size: 0.78rem;
+              color: {c['muted']}; margin: 0; }}
+          [data-testid="stPlotlyChart"] {{ min-height: 240px; }}
+          [data-testid="stDataFrame"] {{ min-height: 120px; }}
           h1, h2, h3, h4 {{ font-family: var(--display); color: {c['ink']}; }}
           /* h2/h3 sono etichette di sezione: maiuscoletto spaziato. h1/h4 restano
              titoli veri, con la crenatura stretta. Le due crenature erano entrambe
@@ -89,28 +102,27 @@ def console_css() -> str:
           [data-testid="stCaptionContainer"] {{ font-family: var(--mono); color: {c['muted']}; }}
 
           /* ===== RAIL (sidebar scura, non la barra grigia di default) ===== */
-          /* Larghezza in REM, non in px: così segue la scala tipografica fluida qui
-             sopra. Con i 300px fissi di prima, il testo che cresceva su schermo
-             stretto veniva tagliato dal rail che restava fermo ("CSV, XLSX, XL…").
-             18.9rem valgono 302px alla scala base — i 300px di sempre sul monitor
-             grande, a due pixel — e 340px quando il testo sale a 18px: cresce quanto
-             ciò che contiene, e il rapporto fra i due non cambia mai. Il numero è
-             misurato sulla riga più lunga del rail ("25MB per file · CSV, XLSX, XLS,
-             JSON"): a 18.6rem l'ellissi le mangiava ancora l'ultima parola.
-             ⚠️ La larghezza vale SOLO da rail APERTO (`aria-expanded="true"`), ed è
-             il punto delicato: Streamlit chiude la barra portandone la larghezza a
-             zero, e un `width !important` incondizionato glielo impedisce — la barra
-             scompare ma il suo spazio resta prenotato, il contenuto non si ricentra e
-             a sinistra rimane una fascia vuota larga quanto il rail. Legata allo
-             stato aperto, da chiuso la regola smette di valere e Streamlit richiude
-             la larghezza a 0 come fa di suo. Se un domani non esponesse più
-             l'attributo, il rail tornerebbe ai suoi 300px di default: si perdono
-             pochi pixel sulla riga più lunga, non si rompe il layout. */
+          /* Larghezza: quella NATIVA di Streamlit (300px), non una nostra.
+             Prima la si portava a 18.9rem perché il testo cresciuto dalla scala
+             fluida faceva troncare la riga più lunga del rail ("25MB per file ·
+             CSV, XLSX, XLS, JSON"). Funzionava, ma introduceva un salto: Streamlit
+             disegna la barra a 300px e la nostra regola arriva subito dopo,
+             allargandola a 340 — misurato a 1800 ms, con l'intera area principale
+             che si restringe a pagina già visibile. Su un monitor da 1904px erano
+             40px su 1904 (invisibili); su un portatile da 1350 pesavano il triplo,
+             ed erano il singolo contributo più grande allo spostamento del layout.
+             Si è tolta la causa invece di compensarla: la riga lunga rimpicciolisce
+             (è un'indicazione di servizio, non testo da leggere) e a 300px ci sta,
+             quindi non serve più alcun override di larghezza — e senza override non
+             c'è salto. */
           section[data-testid="stSidebar"] {{
               background: {c['rail']}; border-right: 1px solid {c['rail_line']};
           }}
-          section[data-testid="stSidebar"][aria-expanded="true"] {{
-              width: 18.9rem !important; min-width: 18.9rem !important;
+          /* La riga più lunga del rail, rimpicciolita quanto basta a stare nei
+             300px nativi anche quando la scala fluida porta il testo a 18px. */
+          section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"] small,
+          section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzoneInstructions"] span {{
+              font-size: 0.68rem !important;
           }}
           section[data-testid="stSidebar"] .stMarkdown,
           section[data-testid="stSidebar"] p,
@@ -195,7 +207,7 @@ def console_css() -> str:
           }}
           /* Segue la larghezza del rail (18.6rem), meno mezza maniglia: resta a
              cavallo del bordo a qualunque scala tipografica. */
-          [data-testid="stSidebarCollapseButton"] {{ left: calc(18.9rem - 15px) !important; }}
+          [data-testid="stSidebarCollapseButton"] {{ left: 285px !important; }}
           [data-testid="stExpandSidebarButton"] {{ left: 6px !important; }}
           [data-testid="stSidebarCollapseButton"],
           [data-testid="stExpandSidebarButton"] button {{

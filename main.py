@@ -55,13 +55,19 @@ def configure_page() -> None:
 def main() -> None:
     """Flusso della pagina, dall'alto verso il basso."""
     configure_page()
+
+    # Il CSS va iniettato PRIMA di disegnare qualunque cosa, e non è una finezza.
+    # Stava dopo la barra laterale, con la motivazione che «la posizione nel DOM non
+    # cambia la cascata»: vero per la cascata, falso per l'utente. Streamlit fa
+    # arrivare al browser gli elementi via via che lo script li produce, quindi la
+    # barra veniva disegnata alla sua larghezza di default (300px) e si allargava ai
+    # nostri 340px quando lo stile arrivava — misurato a 427 ms. Quaranta pixel a
+    # pagina già visibile: l'intera area principale si restringe e ogni riga si
+    # sposta. Iniettandolo per primo, la barra nasce già della misura giusta.
+    st.markdown(console_css(), unsafe_allow_html=True)
+
     limits = demo_limits()
     config = render_sidebar_config(limits)
-
-    # Il blocco <style> vale per l'intero documento (sidebar compresa) a prescindere
-    # da dove finisce nel DOM: la posizione non cambia la cascata, incide solo su
-    # quanto presto arriva al browser — di qui, prima del contenuto della pagina.
-    st.markdown(console_css(), unsafe_allow_html=True)
 
     agent = get_agent(config.provider, config.model_name, config.api_key)
     service = AnalysisService(agent)
