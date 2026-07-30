@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../api/client";
 import type { OpzioniProsa } from "../api/client";
 import { messaggioErrore } from "../api/useRichiesta";
+import { Pannello } from "./Pannello";
 import { Testo } from "./Testo";
 
 /**
@@ -55,9 +56,7 @@ export function ReportEsecutivo({
   }
 
   return (
-    <details className="pannello">
-      <summary>Report esecutivo</summary>
-
+    <Pannello titolo="Report esecutivo">
       <p className="didascalia" style={{ marginTop: 10 }}>
         Cinque sezioni pronte da presentare, scritte sui numeri già calcolati.
       </p>
@@ -84,6 +83,6 @@ export function ReportEsecutivo({
           <Testo>{markdown}</Testo>
         </div>
       )}
-    </details>
+    </Pannello>
   );
 }

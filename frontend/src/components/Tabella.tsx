@@ -22,6 +22,21 @@ export function Tabella({
   const colonne = Object.keys(righe[0]);
   const mostrate = righe.slice(0, massimo);
 
+  // Se una colonna è numerica lo decide la COLONNA, non la singola cella: i
+  // numeri vanno a destra e l'intestazione deve seguirli, altrimenti "Somma"
+  // resta a sinistra mentre i suoi valori stanno a destra e si legge una tabella
+  // con le etichette sfalsate rispetto ai dati.
+  //
+  // Il verdetto si prende sulla maggioranza delle righe mostrate e non sulla
+  // prima: una cella vuota o un "n/d" in cima non deve spostare l'intera colonna.
+  const numerica = new Map(
+    colonne.map((c) => {
+      const valori = mostrate.map((r) => r[c]).filter((v) => v !== null && v !== "");
+      const numerici = valori.filter(eNumerico).length;
+      return [c, valori.length > 0 && numerici / valori.length > 0.5];
+    }),
+  );
+
   return (
     <>
       <div className="tabella-contenitore">
@@ -29,7 +44,9 @@ export function Tabella({
           <thead>
             <tr>
               {colonne.map((c) => (
-                <th key={c}>{c}</th>
+                <th key={c} className={numerica.get(c) ? "numero" : undefined}>
+                  {c}
+                </th>
               ))}
             </tr>
           </thead>
@@ -37,7 +54,7 @@ export function Tabella({
             {mostrate.map((riga, i) => (
               <tr key={i}>
                 {colonne.map((c) => (
-                  <td key={c} className={eNumerico(riga[c]) ? "numero" : undefined}>
+                  <td key={c} className={numerica.get(c) ? "numero" : undefined}>
                     {formattaNumero(riga[c])}
                   </td>
                 ))}

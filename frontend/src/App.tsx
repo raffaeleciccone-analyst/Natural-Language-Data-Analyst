@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { api } from "./api/client";
 import type { Motore, OpzioniProsa } from "./api/client";
 import { messaggioErrore, useRichiesta } from "./api/useRichiesta";
+import { Tema } from "./components/Tema";
 import { Sintesi } from "./components/Sintesi";
 import type { DatasetResponse, FiltroSpec } from "./api/types";
 import { BollaProgetto } from "./components/BollaProgetto";
@@ -10,6 +11,7 @@ import { Filtro } from "./components/Filtro";
 import { Grafico } from "./components/Grafico";
 import { Kpi, KpiScheletro } from "./components/Kpi";
 import { Modello } from "./components/Modello";
+import { Pannello } from "./components/Pannello";
 import { Periodi } from "./components/Periodi";
 import { ReportEsecutivo } from "./components/ReportEsecutivo";
 import { Struttura } from "./components/Struttura";
@@ -34,6 +36,7 @@ export default function App() {
   const [errore, setErrore] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<FiltroSpec | null>(null);
   const [motore, setMotore] = useState<Motore>({});
+  const [railAperto, setRailAperto] = useState(true);
   const inputFile = useRef<HTMLInputElement>(null);
 
   // La configurazione si chiede una volta all'avvio: contiene i suggerimenti e le
@@ -91,10 +94,27 @@ export default function App() {
   };
 
   return (
-    <div className="impaginazione">
-      <aside className="rail">
-        <h1>Natural Language Data Analyst</h1>
-        <div className="sottotitolo">Interfaccia React · API FastAPI</div>
+    <div className={`impaginazione${railAperto ? "" : " rail-chiuso"}`}>
+      {/* Il bottone vive FUORI dal rail: dentro, chiudendolo, sparirebbe insieme
+          a lui e non ci sarebbe piu' modo di riaprirlo. */}
+      <button
+        className="interruttore-rail"
+        onClick={() => setRailAperto((v) => !v)}
+        aria-expanded={railAperto}
+        aria-controls="rail"
+        title={railAperto ? "Nascondi i controlli" : "Mostra i controlli"}
+      >
+        {railAperto ? "‹" : "›"}
+      </button>
+
+      <aside className="rail" id="rail" hidden={!railAperto}>
+        <div className="rail-testata">
+          <div>
+            <h1>Natural Language Data Analyst</h1>
+            <div className="sottotitolo">Interfaccia React · API FastAPI</div>
+          </div>
+          <Tema />
+        </div>
 
         <span className="etichetta">Dataset</span>
         <input
@@ -114,14 +134,21 @@ export default function App() {
         >
           Carica un file
         </button>
-        <div style={{ height: 8 }} />
-        <button
-          className="secondario"
-          onClick={() => void accogli(api.caricaEsempio())}
-          disabled={caricamento}
-        >
-          Usa il dataset di esempio
-        </button>
+        {/* Un pulsante per dataset: l'elenco arriva da `/config` e riflette i
+            file DAVVERO presenti, quindi non promette un esempio che manca.
+            Con uno solo si legge come prima; con due diventa una scelta. */}
+        {(config?.demo_datasets ?? []).map((d) => (
+          <button
+            key={d.name}
+            className="secondario"
+            style={{ marginTop: 8 }}
+            onClick={() => void accogli(api.caricaEsempio(d.name))}
+            disabled={caricamento}
+            title={d.description}
+          >
+            {d.label}
+          </button>
+        ))}
 
         {dataset && (
           <>
@@ -212,16 +239,18 @@ export default function App() {
               {report ? report.kpis.map((k, i) => <Kpi dati={k} key={i} />) : <KpiScheletro />}
             </div>
 
-            {/* Anteprima e struttura stanno QUI, subito sotto i KPI. In fondo
-                alla colonna, dopo tutti i grafici, bisognava cercarle — mentre
-                "cosa c'è dentro questo file?" è la prima domanda che uno si fa
-                davanti a un dataset nuovo, prima ancora di guardare un numero. */}
-            <h2 className="sezione">Anteprima dei dati</h2>
-            {report ? (
-              <Tabella righe={report.preview} massimo={10} />
-            ) : (
-              <div className="scheletro" style={{ height: 220 }} />
-            )}
+            {/* Anteprima e struttura stanno QUI, subito sotto i KPI, ma CHIUSE.
+                Sono la risposta a "cosa c'è dentro questo file?", che uno si fa
+                una volta sola: aperte occupavano lo schermo che serve al report,
+                in fondo alla pagina bisognava cercarle. Chiuse e in alto sono a
+                un clic quando servono e non ingombrano quando non servono. */}
+            <Pannello titolo="Anteprima dei dati">
+              {report ? (
+                <Tabella righe={report.preview} massimo={10} />
+              ) : (
+                <div className="scheletro" style={{ height: 220 }} />
+              )}
+            </Pannello>
 
             {dataset && <Struttura dataset={dataset} />}
 
@@ -291,6 +320,10 @@ export default function App() {
                   </div>
                 )}
 
+                {dataset && report && (
+                  <ReportEsecutivo datasetId={dataset.dataset_id} opzioni={prosa} />
+                )}
+
                 {report?.numeric_stats?.length ? (
                   <>
                     <h2 className="sezione">Statistiche delle colonne numeriche</h2>
@@ -310,9 +343,7 @@ export default function App() {
                   />
                 )}
 
-                {dataset && report && (
-                  <ReportEsecutivo datasetId={dataset.dataset_id} opzioni={prosa} />
-                )}
+
               </div>
 
               {dataset && (
