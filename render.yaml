@@ -1,0 +1,65 @@
+# Blueprint di deploy per Render — l'interfaccia React servita dall'API FastAPI.
+#
+# Perché un file e non dei clic nella console: il deploy è configurazione, e la
+# configurazione che vive solo in un pannello web non è né rivedibile né
+# ripristinabile. Qui sta accanto al codice che descrive, cambia con una pull
+# request e si ricrea da zero su un account nuovo.
+#
+# Uso: Render → New → Blueprint → scegli questo repo. Le sole cose da inserire a
+# mano sono i valori marcati `sync: false` (la chiave del provider), che in un
+# file versionato non devono comparire.
+services:
+  - type: web
+    name: nlda
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt        # il più vicino a un pubblico europeo
+    healthCheckPath: /api/health
+    # Solo il provider cloud della demo: 'all' installerebbe gli SDK di cinque
+    # provider — quattro dei quali il deploy non userà mai — allungando il build
+    # e la superficie di dipendenze per nulla. `openai` copre anche Groq, che
+    # espone un'API compatibile.
+    dockerBuildArgs:
+      EXTRAS: openai,api
+    envVars:
+      # --- Demo pubblica: il tetto di spesa ---
+      # Senza questi, l'API risponde a chiunque usando la chiave qui sotto, e a
+      # pagare è il manutentore. La quota vive in `nlda/api/quota.py`.
+      - key: DEMO_MODE
+        value: "true"
+      - key: DEMO_MAX_QUESTIONS   # per visitatore (identificato dall'IP)
+        value: "15"
+      - key: DEMO_MAX_DAILY       # su tutti i visitatori: è il tetto vero
+        value: "200"
+
+      # --- Provider LLM ---
+      - key: PROVIDER
+        value: groq
+      - key: MODEL
+        value: llama-3.3-70b-versatile
+      # Da inserire nella console di Render, mai qui: un file versionato è
+      # pubblico quanto il repo.
+      - key: GROQ_API_KEY
+        sync: false
+
+      # --- Sandbox: fail-closed ---
+      # Se il sottoprocesso non è avviabile l'esecuzione si BLOCCA invece di
+      # ripiegare in-process, che non ha né timeout né tetto di memoria. È la
+      # scelta giusta ovunque, ed è obbligatoria dove si esegue codice generato
+      # da un modello per conto di sconosciuti.
+      - key: ALLOW_INPROCESS_FALLBACK
+        value: "false"
+
+      # --- Log ---
+      # Una riga JSON per evento, con turn_id, latenza, token e costo stimato:
+      # è la forma che `scripts/analyze_logs.py` sa riepilogare.
+      - key: LOG_FORMAT
+        value: json
+
+      # Il piano gratuito dà 512 MB. L'immagine ne usa ~100 a riposo e ~130 con
+      # un dataset da 10.000 righe caricato; il tetto qui è per il SOTTOPROCESSO
+      # della sandbox, così un'espressione che esplode viene fermata prima di
+      # portarsi via l'istanza.
+      - key: MEMORY_LIMIT_MB
+        value: "256"

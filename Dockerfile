@@ -85,14 +85,24 @@ USER app
 # l'immagine.
 EXPOSE 8000 8501
 
+# La porta è configurabile perché i PaaS la impongono: Render, Fly e Cloud Run
+# passano `$PORT` e si aspettano che il processo ascolti lì. In locale resta 8000
+# e nulla cambia.
+ENV PORT=8000
+
 # Il controllo di salute interroga l'API, che è ciò che il comando di default
 # avvia. L'immagine slim non ha curl: si usa l'interprete che c'è già invece di
 # installare un pacchetto in più solo per questo.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
-    CMD python -c "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health', timeout=4).status == 200 else 1)"
+    CMD python -c "import os,sys,urllib.request; sys.exit(0 if urllib.request.urlopen(f\"http://localhost:{os.environ['PORT']}/api/health\", timeout=4).status == 200 else 1)"
 
 # Di default parte l'API, che serve anche il frontend React compilato. Per
 # l'interfaccia Streamlit si passa un altro comando allo stesso container:
 #   docker run ... nlda streamlit run main.py --server.address=0.0.0.0 --server.port=8501
 # Due interfacce sullo stesso backend, una sola immagine.
-CMD ["uvicorn", "nlda.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+#
+# Forma shell (`sh -c`) perché la forma exec non espande `$PORT`. L'`exec` davanti
+# a uvicorn è necessario: senza, la shell resta il processo 1 e il SIGTERM
+# dell'orchestratore arriva a lei invece che a uvicorn, che verrebbe ucciso solo
+# allo scadere del timeout di grazia — a ogni riavvio, dieci secondi buttati.
+CMD ["sh", "-c", "exec uvicorn nlda.api.app:app --host 0.0.0.0 --port ${PORT}"]
