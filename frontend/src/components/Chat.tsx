@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
+import type { Motore } from "../api/client";
 import { messaggioErrore } from "../api/useRichiesta";
 import { flussoEventi } from "../api/stream";
 import type { AskResponse, DatasetResponse, FiltroSpec } from "../api/types";
@@ -23,10 +24,12 @@ export function Chat({
   dataset,
   unita,
   filtro,
+  motore,
 }: {
   dataset: DatasetResponse;
   unita: string;
   filtro?: FiltroSpec | null;
+  motore: Motore;
 }) {
   const [domanda, setDomanda] = useState("");
   const [storico, setStorico] = useState<AskResponse[]>([]);
@@ -72,8 +75,12 @@ export function Chat({
           // La domanda vale sul sottoinsieme filtrato: altrimenti la pagina
           // mostrerebbe i numeri di una parte e risponderebbe sul totale.
           filtro: filtro ?? null,
+          provider: motore.provider || null,
+          model: motore.model || null,
         },
         controllo.signal,
+        // La chiave nell'header, mai nel corpo che finisce nei log applicativi.
+        motore.apiKey,
       )) {
         if (evento.nome === "step") {
           setFase((evento.dati as { message: string }).message);
