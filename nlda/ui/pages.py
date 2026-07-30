@@ -569,17 +569,47 @@ def render_project_chat(agent: DataAgent, limits: DemoLimits) -> None:
     """
     "Chiedi al progetto": domande sul lavoro, non sui dati.
 
-    Sta accanto alla chat sui dati perche' chi valuta questo progetto ha domande
-    di natura diversa da chi lo usa ("come funziona la sandbox?" invece di "qual e'
-    il mese migliore?"), e finora l'unico modo di rispondergli era che io fossi
-    presente o che leggesse quattordicimila parole di documentazione.
+    Esiste perche' chi VALUTA questo progetto ha domande di natura diversa da chi
+    lo USA ("come funziona la sandbox?" invece di "qual e' il mese migliore?"), e
+    finora l'unico modo di rispondergli era che io fossi presente o che leggesse
+    quattordicimila parole di documentazione.
+
+    ## Perche' una bolla flottante e non una scheda
+
+    Prima era una scheda accanto alla chat sui dati, e su un portatile finiva
+    duemila pixel piu' in basso — dopo tutto il report, perche' sotto la soglia
+    responsive le colonne si impilano. Un assistente che si trova solo scorrendo
+    non viene trovato. Ancorata al viewport, la bolla e' raggiungibile da qualunque
+    punto della pagina e a qualunque risoluzione, ed e' il gesto che chi arriva da
+    un sito qualsiasi conosce gia'.
+
+    `st.popover` regge il caso: SOPRAVVIVE al rerun che segue l'invio della
+    domanda, quindi la risposta appare nel pannello ancora aperto. Un pannello
+    costruito a mano in HTML non potrebbe contenere widget Streamlit — quindi ne'
+    il campo di testo ne' la risposta.
 
     Condivide la QUOTA della demo con la chat sui dati: sono chiamate allo stesso
     modello, sulla stessa chiave, e tenere due budget separati significherebbe
     raddoppiare il tetto di spesa senza dirlo.
     """
-    st.caption("Domande su architettura, sicurezza, scelte tecniche, test, deploy. "
-               "Le risposte vengono dalla documentazione del repository, con la fonte citata.")
+    # Il `st.container()` NON e' decorativo: e' l'elemento che il CSS ancora al
+    # viewport. Senza di esso il marker finisce nel blocco verticale della PAGINA —
+    # e allora il selettore o non trova nulla, o rende `position: fixed` l'intera
+    # pagina (larga 1369px, ancorata in basso a destra). Il contenitore da' alla
+    # bolla un blocco tutto suo, che e' l'unica cosa che il CSS deve spostare.
+    with st.container():
+        st.markdown("<span class='bolla-progetto'></span>", unsafe_allow_html=True)
+        with st.popover("💬", help="Chiedi al progetto: architettura, sicurezza, "
+                                   "scelte tecniche"):
+            _project_chat_body(agent, limits)
+
+
+def _project_chat_body(agent: DataAgent, limits: DemoLimits) -> None:
+    """Contenuto del pannello. Separato dal guscio per poterlo leggere senza il CSS."""
+    st.markdown("### Chiedi al progetto")
+    # Didascalia corta di proposito: nel pannello ogni riga è spazio tolto alla
+    # conversazione, e in monospazio (il tema) quattro righe ne mangiavano un quinto.
+    st.caption("Risposte dalla documentazione del repo, con la fonte citata.")
 
     if "project_qa" not in st.session_state:
         st.session_state.project_qa = []

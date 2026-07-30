@@ -136,17 +136,15 @@ def main() -> None:
         render_column_structure()
     with col_chat:
         st.markdown("<span class='scrollcol'></span>", unsafe_allow_html=True)
-        # Due interlocutori diversi nella stessa colonna: chi USA l'app fa domande
-        # sui propri dati, chi la VALUTA ne fa sul progetto. Due schede invece di
-        # due colonne perché la seconda non serve mai contemporaneamente alla prima
-        # — e perché la larghezza, su un portatile, non basterebbe a nessuna delle due.
-        tab_dati, tab_progetto = st.tabs(["I tuoi dati", "Chiedi al progetto"])
-        with tab_dati:
-            render_chat(service, df, limits, explain=config.explain, unit=unit,
-                        dataset_label=source_label,
-                        sel_measure=sel_measure, sel_category=sel_category)
-        with tab_progetto:
-            render_project_chat(agent, limits)
+        render_chat(service, df, limits, explain=config.explain, unit=unit,
+                    dataset_label=source_label,
+                    sel_measure=sel_measure, sel_category=sel_category)
+
+    # "Chiedi al progetto" — per chi VALUTA il lavoro, non per chi lo usa. Vive in
+    # una bolla flottante ancorata al viewport, quindi si disegna FUORI dalle
+    # colonne: dentro, erediterebbe la loro posizione e su schermo stretto
+    # finirebbe in fondo alla pagina, dove nessuno lo cercherebbe.
+    render_project_chat(agent, limits)
 
     # PER ULTIMA, anche se compare in cima alla pagina: è l'unica parte che
     # aspetta il modello. Generandola qui, l'utente ha già davanti KPI, tabelle,
