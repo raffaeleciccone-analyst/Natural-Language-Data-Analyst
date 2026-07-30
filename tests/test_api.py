@@ -390,3 +390,141 @@ def test_export_di_una_conversazione_vuota_non_esplode(client):
     r = client.post("/api/export", json={"turns": []})
     assert r.status_code == 200
     assert isinstance(r.json()["markdown"], str)
+
+
+# --- Streaming ----------------------------------------------------------------
+def _eventi(testo: str) -> list[tuple[str, dict]]:
+    """Spezza un flusso SSE nella sequenza (nome evento, dati)."""
+    fuori = []
+    for blocco in testo.split("\n\n"):
+        if not blocco.strip():
+            continue
+        nome = corpo = None
+        for riga in blocco.splitlines():
+            if riga.startswith("event: "):
+                nome = riga[7:]
+            elif riga.startswith("data: "):
+                corpo = json.loads(riga[6:])
+        if nome:
+            fuori.append((nome, corpo))
+    return fuori
+
+
+def _servizio_streaming(monkeypatch, turn: Turn, pezzi=("Il ", "totale ", "è 700.")):
+    servizio = MagicMock()
+
+    def risponde(question, df, **kwargs):
+        # `on_step` e' come il servizio comunica l'avanzamento: lo si esercita,
+        # perche' e' proprio quel canale che lo streaming deve trasformare in eventi.
+        passo = kwargs.get("on_step")
+        if passo:
+            passo("Genero il codice…")
+            passo("Eseguo il codice…")
+        return turn
+
+    servizio.answer.side_effect = risponde
+    servizio.stream_explanation.return_value = iter(pezzi)
+    monkeypatch.setattr("nlda.api.app.AnalysisService", lambda _a: servizio)
+    monkeypatch.setattr("nlda.api.app.DataAgent", lambda **k: MagicMock())
+    return servizio
+
+
+def test_lo_streaming_manda_avanzamento_risultato_e_testo(client, csv_bytes, monkeypatch):
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    _servizio_streaming(monkeypatch, Turn(
+        question="totale?", code="risultato = df['Vendite'].sum()",
+        result=ExecutionSuccess(fig=None, value=700, summary="700")))
+
+    r = client.post("/api/ask/stream",
+                    json={"dataset_id": d["dataset_id"], "question": "totale?"})
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/event-stream")
+
+    ev = _eventi(r.text)
+    nomi = [n for n, _ in ev]
+    assert nomi.count("step") == 2
+    assert nomi.index("result") < nomi.index("token"), \
+        "il risultato deve precedere la spiegazione: tabella e grafico non aspettano la prosa"
+    assert nomi[-1] == "done"
+
+
+def test_il_risultato_arriva_senza_spiegazione(client, csv_bytes, monkeypatch):
+    """La spiegazione viaggia nei `token`: duplicarla in `result` la mostrerebbe
+    tutta insieme un istante prima, vanificando lo streaming."""
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    _servizio_streaming(monkeypatch, Turn(
+        question="totale?", code="x", explanation="non deve comparire qui",
+        result=ExecutionSuccess(fig=None, value=700, summary="")))
+
+    ev = dict(_eventi(client.post("/api/ask/stream",
+                                  json={"dataset_id": d["dataset_id"],
+                                        "question": "totale?"}).text))
+    assert ev["result"]["ok"] is True
+    assert ev["result"]["answer"] is None
+    assert ev["result"]["value"] == 700
+
+
+def test_lo_streaming_ricompone_il_testo_completo(client, csv_bytes, monkeypatch):
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    _servizio_streaming(monkeypatch, Turn(
+        question="q", code="x", result=ExecutionSuccess(fig=None, value=1, summary="")))
+
+    ev = _eventi(client.post("/api/ask/stream",
+                             json={"dataset_id": d["dataset_id"], "question": "q"}).text)
+    pezzi = [d_["text"] for n, d_ in ev if n == "token"]
+    finale = [d_ for n, d_ in ev if n == "done"][0]
+    assert "".join(pezzi) == "Il totale è 700."
+    assert finale["answer"] == "Il totale è 700.", \
+        "chi salva la conversazione non deve ricucire i pezzi"
+
+
+def test_un_fallimento_chiude_lo_stream_senza_chiedere_una_narrazione(
+        client, csv_bytes, monkeypatch):
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    servizio = _servizio_streaming(monkeypatch, Turn(
+        question="apri un file", code="open('/etc/passwd')",
+        result=ExecutionFailure("security", "uso di 'open' non consentito")))
+
+    ev = _eventi(client.post("/api/ask/stream",
+                             json={"dataset_id": d["dataset_id"],
+                                   "question": "apri un file"}).text)
+    nomi = [n for n, _ in ev]
+    assert "token" not in nomi, "non si chiede al modello di commentare un fallimento"
+    assert dict(ev)["result"]["failure_kind"] == "security"
+    assert nomi[-1] == "done"
+    servizio.stream_explanation.assert_not_called()
+
+
+def test_un_guasto_nel_servizio_diventa_un_evento_di_errore(client, csv_bytes, monkeypatch):
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    servizio = MagicMock()
+    servizio.answer.side_effect = RuntimeError("il modello è esploso")
+    monkeypatch.setattr("nlda.api.app.AnalysisService", lambda _a: servizio)
+    monkeypatch.setattr("nlda.api.app.DataAgent", lambda **k: MagicMock())
+
+    ev = _eventi(client.post("/api/ask/stream",
+                             json={"dataset_id": d["dataset_id"], "question": "q"}).text)
+    nomi = [n for n, _ in ev]
+    assert "error" in nomi
+    # Il dettaglio tecnico resta nei log: al client va un messaggio utile, non
+    # il testo di un'eccezione interna.
+    assert "esploso" not in dict(ev)["error"]["detail"]
+
+
+def test_le_due_strade_producono_lo_STESSO_risultato(client, csv_bytes, monkeypatch):
+    """
+    `/ask` e `/ask/stream` costruiscono la risposta con la stessa funzione: se
+    divergessero, un client che usa l'una si troverebbe campi diversi dall'altro.
+    """
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    turn = Turn(question="q", code="risultato = df['Vendite'].sum()",
+                result=ExecutionSuccess(fig=None, value=700, summary=""))
+    _servizio_streaming(monkeypatch, turn)
+
+    corpo = {"dataset_id": d["dataset_id"], "question": "q"}
+    unica = client.post("/api/ask", json=corpo).json()
+    a_pezzi = dict(_eventi(client.post("/api/ask/stream", json=corpo).text))["result"]
+
+    ignora = {"answer"}   # nello streaming arriva dopo, nei token
+    assert {k: v for k, v in unica.items() if k not in ignora} == \
+           {k: v for k, v in a_pezzi.items() if k not in ignora}

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../api/client";
+import { flussoEventi } from "../api/stream";
 import type { AskResponse, DatasetResponse, FiltroSpec } from "../api/types";
 import { Turno, TurnoInAttesa } from "./Turno";
 
@@ -41,32 +42,84 @@ export function Chat({
   const [domanda, setDomanda] = useState("");
   const [storico, setStorico] = useState<AskResponse[]>([]);
   const [inCorso, setInCorso] = useState<string | null>(null);
+  const [fase, setFase] = useState("");
   const [errore, setErrore] = useState<string | null>(null);
+  const [avvisoSpiegazione, setAvvisoSpiegazione] = useState<string | null>(null);
+  const annullatore = useRef<AbortController | null>(null);
 
+  // Smontando il componente si chiude il flusso: senza, la lettura
+  // continuerebbe per una pagina che non esiste piu'.
+  useEffect(() => () => annullatore.current?.abort(), []);
+
+  /**
+   * Invia la domanda e consuma il flusso di eventi.
+   *
+   * L'ordine in cui si aggiorna lo stato rispecchia quello degli eventi: prima
+   * l'avanzamento, poi il risultato (tabella e grafico compaiono qui), infine la
+   * spiegazione che si forma un pezzo alla volta. Il turno entra nello storico
+   * appena arriva `result`: da quel momento e' un turno vero, e la prosa lo
+   * raggiunge invece di farlo aspettare.
+   */
   async function invia(testo: string) {
     const pulita = testo.trim();
     if (!pulita || inCorso) return;
     setInCorso(pulita);
+    setFase("Analizzo…");
     setDomanda("");
     setErrore(null);
+
+    const controllo = new AbortController();
+    annullatore.current = controllo;
+    let indiceTurno = -1;
+
     try {
-      const risposta = await api.chiedi({
-        dataset_id: dataset.dataset_id,
-        question: pulita,
-        unit: unita,
-        provider: provider ?? null,
-        // La domanda vale sul sottoinsieme filtrato: altrimenti la pagina
-        // mostrerebbe i numeri di una parte e risponderebbe sul totale.
-        filtro: filtro ?? null,
-      });
-      setStorico((s) => [risposta, ...s]);
+      for await (const evento of flussoEventi(
+        "/ask/stream",
+        {
+          dataset_id: dataset.dataset_id,
+          question: pulita,
+          unit: unita,
+          provider: provider ?? null,
+          // La domanda vale sul sottoinsieme filtrato: altrimenti la pagina
+          // mostrerebbe i numeri di una parte e risponderebbe sul totale.
+          filtro: filtro ?? null,
+        },
+        controllo.signal,
+      )) {
+        if (evento.nome === "step") {
+          setFase((evento.dati as { message: string }).message);
+        } else if (evento.nome === "result") {
+          const turno = evento.dati as AskResponse;
+          setStorico((s) => {
+            indiceTurno = 0;
+            return [turno, ...s];
+          });
+          setFase("Scrivo la spiegazione…");
+        } else if (evento.nome === "token") {
+          const pezzo = (evento.dati as { text: string }).text;
+          // Si concatena sul turno in cima: e' quello appena inserito.
+          setStorico((s) =>
+            s.map((t, i) => (i === 0 ? { ...t, answer: (t.answer ?? "") + pezzo } : t)),
+          );
+        } else if (evento.nome === "done") {
+          const finale = (evento.dati as { answer: string | null }).answer;
+          // Il testo completo sostituisce i pezzi accumulati: se un evento si
+          // fosse perso, qui la frase torna intera.
+          if (finale !== null) {
+            setStorico((s) => s.map((t, i) => (i === 0 ? { ...t, answer: finale } : t)));
+          }
+        } else if (evento.nome === "error") {
+          const dettaglio = (evento.dati as { detail: string }).detail;
+          if (indiceTurno < 0) setErrore(dettaglio);
+          else setAvvisoSpiegazione(dettaglio);
+        }
+      }
     } catch (e) {
-      // Un errore di CHIAMATA (rete, 404, 400) e' diverso da una risposta
-      // negativa: la seconda entra nello storico come turno, questa no —
-      // non c'e' stato nessun turno.
       setErrore(e instanceof ApiError ? e.message : "Errore imprevisto.");
     } finally {
       setInCorso(null);
+      setFase("");
+      annullatore.current = null;
     }
   }
 
@@ -114,7 +167,7 @@ export function Chat({
           onChange={(e) => setDomanda(e.target.value)}
         />
         <button type="submit" disabled={inCorso !== null || !domanda.trim()}>
-          {inCorso ? "Sto analizzando…" : "Invia"}
+          {inCorso ? "…" : "Invia"}
         </button>
       </form>
 
@@ -127,8 +180,11 @@ export function Chat({
       )}
 
       {errore && <div className="errore">{errore}</div>}
+      {avvisoSpiegazione && <div className="avviso">{avvisoSpiegazione}</div>}
 
-      {inCorso && <TurnoInAttesa domanda={inCorso} fase="Genero il codice ed eseguo…" />}
+      {inCorso && !storico.some((t) => t.question === inCorso) && (
+        <TurnoInAttesa domanda={inCorso} fase={fase} />
+      )}
 
       {storico.length === 0 && !inCorso && (
         <div className="esempi">
