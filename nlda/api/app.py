@@ -56,6 +56,7 @@ from nlda.api.models import (
     ColumnKind,
     ConfigResponse,
     DatasetResponse,
+    DemoDataset,
     DistinctResponse,
     ErrorResponse,
     ExecutiveReportResponse,
@@ -75,6 +76,8 @@ from nlda.api.models import (
 )
 from nlda.api.streaming import trasmetti
 from nlda.config import settings
+from nlda.demo_data import disponibili as demo_disponibili
+from nlda.demo_data import trova as trova_demo
 from nlda.export import conversation_to_markdown
 from nlda.kpis import build_kpis
 from nlda.loader import (
@@ -96,6 +99,7 @@ from nlda.periods import compare_periods
 from nlda.project_qa import answer as project_answer
 from nlda.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers, get_provider
 from nlda.results import ExecutionSuccess, advice_for
+from nlda.sandbox.pool import riserva
 from nlda.service import AnalysisService, Turn
 from nlda.suggestions import FREQUENCIES, PROJECT_QUESTIONS, example_questions
 from nlda.utils import with_unit
@@ -274,6 +278,8 @@ def config() -> ConfigResponse:
         # Le stesse liste che usa l'app Streamlit: erano ribattute nel client.
         project_questions=list(PROJECT_QUESTIONS),
         frequencies=list(FREQUENCIES),
+        demo_datasets=[DemoDataset(name=d.nome, label=d.etichetta, description=d.descrizione)
+                       for d in demo_disponibili()],
     )
 
 
@@ -334,12 +340,27 @@ async def carica(file: Annotated[UploadFile, File()]) -> DatasetResponse:
 
 @router.post("/dataset/demo", response_model=DatasetResponse,
              summary="Carica il dataset di esempio")
-def carica_demo() -> DatasetResponse:
-    """Stessa pipeline del file dell'utente: il default non è un caso speciale."""
-    df = load_dataset()
-    chiave = store.impronta(b"__demo__", "sales.csv")
-    store.magazzino.aggiungi(chiave, df, "Dataset di esempio (Superstore Sales)")
-    return _descrivi(df, chiave, "Dataset di esempio (Superstore Sales)")
+def carica_demo(nome: str | None = None) -> DatasetResponse:
+    """
+    Stessa pipeline del file dell'utente: il default non è un caso speciale.
+
+    Senza `nome` si prende il primo disponibile, così il pulsante "usa il dataset
+    di esempio" continua a funzionare come prima.
+    """
+    scelto = trova_demo(nome)
+    if scelto is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dataset di esempio '{nome}' non disponibile in questa installazione."
+            if nome else "Questa installazione non ha dataset di esempio.")
+
+    df = load_dataset(scelto.file)
+    etichetta = f"Esempio · {scelto.etichetta}"
+    # L'impronta include il NOME: senza, due dataset di esempio diversi
+    # finirebbero sulla stessa chiave e il secondo restituirebbe il primo.
+    chiave = store.impronta(b"__demo__", scelto.file)
+    store.magazzino.aggiungi(chiave, df, etichetta)
+    return _descrivi(df, chiave, etichetta)
 
 
 # --- Report -------------------------------------------------------------------
@@ -680,6 +701,16 @@ def create_app() -> FastAPI:
 
     app.include_router(router)
     _monta_frontend(app)
+
+    # Un worker si scalda all'avvio, poi dopo ogni esecuzione (`pool.esegui`).
+    # L'app Streamlit lo faceva da sempre, questa no: pagava ~2 secondi di import
+    # (pandas, plotly) DENTRO il budget di `EXEC_TIMEOUT`, cioè dentro il tempo
+    # concesso al codice generato. Su una macchina scarica passava inosservato;
+    # con la CPU occupata da un modello locale bastava a far scadere una
+    # `groupby` da tre righe, e l'errore diceva "codice troppo lento" — accusando
+    # il codice di una lentezza che era dell'infrastruttura.
+    riserva.prewarm()
+
     log.info("api_pronta", extra={"timeout_exec": settings.exec_timeout})
     return app
 

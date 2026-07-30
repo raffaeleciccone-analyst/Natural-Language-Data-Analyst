@@ -18,12 +18,19 @@ __pycache__
 # Sviluppo: non serve a far girare l'app
 tests
 scripts
-docs
 design
-DEPLOY.md
 Dockerfile
 docker-compose.yml
 .dockerignore
+
+# I .md del repo NON sono documentazione di contorno: sono la base di conoscenza
+# di "Chiedi al progetto" (`nlda/project_qa.py:FONTI`). Escludendoli, nel
+# container la ricerca non trovava nulla e la funzione rispondeva "non trovo
+# nulla nella documentazione" a qualunque domanda — senza fallire, perche' una
+# fonte assente e' trattata come non fatale. Si tiene fuori tutto il resto di
+# `docs/`, che sono immagini da mezzo megabyte l'una.
+docs/*
+!docs/DOCUMENTAZIONE_TECNICA.md
 
 # Segreti: non devono MAI finire in un layer dell'immagine
 .env
