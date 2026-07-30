@@ -100,7 +100,8 @@ body {
 }
 
 .rail select,
-.rail input[type="text"] {
+.rail input[type="text"],
+.rail input[type="password"] {
   width: 100%;
   background: var(--rail2);
   border: 1px solid var(--rail-line);
@@ -641,6 +642,16 @@ ul.fonti li { margin: 3px 0; }
 
 .scambio p:last-child, .riquadro p:last-child { margin-bottom: 0; }
 
+/* I titoli del report esecutivo: scanditi, ma sotto la gerarchia della pagina. */
+.riquadro h2, .riquadro h3, .riquadro h4, .riquadro h5 {
+  font-family: var(--display);
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  margin: 18px 0 6px;
+}
+
+.riquadro > :is(h2, h3, h4, h5):first-child { margin-top: 0; }
+
 /* ===== Filtro nel rail ===== */
 .valori-filtro {
   max-height: 190px;
@@ -724,8 +735,66 @@ details.pannello select {
   color: var(--ink);
 }
 
+/*
+ * Gli stessi pannelli richiudibili, ma nel rail scuro.
+ *
+ * Unione e Modello stanno chiusi finché non servono: sono controlli che si usano
+ * una volta o mai, e aperti occuperebbero la colonna a scapito di misura,
+ * categoria e filtro, che si toccano di continuo.
+ */
+details.pannello-rail {
+  border: 1px solid var(--rail-line);
+  border-radius: var(--raggio);
+  background: var(--rail2);
+  padding: 10px 12px;
+  margin: 22px 0 0;
+}
+
+details.pannello-rail summary {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--rail-soft);
+  cursor: pointer;
+}
+
+details.pannello-rail[open] summary { margin-bottom: 4px; }
+
+/* Il primo controllo non deve staccarsi dal titolo del pannello. */
+details.pannello-rail .etichetta:first-of-type { margin-top: 12px; }
+
+details.pannello-rail .didascalia { color: var(--rail-soft); font-size: 0.7rem; }
+
+details.pannello-rail button { width: 100%; margin-top: 10px; }
+
 .crescita { color: var(--deep); font-weight: 600; }
 .calo { color: #a8332a; font-weight: 600; }
+
+/* ===== Struttura delle colonne ===== */
+.tipo-colonna {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink2);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+/* Il dettaglio è il campo lungo: senza un tetto allarga la tabella e obbliga a
+   scorrere in orizzontale per leggere le colonne che contano davvero. */
+.dettaglio-colonna {
+  color: var(--ink2);
+  font-size: 0.84rem;
+  max-width: 34ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ===== Barra delle azioni ===== */
 .azioni {

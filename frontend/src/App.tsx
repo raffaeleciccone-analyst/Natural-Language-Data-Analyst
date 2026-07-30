@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { api } from "./api/client";
+import type { Motore, OpzioniProsa } from "./api/client";
 import { messaggioErrore, useRichiesta } from "./api/useRichiesta";
 import { Sintesi } from "./components/Sintesi";
 import type { DatasetResponse, FiltroSpec } from "./api/types";
@@ -8,8 +9,12 @@ import { Chat } from "./components/Chat";
 import { Filtro } from "./components/Filtro";
 import { Grafico } from "./components/Grafico";
 import { Kpi, KpiScheletro } from "./components/Kpi";
+import { Modello } from "./components/Modello";
 import { Periodi } from "./components/Periodi";
+import { ReportEsecutivo } from "./components/ReportEsecutivo";
+import { Struttura } from "./components/Struttura";
 import { Tabella } from "./components/Tabella";
+import { Unione } from "./components/Unione";
 import "./theme.css";
 
 /**
@@ -28,6 +33,7 @@ export default function App() {
   const [caricamento, setCaricamento] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<FiltroSpec | null>(null);
+  const [motore, setMotore] = useState<Motore>({});
   const inputFile = useRef<HTMLInputElement>(null);
 
   // La configurazione si chiede una volta all'avvio: contiene i suggerimenti e le
@@ -73,6 +79,16 @@ export default function App() {
   const inAttesa = caricamento || (dataset !== null && report === null && !errore && !erroreReport);
   const fig = (nome: string) =>
     report?.figures?.[nome] as Record<string, unknown> | undefined;
+
+  // Le colonne che il BACKEND ha scelto, più il motore: è ciò che serve alle due
+  // chiamate che passano dal modello. Si compone una volta perché sintesi e
+  // report esecutivo devono per forza descrivere gli stessi numeri.
+  const prosa: OpzioniProsa = {
+    measure: report?.measure ?? undefined,
+    category: report?.category ?? undefined,
+    unit: report?.unit,
+    ...motore,
+  };
 
   return (
     <div className="impaginazione">
@@ -148,8 +164,18 @@ export default function App() {
               filtro={filtro}
               onCambia={setFiltro}
             />
+
+            {/* Stessa `key`: unito un file, il pannello riparte pulito invece
+                di conservare le chiavi del dataset precedente. */}
+            <Unione
+              key={`unione-${dataset.dataset_id}`}
+              dataset={dataset}
+              onUnito={(nuovo) => void accogli(Promise.resolve(nuovo))}
+            />
           </>
         )}
+
+        <Modello config={config} motore={motore} onCambia={setMotore} />
       </aside>
 
       <main className="spazio-lavoro">
@@ -186,6 +212,19 @@ export default function App() {
               {report ? report.kpis.map((k, i) => <Kpi dati={k} key={i} />) : <KpiScheletro />}
             </div>
 
+            {/* Anteprima e struttura stanno QUI, subito sotto i KPI. In fondo
+                alla colonna, dopo tutti i grafici, bisognava cercarle — mentre
+                "cosa c'è dentro questo file?" è la prima domanda che uno si fa
+                davanti a un dataset nuovo, prima ancora di guardare un numero. */}
+            <h2 className="sezione">Anteprima dei dati</h2>
+            {report ? (
+              <Tabella righe={report.preview} massimo={10} />
+            ) : (
+              <div className="scheletro" style={{ height: 220 }} />
+            )}
+
+            {dataset && <Struttura dataset={dataset} />}
+
             <div className="scala" />
 
             <div className="colonne">
@@ -193,84 +232,92 @@ export default function App() {
                 <h2 className="sezione">Report iniziale sui dati</h2>
 
                 {dataset && report && (
-                  <Sintesi
-                    datasetId={dataset.dataset_id}
-                    measure={report.measure}
-                    category={report.category}
-                    unit={report.unit}
+                  <Sintesi datasetId={dataset.dataset_id} opzioni={prosa} />
+                )}
+
+                {report?.findings?.length ? (
+                  <div className="riquadro">
+                    <div className="r-etichetta">Insight automatici</div>
+                    <ul>
+                      {report.findings.map((f, i) => (
+                        <li key={i}>{f}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  inAttesa && (
+                    <div className="scheletro" style={{ height: 120, margin: "4px 0 14px" }} />
+                  )
+                )}
+
+                <div className="griglia-grafici">
+                  {/* I titoli usano le scelte che il BACKEND ha applicato, non lo
+                      stato locale: se il client le lascia vuote le decide lui, sul
+                      dataset filtrato, e un titolo costruito qui nominerebbe una
+                      colonna diversa da quella tracciata. */}
+                  <Grafico
+                    titolo={`Classifica: ${report?.measure ?? "conteggio"} per ${report?.category ?? "categoria"}`}
+                    figura={fig("top")}
+                    onCategoria={(valore) => {
+                      // Cliccare una barra filtra la pagina su quella categoria;
+                      // ricliccarla toglie il filtro. È la funzione "grafici
+                      // collegati" dell'app Streamlit — lì filtrava il solo
+                      // andamento, qui l'intera pagina, che è quel che l'utente si
+                      // aspetta dopo aver visto il filtro del rail fare lo stesso.
+                      const colonna = report?.category;
+                      if (!colonna) return;
+                      const attivo =
+                        filtro?.column === colonna &&
+                        filtro.values.length === 1 &&
+                        filtro.values[0] === valore;
+                      setFiltro(attivo ? null : { column: colonna, values: [valore] });
+                    }}
+                  />
+                  <Grafico
+                    titolo={`Andamento di ${report?.measure ?? "conteggio"} nel tempo`}
+                    figura={fig("trend")}
+                  />
+                </div>
+
+                {(fig("dist") || inAttesa) && (
+                  <div style={{ marginTop: 16 }}>
+                    <Grafico titolo={`Distribuzione di ${report?.measure ?? ""}`} figura={fig("dist")} />
+                  </div>
+                )}
+
+                {fig("corr") && (
+                  <div style={{ marginTop: 16 }}>
+                    <Grafico titolo="Correlazioni fra le misure" figura={fig("corr")} />
+                  </div>
+                )}
+
+                {report?.numeric_stats?.length ? (
+                  <>
+                    <h2 className="sezione">Statistiche delle colonne numeriche</h2>
+                    <Tabella righe={report.numeric_stats} />
+                  </>
+                ) : null}
+
+                {/* `dataset &&` e non `dataset!`: questo blocco si disegna anche
+                    mentre il file sta caricando, quando `dataset` e' ancora null.
+                    L'asserzione di non-nullita' zittiva il compilatore proprio sul
+                    caso che capita davvero, e il componente esplodeva a runtime. */}
+                {dataset && (
+                  <Periodi
+                    dataset={dataset}
+                    misura={misura}
+                    frequenze={config?.frequencies ?? []}
                   />
                 )}
 
-            {report?.findings?.length ? (
-              <div className="riquadro">
-                <div className="r-etichetta">Insight automatici</div>
-                <ul>
-                  {report.findings.map((f, i) => (
-                    <li key={i}>{f}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              inAttesa && (
-                <div className="scheletro" style={{ height: 120, margin: "4px 0 14px" }} />
-              )
-            )}
-
-            <div className="griglia-grafici">
-              {/* I titoli usano le scelte che il BACKEND ha applicato, non lo
-                  stato locale: se il client le lascia vuote le decide lui, sul
-                  dataset filtrato, e un titolo costruito qui nominerebbe una
-                  colonna diversa da quella tracciata. */}
-              <Grafico
-                titolo={`Classifica: ${report?.measure ?? "conteggio"} per ${report?.category ?? "categoria"}`}
-                figura={fig("top")}
-              />
-              <Grafico
-                titolo={`Andamento di ${report?.measure ?? "conteggio"} nel tempo`}
-                figura={fig("trend")}
-              />
-            </div>
-
-            {(fig("dist") || inAttesa) && (
-              <div style={{ marginTop: 16 }}>
-                <Grafico titolo={`Distribuzione di ${report?.measure ?? ""}`} figura={fig("dist")} />
-              </div>
-            )}
-
-            {fig("corr") && (
-              <div style={{ marginTop: 16 }}>
-                <Grafico titolo="Correlazioni fra le misure" figura={fig("corr")} />
-              </div>
-            )}
-
-            {report?.numeric_stats?.length ? (
-              <>
-                <h2 className="sezione">Statistiche delle colonne numeriche</h2>
-                <Tabella righe={report.numeric_stats} />
-              </>
-            ) : null}
-
-            {/* `dataset &&` e non `dataset!`: questo blocco si disegna anche
-                mentre il file sta caricando, quando `dataset` e' ancora null.
-                L'asserzione di non-nullita' zittiva il compilatore proprio sul
-                caso che capita davvero, e il componente esplodeva a runtime. */}
-            {dataset && (
-              <Periodi
-                dataset={dataset}
-                misura={misura}
-                frequenze={config?.frequencies ?? []}
-              />
-            )}
-
-            <h2 className="sezione">Anteprima dei dati</h2>
-            {report ? (
-              <Tabella righe={report.preview} massimo={10} />
-            ) : (
-              <div className="scheletro" style={{ height: 220 }} />
-            )}
+                {dataset && report && (
+                  <ReportEsecutivo datasetId={dataset.dataset_id} opzioni={prosa} />
+                )}
               </div>
 
-              {dataset && <Chat dataset={dataset} unita={unita} filtro={filtro} />}
+              {dataset && (
+                <Chat dataset={dataset} unita={unita} filtro={filtro} motore={motore} />
+              )}
             </div>
           </>
         )}
