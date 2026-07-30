@@ -42,7 +42,10 @@ export interface AskResponse {
   warnings?: string[];
   /** syntax | security | runtime | timeout | provider | internal */
   failure_kind?: string | null;
+  /** Cosa è andato storto */
   message?: string | null;
+  /** Cosa può farci l'utente: deriva da failure_kind */
+  advice?: string | null;
 }
 
 /** Una colonna, come il report la vede. */
@@ -65,6 +68,10 @@ export interface ConfigResponse {
   max_questions: number;
   max_upload_mb: number;
   supported_extensions: string[];
+  /** Domande d'esempio sul progetto: le stesse che mostra l'app Streamlit */
+  project_questions?: string[];
+  /** Frequenze accettate dal confronto tra periodi */
+  frequencies?: string[];
 }
 
 /** Esito del caricamento: l'identificativo e tutto ciò che serve a impostare il report. */
@@ -83,6 +90,8 @@ export interface DatasetResponse {
   suggested_category: string | null;
   /** '$' per misure economiche senza unità indicata */
   suggested_unit: string;
+  /** Domande d'esempio costruite sulle colonne di QUESTO dataset */
+  example_questions?: string[];
 }
 
 /** Valori distinti di una colonna: servono a costruire il filtro. */
@@ -153,6 +162,12 @@ export interface Kpi {
   tick: string;
 }
 
+/** La sintesi in prosa del report, scritta dal modello sui numeri già calcolati. */
+export interface OverviewResponse {
+  /** None se non c'è nulla da raccontare */
+  text: string | null;
+}
+
 /** Un periodo e la variazione rispetto al precedente. */
 export interface PeriodRow {
   period: string;
@@ -189,8 +204,22 @@ export interface ProviderInfo {
   requires_api_key: boolean;
 }
 
-/** Il report iniziale: numeri calcolati da Pandas, mai dal modello. */
+/**
+ * Il report iniziale: numeri calcolati da Pandas, mai dal modello.
+ * Riporta anche le scelte APPLICATE (misura, categoria, unità): il client può
+ * averle lasciate vuote, e allora le decide il backend sul dataset filtrato. Un
+ * client che intitolasse i grafici col proprio stato scriverebbe il nome di una
+ * colonna diversa da quella tracciata.
+ */
 export interface ReportResponse {
+  /** La misura effettivamente usata */
+  measure: string | null;
+  /** La categoria effettivamente usata */
+  category: string | null;
+  /** L'unità effettivamente applicata */
+  unit: string;
+  /** Il filtro attivo in forma leggibile, es. "Region ∈ {Nord, Sud}" */
+  filter_label?: string;
   kpis: Kpi[];
   /** Insight deterministici, non generati dall'AI */
   findings: string[];

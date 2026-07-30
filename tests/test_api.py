@@ -533,3 +533,102 @@ def test_le_due_strade_producono_lo_STESSO_risultato(client, csv_bytes, monkeypa
     ignora = {"answer"}   # nello streaming arriva dopo, nei token
     assert {k: v for k, v in unica.items() if k not in ignora} == \
            {k: v for k, v in a_pezzi.items() if k not in ignora}
+
+
+# --- Le due interfacce non devono divergere -----------------------------------
+def test_le_domande_d_esempio_arrivano_dal_backend(client, csv_bytes):
+    """
+    Erano scritte due volte, una per interfaccia, e avevano gia' divergato: la
+    versione Streamlit proponeva fino a tre domande, quella React due e senza il
+    ramo per il solo raggruppamento.
+    """
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    assert d["example_questions"], "il client non deve inventarsele"
+    assert any("Vendite" in q for q in d["example_questions"]), \
+        "devono essere costruite sulle colonne di QUESTO dataset"
+
+    from nlda.suggestions import example_questions
+    assert d["example_questions"] == example_questions("Vendite", "Regione")
+
+
+def test_config_espone_le_liste_che_il_client_ribatteva(client):
+    j = client.get("/api/config").json()
+    from nlda.suggestions import FREQUENCIES, PROJECT_QUESTIONS
+    assert j["project_questions"] == list(PROJECT_QUESTIONS)
+    assert j["frequencies"] == list(FREQUENCIES)
+
+
+def test_il_report_dichiara_le_scelte_APPLICATE(client, csv_bytes):
+    """
+    Il client puo' lasciarle vuote, e allora le decide il backend sul dataset
+    filtrato: un titolo costruito con lo stato del client nominerebbe una colonna
+    diversa da quella tracciata.
+    """
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    j = client.get(f"/api/dataset/{d['dataset_id']}/report").json()
+    assert j["measure"] == "Vendite"
+    assert j["category"] == "Regione"
+    assert isinstance(j["unit"], str)
+
+
+def test_l_etichetta_del_filtro_la_compone_il_backend(client, csv_bytes):
+    """`views.apply_filter` distingue il valore singolo dall'insieme; il client
+    ne scriveva una terza forma, sempre con '='."""
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    uno = client.get(f"/api/dataset/{d['dataset_id']}/report",
+                     params={"filter_column": "Regione", "filter_values": ["Nord"]}).json()
+    due = client.get(f"/api/dataset/{d['dataset_id']}/report",
+                     params={"filter_column": "Regione",
+                             "filter_values": ["Nord", "Sud"]}).json()
+    assert uno["filter_label"] == "Regione = Nord"
+    assert "∈" in due["filter_label"]
+    # Senza filtro, nessuna etichetta da mostrare.
+    assert client.get(f"/api/dataset/{d['dataset_id']}/report").json()["filter_label"] == ""
+
+
+def test_la_mappa_di_correlazione_compare_quando_i_dati_la_giustificano(client):
+    """Il modello dei dati la prometteva e l'API non la produceva mai, mentre
+    Streamlit la disegna."""
+    righe = b"".join(f"R{i % 4},{100 + i * 7},{40 + i * 3}\n".encode() for i in range(40))
+    csv = b"Regione,Vendite,Costi\n" + righe
+    d = client.post("/api/dataset", files={"file": ("due.csv", csv, "text/csv")}).json()
+    assert len(d["measures"]) >= 2
+    assert "corr" in client.get(f"/api/dataset/{d['dataset_id']}/report").json()["figures"]
+
+
+def test_una_sola_misura_non_produce_correlazioni(client, csv_bytes):
+    """La correlazione ha bisogno di almeno due misure: non si inventa un grafico."""
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    assert "corr" not in client.get(f"/api/dataset/{d['dataset_id']}/report").json()["figures"]
+
+
+def test_il_consiglio_viaggia_con_il_fallimento(client, csv_bytes, monkeypatch):
+    """La politica 'cosa dire quando fallisce' viveva solo nel client React."""
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    _finto_servizio(monkeypatch, Turn(
+        question="apri un file", code="open('/etc/passwd')",
+        result=ExecutionFailure("security", "uso di 'open' non consentito")))
+
+    j = client.post("/api/ask", json={"dataset_id": d["dataset_id"],
+                                      "question": "apri un file"}).json()
+    from nlda.results import advice_for
+    assert j["advice"] == advice_for("security")
+    assert "sandbox" in j["advice"].lower()
+
+
+def test_la_sintesi_ha_una_rotta_propria(client, csv_bytes, monkeypatch):
+    """
+    Il report React ne era privo mentre quello Streamlit ce l'ha. E' una rotta a
+    parte perche' e' l'unica che aspetta il modello: dentro /report farebbe
+    aspettare anche i numeri, che sono gia' pronti.
+    """
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    agente = MagicMock()
+    agente.overview.return_value = "Le vendite crescono da Nord a Sud."
+    monkeypatch.setattr("nlda.api.app.DataAgent", lambda **k: agente)
+
+    r = client.post(f"/api/dataset/{d['dataset_id']}/overview", params={"unit": "€"})
+    assert r.status_code == 200
+    assert r.json()["text"] == "Le vendite crescono da Nord a Sud."
+    # L'unita' arriva al modello: senza, la inventerebbe.
+    assert "€" in agente.overview.call_args.args[0]

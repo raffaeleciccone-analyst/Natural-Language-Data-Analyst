@@ -37,6 +37,12 @@ class ConfigResponse(BaseModel):
     max_questions: int = Field(description="Domande per sessione in modalità demo")
     max_upload_mb: int
     supported_extensions: list[str]
+    project_questions: list[str] = Field(
+        default_factory=list,
+        description="Domande d'esempio sul progetto: le stesse che mostra l'app Streamlit")
+    frequencies: list[str] = Field(
+        default_factory=list,
+        description="Frequenze accettate dal confronto tra periodi")
 
 
 # --- Dataset ------------------------------------------------------------------
@@ -63,6 +69,9 @@ class DatasetResponse(BaseModel):
     suggested_measure: str | None
     suggested_category: str | None
     suggested_unit: str = Field(description="'$' per misure economiche senza unità indicata")
+    example_questions: list[str] = Field(
+        default_factory=list,
+        description="Domande d'esempio costruite sulle colonne di QUESTO dataset")
 
 
 class FiltroSpec(BaseModel):
@@ -149,8 +158,21 @@ class Kpi(BaseModel):
 
 
 class ReportResponse(BaseModel):
-    """Il report iniziale: numeri calcolati da Pandas, mai dal modello."""
+    """
+    Il report iniziale: numeri calcolati da Pandas, mai dal modello.
 
+    Riporta anche le scelte APPLICATE (misura, categoria, unità): il client può
+    averle lasciate vuote, e allora le decide il backend sul dataset filtrato. Un
+    client che intitolasse i grafici col proprio stato scriverebbe il nome di una
+    colonna diversa da quella tracciata.
+    """
+
+    measure: str | None = Field(description="La misura effettivamente usata")
+    category: str | None = Field(description="La categoria effettivamente usata")
+    unit: str = Field(description="L'unità effettivamente applicata")
+    filter_label: str = Field(
+        default="",
+        description="Il filtro attivo in forma leggibile, es. \"Region ∈ {Nord, Sud}\"")
     kpis: list[Kpi]
     findings: list[str] = Field(description="Insight deterministici, non generati dall'AI")
     numeric_stats: list[dict[str, Any]] = Field(default_factory=list)
@@ -196,7 +218,9 @@ class AskResponse(BaseModel):
                                 description="Avvisi di plausibilità ad alta confidenza")
     failure_kind: str | None = Field(
         default=None, description="syntax | security | runtime | timeout | provider | internal")
-    message: str | None = None
+    message: str | None = Field(default=None, description="Cosa è andato storto")
+    advice: str | None = Field(
+        default=None, description="Cosa può farci l'utente: deriva da failure_kind")
 
 
 # --- Domande sul progetto -----------------------------------------------------
@@ -211,6 +235,12 @@ class ProjectQaResponse(BaseModel):
 
     answer: str
     sources: list[str] = Field(default_factory=list)
+
+
+class OverviewResponse(BaseModel):
+    """La sintesi in prosa del report, scritta dal modello sui numeri già calcolati."""
+
+    text: str | None = Field(description="None se non c'è nulla da raccontare")
 
 
 class ErrorResponse(BaseModel):

@@ -15,17 +15,6 @@ import { Testo } from "./Testo";
  * scelta sbagliata in un'app che esegue codice scritto da un modello.
  */
 
-/** Cosa dire all'utente per ogni causa di fallimento. Il testo grezzo del
- *  backend descrive il guasto; qui si aggiunge cosa può farci lui. */
-const CONSIGLIO: Record<string, string> = {
-  security: "La richiesta produrrebbe codice non consentito dalla sandbox. Riformulala come domanda sui dati.",
-  syntax: "Il modello non è riuscito a produrre codice valido. Prova a essere più specifico.",
-  runtime: "Il codice è stato eseguito ma è fallito sui dati: forse una colonna non esiste con quel nome.",
-  timeout: "L'elaborazione ha superato il tempo massimo. Prova a restringere la domanda.",
-  provider: "Il modello non è raggiungibile. Controlla la configurazione e riprova.",
-  internal: "L'ambiente di esecuzione isolato non è disponibile.",
-};
-
 function Valore({ turno }: { turno: AskResponse }) {
   if (turno.value === null || turno.value === undefined) return null;
 
@@ -47,7 +36,11 @@ export function Turno({ turno }: { turno: AskResponse }) {
 
       {!turno.ok ? (
         <div className="errore">
-          <strong>{CONSIGLIO[turno.failure_kind ?? ""] ?? "La richiesta non è andata a buon fine."}</strong>
+          {/* Il consiglio arriva dal backend (`results.ADVICE`), accanto alla
+              definizione di `FailureKind` da cui deriva anche `retryable`:
+              viveva solo qui, quindi lo stesso rifiuto della sandbox dava un
+              consiglio in questa interfaccia e il testo grezzo nell'altra. */}
+          <strong>{turno.advice ?? "La richiesta non è andata a buon fine."}</strong>
           {turno.message && <div className="dettaglio-errore">{turno.message}</div>}
         </div>
       ) : (

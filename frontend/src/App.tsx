@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { api } from "./api/client";
 import { messaggioErrore, useRichiesta } from "./api/useRichiesta";
+import { Sintesi } from "./components/Sintesi";
 import type { DatasetResponse, FiltroSpec } from "./api/types";
 import { BollaProgetto } from "./components/BollaProgetto";
 import { Chat } from "./components/Chat";
@@ -28,6 +29,10 @@ export default function App() {
   const [errore, setErrore] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<FiltroSpec | null>(null);
   const inputFile = useRef<HTMLInputElement>(null);
+
+  // La configurazione si chiede una volta all'avvio: contiene i suggerimenti e le
+  // frequenze, cioe' liste che il backend possiede e che il client ribatteva.
+  const { dati: config } = useRichiesta(() => api.config(), []);
 
   /** Percorso comune al caricamento di un file e del dataset di esempio. */
   async function accogli(promessa: Promise<DatasetResponse>) {
@@ -157,10 +162,10 @@ export default function App() {
 
         {filtro && (
           <div className="filtro-attivo">
-            <span>
-              Filtro attivo: <strong>{filtro.column}</strong> ={" "}
-              {filtro.values.join(", ")}
-            </span>
+            {/* L'etichetta la compone `views.apply_filter`, che distingue il
+                valore singolo dall'insieme: scriverla qui sarebbe una terza
+                forma dello stesso filtro. */}
+            <span>Filtro attivo: {report?.filter_label ?? filtro.column}</span>
             <button className="tenue" onClick={() => setFiltro(null)}>
               Togli il filtro
             </button>
@@ -187,6 +192,15 @@ export default function App() {
               <div>
                 <h2 className="sezione">Report iniziale sui dati</h2>
 
+                {dataset && report && (
+                  <Sintesi
+                    datasetId={dataset.dataset_id}
+                    measure={report.measure}
+                    category={report.category}
+                    unit={report.unit}
+                  />
+                )}
+
             {report?.findings?.length ? (
               <div className="riquadro">
                 <div className="r-etichetta">Insight automatici</div>
@@ -203,16 +217,29 @@ export default function App() {
             )}
 
             <div className="griglia-grafici">
+              {/* I titoli usano le scelte che il BACKEND ha applicato, non lo
+                  stato locale: se il client le lascia vuote le decide lui, sul
+                  dataset filtrato, e un titolo costruito qui nominerebbe una
+                  colonna diversa da quella tracciata. */}
               <Grafico
-                titolo={`Classifica: ${misura || "conteggio"} per ${categoria || "categoria"}`}
+                titolo={`Classifica: ${report?.measure ?? "conteggio"} per ${report?.category ?? "categoria"}`}
                 figura={fig("top")}
               />
-              <Grafico titolo={`Andamento di ${misura || "conteggio"} nel tempo`} figura={fig("trend")} />
+              <Grafico
+                titolo={`Andamento di ${report?.measure ?? "conteggio"} nel tempo`}
+                figura={fig("trend")}
+              />
             </div>
 
             {(fig("dist") || inAttesa) && (
               <div style={{ marginTop: 16 }}>
-                <Grafico titolo={`Distribuzione di ${misura}`} figura={fig("dist")} />
+                <Grafico titolo={`Distribuzione di ${report?.measure ?? ""}`} figura={fig("dist")} />
+              </div>
+            )}
+
+            {fig("corr") && (
+              <div style={{ marginTop: 16 }}>
+                <Grafico titolo="Correlazioni fra le misure" figura={fig("corr")} />
               </div>
             )}
 
@@ -227,7 +254,13 @@ export default function App() {
                 mentre il file sta caricando, quando `dataset` e' ancora null.
                 L'asserzione di non-nullita' zittiva il compilatore proprio sul
                 caso che capita davvero, e il componente esplodeva a runtime. */}
-            {dataset && <Periodi dataset={dataset} misura={misura} />}
+            {dataset && (
+              <Periodi
+                dataset={dataset}
+                misura={misura}
+                frequenze={config?.frequencies ?? []}
+              />
+            )}
 
             <h2 className="sezione">Anteprima dei dati</h2>
             {report ? (
@@ -243,7 +276,7 @@ export default function App() {
         )}
       </main>
 
-      <BollaProgetto />
+      <BollaProgetto esempi={config?.project_questions ?? []} />
     </div>
   );
 }

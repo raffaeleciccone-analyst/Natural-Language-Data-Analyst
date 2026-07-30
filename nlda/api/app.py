@@ -61,6 +61,7 @@ from nlda.api.models import (
     FiltroSpec,
     JoinRequest,
     Kpi,
+    OverviewResponse,
     PeriodRow,
     PeriodsResponse,
     ProjectQaRequest,
@@ -91,8 +92,10 @@ from nlda.log import get_logger
 from nlda.periods import compare_periods
 from nlda.project_qa import answer as project_answer
 from nlda.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers, get_provider
-from nlda.results import ExecutionSuccess
+from nlda.results import ExecutionSuccess, advice_for
 from nlda.service import AnalysisService, Turn
+from nlda.suggestions import FREQUENCIES, PROJECT_QUESTIONS, example_questions
+from nlda.utils import with_unit
 from nlda.views import apply_filter, join_datasets
 
 log = get_logger(__name__)
@@ -139,19 +142,24 @@ def _righe_json(df: pd.DataFrame, massimo: int = 200) -> list[dict]:
 MAX_VALORI_DISTINTI = 500   # oltre, un elenco a discesa non e' piu' usabile
 
 
-def _filtrato(df: pd.DataFrame, filtro: "FiltroSpec | None") -> pd.DataFrame:
+def _filtrato(df: pd.DataFrame,
+              filtro: "FiltroSpec | None") -> "tuple[pd.DataFrame, str]":
     """
-    Applica il filtro, spiegando l'errore se la colonna non c'e'.
+    Applica il filtro e ne restituisce anche l'ETICHETTA leggibile.
 
     Il filtro vale per il report E per le domande: se restringessi solo il primo,
     l'utente vedrebbe numeri di un sottoinsieme e riceverebbe risposte sul totale
     — due verita' diverse nella stessa pagina.
+
+    L'etichetta la compone gia' `views.apply_filter`, che distingue il caso
+    singolo (`col = v`) dal multiplo (`col in {a, b}`). Prima la si buttava via e
+    il client ne scriveva una terza forma: lo stesso filtro si leggeva in due modi
+    a seconda dell'interfaccia.
     """
     if filtro is None:
-        return df
+        return df, ""
     _esigi_colonne(df, filter_column=filtro.column)
-    ristretto, _ = apply_filter(df, (filtro.column, tuple(filtro.values)))
-    return ristretto
+    return apply_filter(df, (filtro.column, tuple(filtro.values)))
 
 
 def _esigi_colonne(df: pd.DataFrame, **colonne: str) -> None:
@@ -212,6 +220,9 @@ def config() -> ConfigResponse:
         max_questions=0,
         max_upload_mb=MAX_UPLOAD_MB,
         supported_extensions=list(SUPPORTED_EXTENSIONS),
+        # Le stesse liste che usa l'app Streamlit: erano ribattute nel client.
+        project_questions=list(PROJECT_QUESTIONS),
+        frequencies=list(FREQUENCIES),
     )
 
 
@@ -242,6 +253,8 @@ def _descrivi(df: pd.DataFrame, dataset_id: str, etichetta: str) -> DatasetRespo
         suggested_measure=suggerita,
         suggested_category=best_category(df) if categorie else None,
         suggested_unit=default_unit(suggerita),
+        example_questions=example_questions(
+            suggerita, best_category(df) if categorie else None),
     )
 
 
@@ -288,7 +301,7 @@ def report(dataset_id: str, measure: str | None = None,
     voce = _dataset(dataset_id)
     filtro = (FiltroSpec(column=filter_column, values=filter_values)
               if filter_column and filter_values else None)
-    df = _filtrato(voce.df, filtro)
+    df, etichetta_filtro = _filtrato(voce.df, filtro)
     misure = ordered_measures(measure_columns(df))
     measure = measure or (misure[0] if misure else None)
     category = category or best_category(df)
@@ -311,9 +324,17 @@ def report(dataset_id: str, measure: str | None = None,
         fig = charts.try_fig(charts.histogram, df, measure)
         if fig is not None:
             figure["dist"] = _figura_json(fig)
+    # La mappa di correlazione: il modello dei dati la prometteva gia' e l'API non
+    # la produceva mai, mentre Streamlit la disegna. Compare solo quando `analyze`
+    # trova almeno due misure e righe a sufficienza (vedi loader._correlations).
+    if insights.get("corr") is not None:
+        fig = charts.try_fig(charts.corr_heatmap, insights["corr"])
+        if fig is not None:
+            figure["corr"] = _figura_json(fig)
 
     stats = insights.get("numeric_stats")
     return ReportResponse(
+        measure=measure, category=category, unit=unit, filter_label=etichetta_filtro,
         kpis=[Kpi(label=k[0], value=k[1], sub=k[2], tick=k[3])
               for k in build_kpis(df, measure, category, unit)],
         findings=list(insights.get("findings", [])),
@@ -349,7 +370,8 @@ def _risposta(turn: Turn, colonne, *, includi_spiegazione: bool = True) -> dict:
     if not isinstance(turn.result, ExecutionSuccess):
         return AskResponse(ok=False, question=turn.question, code=turn.code,
                            failure_kind=turn.result.kind,
-                           message=turn.result.message).model_dump()
+                           message=turn.result.message,
+                           advice=advice_for(turn.result.kind)).model_dump()
 
     valore, tipo = _valore_serializzabile(turn.result.value)
     return AskResponse(
@@ -365,7 +387,7 @@ def _risposta(turn: Turn, colonne, *, includi_spiegazione: bool = True) -> dict:
 @router.post("/ask", response_model=AskResponse, summary="Fai una domanda sui dati")
 def ask(req: AskRequest, x_api_key: str | None = Header(default=None)) -> AskResponse:
     voce = _dataset(req.dataset_id)
-    df = _filtrato(voce.df, req.filtro)
+    df, _ = _filtrato(voce.df, req.filtro)
     service = AnalysisService(_agente(req.provider, req.model, x_api_key))
     turn = service.answer(req.question, df, explain=req.explain, unit=req.unit)
     return AskResponse(**_risposta(turn, df.columns))
@@ -381,7 +403,7 @@ def ask_stream(req: AskRequest, x_api_key: str | None = Header(default=None)):
     lenta. Dettagli del protocollo in `nlda.api.streaming`.
     """
     voce = _dataset(req.dataset_id)
-    df = _filtrato(voce.df, req.filtro)
+    df, _ = _filtrato(voce.df, req.filtro)
     service = AnalysisService(_agente(req.provider, req.model, x_api_key))
 
     # Si cattura l'ELENCO delle colonne, non il DataFrame: alla lambda serve solo
@@ -400,6 +422,36 @@ def ask_stream(req: AskRequest, x_api_key: str | None = Header(default=None)):
         # insieme alla fine: lo streaming resterebbe tale solo sulla carta.
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/dataset/{dataset_id}/overview", response_model=OverviewResponse,
+             summary="La sintesi in prosa del report")
+def overview(dataset_id: str, measure: str | None = None, category: str | None = None,
+             unit: str = "", x_api_key: str | None = Header(default=None),
+             provider: str | None = None, model: str | None = None) -> OverviewResponse:
+    """
+    Il pezzo che il report React non aveva e quello Streamlit si', cioe' la
+    divergenza piu' grande fra le due interfacce.
+
+    E' una rotta A PARTE e non un campo del report per lo stesso motivo per cui in
+    Streamlit si genera per ultima: e' l'unica parte che aspetta il modello — con
+    un modello locale sono decine di secondi — e infilarla nel report farebbe
+    aspettare anche i numeri, che sono gia' pronti.
+
+    I numeri li ha gia' calcolati Pandas: al modello arriva `insights["text"]`, e
+    il prompt gli vieta di calcolarne altri.
+    """
+    voce = _dataset(dataset_id)
+    df = voce.df
+    misure = ordered_measures(measure_columns(df))
+    measure = measure or (misure[0] if misure else None)
+    insights = analyze(df, measure, category or best_category(df))
+    testo = insights.get("text")
+    if not testo:
+        return OverviewResponse(text=None)
+
+    agente = _agente(provider, model, x_api_key)
+    return OverviewResponse(text=agente.overview(with_unit(testo, unit or default_unit(measure))))
 
 
 # --- Domande sul progetto -----------------------------------------------------

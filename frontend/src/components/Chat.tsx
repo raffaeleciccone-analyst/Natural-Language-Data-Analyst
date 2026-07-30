@@ -19,16 +19,6 @@ import { Turno, TurnoInAttesa } from "./Turno";
  * l'occhio gia' guarda, senza dover scorrere.
  */
 
-/** Domande d'esempio costruite sulle colonne reali: dicono subito che tipo di
- *  richiesta funziona, meglio di qualunque istruzione. */
-function esempi(dataset: DatasetResponse): string[] {
-  const m = dataset.suggested_measure;
-  const c = dataset.suggested_category;
-  if (m && c) return [`Mostrami ${m} per ${c}`, `Quali sono i 5 ${c} con più ${m}?`];
-  if (m) return [`Qual è il totale di ${m}?`];
-  return ["Quante righe ha il dataset?"];
-}
-
 export function Chat({
   dataset,
   unita,
@@ -188,7 +178,7 @@ export function Chat({
       {storico.length === 0 && !inCorso && (
         <div className="esempi">
           <p className="didascalia">Non sai da dove iniziare? Prova una di queste.</p>
-          {esempi(dataset).map((e) => (
+          {dataset.example_questions.map((e) => (
             <button key={e} className="esempio" onClick={() => void invia(e)}>
               {e}
             </button>

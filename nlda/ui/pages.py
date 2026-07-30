@@ -30,6 +30,7 @@ from nlda.project_qa import answer as answer_about_project
 from nlda.providers import DEFAULT_MODELS, REQUIRES_API_KEY, available_providers
 from nlda.results import ExecutionFailure, ExecutionSuccess
 from nlda.service import AnalysisService, Turn
+from nlda.suggestions import FREQUENCIES, PROJECT_QUESTIONS, example_questions
 from nlda.ui.session import (
     _KEY_ENV,
     SidebarConfig,
@@ -364,7 +365,8 @@ def render_executive_report(agent: DataAgent, insights: dict, limits: DemoLimits
                            file_name="report_esecutivo.md", mime="text/markdown")
 
 
-_FREQ_LABELS = {"Trimestre": "trimestre", "Mese": "mese", "Anno": "anno"}
+# Le frequenze arrivano da `nlda.suggestions`: erano tre copie, una qui, una
+# nel client React e una in `periods._FREQ`.
 
 
 def render_period_comparison(df: pd.DataFrame, sel_measure, unit: str = "",
@@ -388,7 +390,7 @@ def render_period_comparison(df: pd.DataFrame, sel_measure, unit: str = "",
         date_col = c1.selectbox("Colonna data", date_cols, key="cmp_date")
         idx = measures.index(sel_measure) if sel_measure in measures else 0
         measure = c2.selectbox("Misura", measures, index=idx, key="cmp_measure")
-        freq_label = c3.selectbox("Periodo", list(_FREQ_LABELS), key="cmp_freq")
+        freq_label = c3.selectbox("Periodo", list(FREQUENCIES), key="cmp_freq")
 
         # Streamlit esegue il corpo di un expander anche quando è CHIUSO, e
         # compare_periods è un groupby sull'intero dataset: senza memoria si
@@ -401,7 +403,7 @@ def render_period_comparison(df: pd.DataFrame, sel_measure, unit: str = "",
             st.session_state.cmp_key = chiave
             try:
                 st.session_state.cmp_out = (
-                    compare_periods(df, date_col, measure, freq=_FREQ_LABELS[freq_label]), None)
+                    compare_periods(df, date_col, measure, freq=freq_label), None)
             except Exception as e:  # noqa: BLE001 — dati dell'utente: si spiega, non si esplode
                 # Anche il fallimento si tiene da parte: rifare il calcolo a ogni
                 # rerun per riottenere lo stesso errore non serve a nessuno.
@@ -476,31 +478,6 @@ def _render_turn_streaming(service: AnalysisService, question: str, turn: Turn,
     return replace(turn, explanation=testo)
 
 
-def _esempi_domande(sel_measure: str | None, sel_category: str | None) -> list[str]:
-    """
-    Domande d'esempio per l'empty-state della chat, costruite sulle colonne già
-    scelte per il report: così i suggerimenti sono sempre pertinenti al dataset
-    caricato, non frasi fisse buone solo per la demo. Ripiego su due domande
-    generiche quando il dataset non offre né misura né categoria.
-    """
-    esempi: list[str] = []
-    if sel_measure and sel_category:
-        esempi.append(f"Mostrami {sel_measure} per {sel_category}")
-        esempi.append(f"Quali sono i 5 {sel_category} con più {sel_measure}?")
-    if sel_measure:
-        esempi.append(f"Qual è il totale di {sel_measure}?")
-    elif sel_category:
-        esempi.append(f"Quante righe per ciascun {sel_category}?")
-    return esempi[:3] or ["Quante righe ha il dataset?", "Mostrami le prime 10 righe"]
-
-
-# Domande che un valutatore fa davvero, e che la documentazione copre bene: fanno
-# da vetrina alle sezioni piu' interessanti invece di lasciare il campo vuoto.
-_ESEMPI_PROGETTO = (
-    "Come funziona la sandbox di sicurezza?",
-    "Come evitate che l'AI inventi i numeri?",
-    "Che design pattern sono stati usati?",
-)
 
 
 def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
@@ -558,7 +535,7 @@ def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
     # di richiesta funziona, e cliccarne una equivale a scriverla e inviarla.
     if not turns:
         st.caption("Non sai da dove iniziare? Prova una di queste 👇")
-        for j, ex in enumerate(_esempi_domande(sel_measure, sel_category)):
+        for j, ex in enumerate(example_questions(sel_measure, sel_category)):
             if st.button(ex, key=f"esempio_{j}", width="stretch"):
                 question = ex
 
@@ -648,7 +625,7 @@ def _project_chat_body(agent: DataAgent, limits: DemoLimits) -> None:
     if not storico:
         with suggerimenti.container():
             st.caption("Oppure prova una di queste 👇")
-            for j, ex in enumerate(_ESEMPI_PROGETTO):
+            for j, ex in enumerate(PROJECT_QUESTIONS):
                 if st.button(ex, key=f"pq_{j}", width="stretch"):
                     domanda = ex
     if domanda:
