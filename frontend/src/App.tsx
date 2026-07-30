@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "./api/client";
 import type { DatasetResponse, ReportResponse } from "./api/types";
+import { Chat } from "./components/Chat";
 import { Grafico } from "./components/Grafico";
 import { Kpi, KpiScheletro } from "./components/Kpi";
 import { Tabella } from "./components/Tabella";
@@ -158,7 +159,10 @@ export default function App() {
             </div>
 
             <div className="scala" />
-            <h2 className="sezione">Report iniziale sui dati</h2>
+
+            <div className="colonne">
+              <div>
+                <h2 className="sezione">Report iniziale sui dati</h2>
 
             {report?.findings?.length ? (
               <div className="riquadro">
@@ -202,6 +206,10 @@ export default function App() {
             ) : (
               <div className="scheletro" style={{ height: 220 }} />
             )}
+              </div>
+
+              {dataset && <Chat dataset={dataset} unita={unita} />}
+            </div>
           </>
         )}
       </main>
