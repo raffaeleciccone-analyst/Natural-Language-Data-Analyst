@@ -284,16 +284,35 @@ def histogram(df, col, nbins: int = 40):
     if values.empty:
         raise ValueError(f"La colonna '{col}' non contiene valori numerici.")
 
-    median = float(values.median())
     p_high = float(values.quantile(0.99))
-    # Log solo se ha senso: valori strettamente positivi (log10 richiede > 0) e
-    # coda destra marcata (il 99° pct dista molte volte dalla mediana). L'euristica
-    # è conservativa: dataset "normali" (età, punteggi…) restano in lineare.
-    use_log = float(values.min()) > 0 and median > 0 and (p_high / median) > 8
+
+    # La decisione si prende sui valori POSITIVI, non su tutti.
+    #
+    # Prima bastava un solo zero per escludere la scala logaritmica: su un
+    # archivio di film, i 47 titoli senza incasso negli Stati Uniti mandavano in
+    # lineare una colonna asimmetrica quasi 15 volte — e l'istogramma diventava
+    # una torre a sinistra con trecento milioni di deserto a destra. Uno zero non
+    # dice che i dati non sono log-normali; dice solo che log10 non lo sa
+    # disegnare.
+    positivi = values[values > 0]
+    non_positivi = len(values) - len(positivi)
+    mediana_pos = float(positivi.median()) if len(positivi) else 0.0
+    p_high_pos = float(positivi.quantile(0.99)) if len(positivi) else 0.0
+
+    # Se pero' i non-positivi sono TANTI, sono loro l'informazione: nasconderli
+    # per raddrizzare la curva vorrebbe dire togliere dal grafico un quinto dei
+    # dati senza che si veda. Sopra quella quota si resta in lineare.
+    QUOTA_MAX_NASCOSTA = 0.2
+    use_log = (
+        len(positivi) >= 20
+        and mediana_pos > 0
+        and (p_high_pos / mediana_pos) > 8
+        and non_positivi / len(values) <= QUOTA_MAX_NASCOSTA
+    )
 
     if use_log:
         import numpy as np
-        log_vals = np.log10(values)
+        log_vals = np.log10(positivi)
         fig = px.histogram(x=log_vals, nbins=nbins, color_discrete_sequence=[_BAR])
         # Etichette dell'asse alle potenze di 10, ma scritte in scala originale
         # (1, 10, 100, 1.000…): l'utente legge i valori veri, non gli esponenti.
@@ -302,6 +321,16 @@ def histogram(df, col, nbins: int = 40):
         fig.update_xaxes(tickvals=tick, ticktext=[fmt_num(10 ** t) for t in tick])
         fig.update_layout(bargap=0.05, yaxis_title="record", showlegend=False,
                           xaxis_title=f"{col} (scala logaritmica)")
+        if non_positivi:
+            # Dichiarato, non taciuto: una scala logaritmica lo zero non lo sa
+            # rappresentare, e chi legge deve sapere quanti record mancano.
+            fig.add_annotation(
+                xref="paper", yref="paper", x=1, y=1.06, xanchor="right", yanchor="bottom",
+                showarrow=False, align="right",
+                text=(f"{fmt_num(non_positivi)} record con valore zero o negativo "
+                      "non rappresentabili in scala logaritmica"),
+                font=dict(size=11, color=_THEME["secondary"]),
+            )
         return apply_theme(fig)
 
     # Ripiego lineare: limita la vista al 99° percentile se c'è una coda di outlier.
