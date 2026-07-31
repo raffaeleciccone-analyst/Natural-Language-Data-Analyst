@@ -47,6 +47,12 @@ def _limit_memory(mb: int) -> None:
         log.warning("Impossibile impostare il cap memoria a %d MB: %s", mb, e)
 
 
+# Marcatore di prontezza. Un byte di controllo: non e' un inizio di JSON valido,
+# quindi non puo' essere confuso col risultato nemmeno se qualcosa lo lasciasse
+# passare. Il genitore lo consuma in `sandbox/pool.py`.
+PRONTO = b""
+
+
 def main() -> None:
     # L'ORDINE conta, ed è il motivo per cui il worker può essere pre-avviato.
     #
@@ -67,6 +73,17 @@ def main() -> None:
     # eventuali stampe verso stderr, così su stdout finisce solo il JSON.
     real_stdout_fd = os.dup(1)
     os.dup2(2, 1)
+
+    # "Sono pronto": un byte che NON puo' iniziare un JSON, scritto dopo gli
+    # import e prima di mettersi in attesa.
+    #
+    # Serve al genitore per distinguere due attese che prima erano una sola:
+    # quanto ci mette QUESTO processo a esistere, e quanto ci mette il codice
+    # generato a girare. Erano sommate dentro `EXEC_TIMEOUT`, cosi' su una
+    # macchina lenta — 0,1 vCPU sul piano gratuito di un PaaS — andava in timeout
+    # persino `len(df)`, e il messaggio d'errore accusava il codice dell'utente di
+    # una lentezza che era dell'infrastruttura.
+    os.write(real_stdout_fd, PRONTO)
 
     raw = sys.stdin.buffer.read()
     # La sorgente è il processo GENITORE, non l'utente: è lui a costruire questo
