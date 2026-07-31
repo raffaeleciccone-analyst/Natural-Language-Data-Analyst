@@ -70,9 +70,13 @@ di memoria. Due scelte di dettaglio che valgono più di quanto sembri:
   sorgente è fidata e preserva i dtype del DataFrame.
 - **Limite noto e dichiarato:** è una barriera *di processo*, non *di sistema*. Su
   Windows, fuori dal container, non c'è cap di RAM (`resource` è POSIX-only).
-  L'isolamento vero è il `Dockerfile` con `read_only`, `cap_drop: ALL`,
-  `no-new-privileges`, utente non-root e `mem_limit`. Dichiararlo è parte della
-  soluzione, non una nota a piè di pagina.
+  L'isolamento di sistema lo aggiunge `docker-compose.yml` — `read_only`,
+  `cap_drop: ALL`, `no-new-privileges`, `pids_limit` — **non il `Dockerfile`**,
+  che porta con sé il solo utente non-root.
+  La differenza conta: la demo pubblica gira su Render, il cui Blueprint non
+  espone quei campi, quindi lì l'isolamento di sistema **non c'è**. Chi si
+  auto-ospita con `docker compose` ce l'ha. La tabella completa di cosa vale dove
+  sta in [THREAT_MODEL.md](THREAT_MODEL.md#cosa-vale-dove).
 
 ### 3. Affidabilità: l'esito è un TIPO, non una stringa
 

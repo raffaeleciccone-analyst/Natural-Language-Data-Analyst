@@ -193,3 +193,21 @@ utente non privilegiato, capability rimosse, tetto di RAM e di processi. Vedi
 `ALLOW_INPROCESS_FALLBACK=false` (già in `render.yaml`) chiude l'ultima porta: se
 il sottoprocesso non è avviabile l'esecuzione **si blocca** invece di ripiegare
 in-process, che non ha né timeout né tetto di memoria. Fallire chiuso.
+
+### Quello che Render NON può darti
+
+Il paragrafo qui sopra descrive `docker-compose.yml`. Sul deploy Render **quei
+campi non esistono**: il formato Blueprint non espone `read_only`, `cap_drop`,
+`pids_limit` né `no-new-privileges`, perché sono opzioni del runtime di Docker
+che l'host non lascia impostare.
+
+Sull'istanza pubblica restano: i tre layer applicativi (validatore AST,
+sottoprocesso con timeout, canale di ritorno JSON), l'**utente non-root** cotto
+nel `Dockerfile`, il cap di RAM e il fail-closed. Manca il confinamento *di
+sistema*, cioè quello che renderebbe innocua un'evasione dai primi tre.
+
+**Quando conta davvero.** Per una demo con dati pubblici e una quota di spesa è
+un rischio residuo accettabile, ed è dichiarato in
+[THREAT_MODEL.md](THREAT_MODEL.md#cosa-vale-dove). Per ospitare questo progetto
+con dati che contano serve un host che dia accesso al runtime — una VM con
+`docker compose up`, oppure Fly.io o Cloud Run, dove quei limiti si impostano.

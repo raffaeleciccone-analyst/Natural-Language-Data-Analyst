@@ -204,6 +204,13 @@ Chiude anche il residuo che l'AST non può coprire: una chiamata di libreria che
 I/O al proprio interno (`px.data.gapminder()`) non è visibile al validatore, ma
 resta confinata dal container.
 
+> ⚠️ **Questo vale per chi si auto-ospita, non per la demo pubblica.** Il
+> Blueprint di Render non espone `read_only`, `cap_drop`, `pids_limit` né
+> `no-new-privileges`: sull'istanza pubblica sopravvivono i tre layer applicativi,
+> l'utente non-root, il cap di RAM e il fail-closed — non il confinamento di
+> sistema. La tabella di cosa vale dove è in
+> [THREAT_MODEL.md](THREAT_MODEL.md#cosa-vale-dove).
+
 Una sola immagine, due interfacce:
 
 ```bash
