@@ -24,11 +24,14 @@
   --accent: #0d8a7d;
   --deep: #0a6b61;
   --tint: #e3f0ee;
-  --rail: #191d23;
-  --rail2: #20262e;
-  --rail-ink: #d6dde4;
-  --rail-soft: #8a95a1;
-  --rail-line: #2b323b;
+  --rail: #eef1f4;
+  --rail2: #ffffff;
+  --rail-ink: #1b1f24;
+  --rail-soft: #5c6873;
+  --rail-line: #dde2e8;
+  /* Il rail seguiva il tema della pagina solo a parole: era scuro anche in
+     modalita' chiara, e su uno schermo luminoso era una colonna nera accanto a
+     una pagina bianca. Ora i due temi lo ridefiniscono come tutto il resto. */
 
   --sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
   --display: "Space Grotesk", system-ui, sans-serif;
@@ -65,6 +68,11 @@
     --accent: #2bb3a3;
     --deep: #46c9b8;
     --tint: #1d3330;
+    --rail: #191d23;
+    --rail2: #20262e;
+    --rail-ink: #d6dde4;
+    --rail-soft: #8a95a1;
+    --rail-line: #2b323b;
   }
 }
 
@@ -80,6 +88,11 @@
   --accent: #2bb3a3;
   --deep: #46c9b8;
   --tint: #1d3330;
+  --rail: #191d23;
+  --rail2: #20262e;
+  --rail-ink: #d6dde4;
+  --rail-soft: #8a95a1;
+  --rail-line: #2b323b;
 }
 
 /* Dice al browser di che tinta sono i controlli nativi: senza, le caselle di
@@ -184,9 +197,11 @@ body {
 }
 
 .rail h1 {
+  /* `--rail-ink` e non `#fff`: col rail chiaro il titolo spariva sul fondo. La
+     dichiarazione bianca stava PIU' IN BASSO nello stesso blocco e vinceva. */
+  color: var(--rail-ink);
   font-family: var(--display);
   font-size: 1.02rem;
-  color: #fff;
   margin: 0 0 4px;
   letter-spacing: -0.01em;
 }
@@ -1023,7 +1038,8 @@ button.tenue:hover:not(:disabled) {
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: none;
-  color: #fff;
+  /* Non `#fff`: nel tema chiaro sparirebbe sul fondo del rail. */
+  color: var(--rail-ink);
   margin: 0 0 12px;
 }
 
@@ -1101,7 +1117,7 @@ button.tenue:hover:not(:disabled) {
 
 .rail button.secondario:hover:not(:disabled) {
   border-color: var(--accent);
-  color: #fff;
+  color: var(--accent);
 }
 
 /* I pannelli richiudibili chiudono il rail: senza margine sotto, l'ultimo si
