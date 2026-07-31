@@ -186,11 +186,21 @@ def test_generazione_codice_fallita_solleva_providererror(sales_df: pd.DataFrame
         agente.ask_code("qual è il totale?", sales_df)
 
 
-def test_narrativa_ripulita_dai_backtick():
-    # Alcuni modelli infilano backtick a caso: in Markdown diventano frammenti
-    # monospace in mezzo alla frase.
+def test_la_narrativa_esce_com_e_dal_backend():
+    """
+    I backtick li toglie chi DISEGNA, non chi genera.
+
+    Il test prima chiedeva il contrario: che `explain` li togliesse. Ma toglierli
+    li' era adattare il testo al markdown di Streamlit dentro un modulo che serve
+    anche il frontend React — dove i backtick sono legittimi e `Testo` li rende
+    come codice inline. Ora la pulizia sta in `ui_components.senza_backtick`, e
+    chi non importa Streamlit non puo' applicarla per sbaglio.
+    """
     agente = DataAgent(provider=_ProviderFinto("  Le vendite valgono `1.000`.  "))
-    assert agente.explain("quanto?", "1000") == "Le vendite valgono 1.000."
+    assert agente.explain("quanto?", "1000") == "Le vendite valgono `1.000`."
+
+    from nlda.ui_components import senza_backtick
+    assert senza_backtick("Le vendite valgono `1.000`.") == "Le vendite valgono 1.000."
 
 
 # --- #29: schema costruito una volta e con un tetto sulle colonne ----------------
@@ -231,3 +241,54 @@ def test_schema_sotto_il_tetto_elenca_tutto():
     schema = _describe_schema(stretto)
     assert "'a'" in schema and "'b'" in schema
     assert "colonne, non elencate" not in schema
+
+
+# --- Il backend non conosce l'interfaccia --------------------------------------
+def test_lo_stream_non_adatta_il_testo_a_streamlit():
+    r"""
+    `md_safe` neutralizza i `$` perche' una COPPIA e' un delimitatore LaTeX nel
+    markdown di Streamlit. Veniva applicato dentro `agent.py`, cioe' nel backend
+    che serve anche il frontend React: quei `\$` arrivavano alla chat React, che
+    non li interpreta, e l'utente leggeva "216,36 \$" al primo messaggio.
+
+    Il backend rende il testo del modello com'e'. Chi lo disegna decide.
+    """
+    from unittest.mock import MagicMock
+
+    from nlda.agent import DataAgent
+
+    agente = DataAgent.__new__(DataAgent)
+    agente.provider = MagicMock()
+    agente.provider.stream.return_value = ["costa 216,36 $ ", "in `Region` West"]
+    agente.provider._last_usage = MagicMock(total_tokens=1)
+    agente._explain_prompts = lambda q, r: ("s", "u")
+
+    testo = "".join(agente.explain_stream("q", "r"))
+    assert r"\$" not in testo, "l'escape di Streamlit non deve uscire dal backend"
+    assert "`" in testo, "nemmeno i backtick vanno tolti qui"
+    assert testo == "costa 216,36 $ in `Region` West"
+
+
+def test_la_narrativa_non_stream_esce_intatta():
+    """Stessa regola per il percorso senza streaming, che alimenta /overview,
+    /executive-report e la risposta salvata."""
+    from unittest.mock import MagicMock
+
+    from nlda.agent import DataAgent
+
+    agente = DataAgent.__new__(DataAgent)
+    agente.provider = MagicMock()
+    agente.provider.generate.return_value = "  totale 100 $ in `A`  "
+    assert agente._narrate("s", "u", "x") == "totale 100 $ in `A`"
+
+
+def test_i_due_adattamenti_di_streamlit_sono_distinti():
+    r"""
+    `md_safe` serve a `st.markdown`; il riquadro HTML vuole solo i backtick via,
+    perche' un `\$` ci comparirebbe col backslash in chiaro. Erano una funzione
+    sola, e il riquadro riceveva un escape che non sa disfare.
+    """
+    from nlda.ui_components import md_safe, senza_backtick
+
+    assert md_safe("100 $ e `x`") == r"100 \$ e x"
+    assert senza_backtick("100 $ e `x`") == "100 $ e x"

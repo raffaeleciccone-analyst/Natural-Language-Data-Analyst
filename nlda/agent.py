@@ -7,7 +7,7 @@ from nlda.errors import ProviderError
 from nlda.log import get_logger
 from nlda.providers import LLMProvider, get_provider
 from nlda.sanitize import MAX_LEN_NOME, sanitize
-from nlda.utils import clean_code, column_kind, md_safe
+from nlda.utils import clean_code, column_kind
 
 log = get_logger(__name__)
 
@@ -183,10 +183,12 @@ class DataAgent:
         complemento, non il risultato. Se il modello non risponde, l'utente vede
         comunque i numeri calcolati da Pandas, con un avviso al posto del commento.
 
-        La narrativa è testo puro: rimuove i backtick che alcuni modelli aggiungono a
-        caso, perché in Markdown diventano frammenti monospace verdi senza senso."""
+        Restituisce il testo del modello COM'E'. Ripulirlo qui — togliere i
+        backtick, neutralizzare i `$` — era adattarlo al markdown di Streamlit
+        dentro un modulo che serve anche il frontend React: vedi
+        `ui_components.md_safe`, dove quella pulizia ora vive."""
         try:
-            return self.provider.generate(system_prompt, user_prompt).strip().replace("`", "")
+            return self.provider.generate(system_prompt, user_prompt).strip()
         except Exception as e:
             log.error("Generazione narrativa (%s) fallita: %s", description, e)
             return f"_(Impossibile generare {description}: {self._motivo_llm(e)})_"
@@ -312,10 +314,11 @@ class DataAgent:
         """
         system_prompt, user_prompt = self._explain_prompts(user_question, result_summary)
         try:
-            for blocco in self.provider.stream(system_prompt, user_prompt):
-                # Neutralizza per blocco ciò che il markdown di Streamlit interpreterebbe
-                # male: backtick (monospace a caso) e `$` della valuta (coppie = LaTeX).
-                yield md_safe(blocco)
+            # I blocchi escono come li manda il modello: chi li disegna decide
+            # come adattarli. Qui passavano per `md_safe`, che e' una regola del
+            # markdown di Streamlit, e quei `\$` finivano anche nella chat React,
+            # che li mostrava in chiaro.
+            yield from self.provider.stream(system_prompt, user_prompt)
         except Exception as e:  # noqa: BLE001 — la narrativa è tollerante, non solleva
             log.error("Streaming della spiegazione fallito: %s", e)
             yield f"_(Impossibile generare la spiegazione: {self._motivo_llm(e)})_"
