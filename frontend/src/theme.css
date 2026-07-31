@@ -356,6 +356,9 @@ body {
 }
 
 .pannello-grafico {
+  /* Senza, il minimo intrinseco della figura Plotly allarga il pannello oltre
+     la colonna che dovrebbe contenerlo. */
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--raggio);
@@ -619,7 +622,12 @@ button.collegamento:hover { background: none; color: var(--accent); }
 }
 
 @media (max-width: 1250px) {
-  .colonne { grid-template-columns: 1fr; }
+  /* `minmax(0, 1fr)` e non `1fr`: un `1fr` porta con se' `min-width: auto`,
+     quindi la colonna si allarga fino al contenuto piu' largo che contiene — un
+     grafico Plotly, una tabella a diciotto colonne — e sfonda la pagina. Su un
+     telefono si vedeva cosi': "Invia" tagliato a meta', l'ultima colonna delle
+     statistiche fuori dallo schermo, le domande d'esempio troncate. */
+  .colonne { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ===== Bolla "Chiedi al progetto" ==========================================
