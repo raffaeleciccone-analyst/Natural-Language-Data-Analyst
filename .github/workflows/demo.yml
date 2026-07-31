@@ -1,0 +1,43 @@
+# La demo pubblica funziona? Lo si chiede a lei.
+#
+# La CI verifica il codice e l'immagine, e da poco anche il container avviato con
+# le variabili di `render.yaml`. Restano fuori due cose che solo il servizio vero
+# sa: se l'host applica davvero quelle variabili — `EXEC_TIMEOUT` e' rimasto nel
+# blueprint per giorni senza mai raggiungere l'app — e come si comporta su 0,1
+# vCPU condivisa, che e' dove il progetto si e' rotto tre volte di fila.
+#
+# Sta in un workflow SEPARATO e non nella CI perche' parla con un servizio
+# esterno: un fallimento qui non deve bloccare una pull request, dice che e' giu'
+# la demo, non che il codice e' sbagliato.
+name: Demo pubblica
+
+on:
+  schedule:
+    # Una volta al giorno. Costa UNA domanda sulla quota giornaliera condivisa
+    # (DEMO_MAX_DAILY=200), cioe' mezzo punto percentuale.
+    - cron: "30 7 * * *"
+  workflow_dispatch:
+    inputs:
+      senza_modello:
+        description: "Salta la domanda all'AI (nessun consumo di quota)"
+        type: boolean
+        default: false
+
+jobs:
+  verifica:
+    name: La demo risponde
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # Nessuna dipendenza: lo script usa la sola libreria standard, cosi' questo
+      # controllo resta in piedi anche se l'installazione del progetto si rompe —
+      # ed e' proprio quando serve di piu'.
+      - name: Interroga la demo
+        run: |
+          python scripts/verifica_deploy.py \
+            ${{ inputs.senza_modello && '--senza-modello' || '' }}
