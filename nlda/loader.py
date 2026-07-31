@@ -612,7 +612,13 @@ def _findings(df: pd.DataFrame, res: dict, main_num) -> list:
         lead = top.iloc[0]
         # Solo con totale positivo e quota sensata (0-100%): con misure che possono
         # essere negative — es. Profit con perdite — la percentuale non avrebbe senso.
-        if tot > 0 and 0 <= lead[num] <= tot:
+        #
+        # E solo se le categorie sono ALMENO DUE. Con una sola la quota è il 100%
+        # per definizione: filtrando la pagina su "East" si leggeva "East da solo
+        # pesa il 100% del totale di Sales", che non è un'osservazione ma una
+        # tautologia — e messa in cima agli insight faceva dubitare anche degli
+        # altri tre, che invece dicono qualcosa.
+        if len(top) >= 2 and tot > 0 and 0 <= lead[num] <= tot:
             out.append(f"{_clean_label(lead[cat])} da solo pesa il "
                        f"{fmt_num(lead[num] / tot * 100)}% del totale di {num}.")
 
