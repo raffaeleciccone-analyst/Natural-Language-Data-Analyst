@@ -83,7 +83,7 @@ domanda con la risposta e la tabella che l'ha prodotta.*
 | **Esporta la conversazione** | Ogni turno in Markdown, **codice Pandas generato compreso**. |
 | **Multi-provider LLM** | Ollama (locale, senza chiave), Groq, Anthropic, OpenAI, Gemini. Gli SDK sono opzionali: si installa solo quello che serve. |
 | **Chiedi al progetto** | Una modalità che risponde sul progetto stesso citando le fonti, con recupero TF-IDF sui documenti del repo. |
-| **Due dataset di esempio** | Vendite (9.800 ordini) e film (3.201 titoli con incassi e voti): domini diversi, per mostrare che il rilevamento di misure, categorie e date non è tarato su un file solo. |
+| **Due dataset di esempio** | Vendite (9.800 ordini) e film (1.830 titoli del decennio 2000-2009, con incassi e voti): domini diversi, per mostrare che il rilevamento di misure, categorie e date non è tarato su un file solo. |
 | **Tema chiaro e scuro** | Parte dalla preferenza di sistema; grafici compresi. |
 
 **Formati**: CSV, Excel (`.xlsx`/`.xls`), JSON. Tipi, date e colonne "misura"
@@ -313,7 +313,7 @@ frontend/src/              interfaccia React — nessuna decisione sui dati, sol
 └─ components/             KPI, grafici, tabelle, filtro, chat, pannelli
 
 main.py + nlda/ui/         interfaccia Streamlit
-scripts/                   generazione dei tipi, favicon, corpus, smoke, eval, analisi log
+scripts/                   generazione dei tipi, dataset di esempio, corpus, smoke, eval, analisi log
 tests/                     suite pytest (con focus sulla sandbox di sicurezza)
 ```
 
