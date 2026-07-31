@@ -60,12 +60,17 @@ services:
       - key: LOG_FORMAT
         value: json
 
-      # Il piano gratuito dà 512 MB. L'immagine ne usa ~100 a riposo e ~130 con
-      # un dataset da 10.000 righe caricato; il tetto qui è per il SOTTOPROCESSO
-      # della sandbox, così un'espressione che esplode viene fermata prima di
-      # portarsi via l'istanza.
+      # ATTENZIONE al significato: `RLIMIT_AS` limita lo spazio di INDIRIZZAMENTO,
+      # non la memoria occupata. Qui c'era 256, scelto ragionando sui ~130 MB che
+      # l'immagine occupa davvero — ed era sbagliato: pandas e numpy riservano
+      # molto piu' spazio virtuale di quanto usino, e sotto 1 GB il worker moriva
+      # prima ancora di eseguire `len(df)`. Ogni domanda falliva con "possibile
+      # esaurimento memoria".
+      #
+      # 1500 e' il default del progetto. Il contenimento reale su questo piano lo
+      # danno i 512 MB del container, che Render applica dall'esterno.
       - key: MEMORY_LIMIT_MB
-        value: "256"
+        value: "1500"
 
       # Il piano gratuito da' 0,1 vCPU condivisa: l'avvio del worker della
       # sandbox — un interprete che importa pandas e plotly — richiede li' molto
