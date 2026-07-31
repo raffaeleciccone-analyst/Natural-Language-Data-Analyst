@@ -23,11 +23,55 @@ import "./theme.css";
 const SOGLIA_STRETTA = 820;
 
 /**
+ * Un elenco di colonne del dataset da cui sceglierne una.
+ *
+ * Misura e categoria erano lo stesso oggetto scritto due volte, diverso solo nel
+ * testo mostrato quando il dataset non offre quel tipo di colonna. Due copie di
+ * un controllo divergono alla prima modifica che si ricorda di toccarne una sola.
+ */
+function ScegliColonna({
+  etichetta,
+  valore,
+  colonne,
+  vuoto,
+  onCambia,
+}: {
+  etichetta: string;
+  valore: string;
+  colonne: string[];
+  /** Cosa dire quando il dataset non ha colonne di questo tipo. */
+  vuoto: string;
+  onCambia: (v: string) => void;
+}) {
+  return (
+    <>
+      <span className="etichetta">{etichetta}</span>
+      <select value={valore} onChange={(e) => onCambia(e.target.value)}>
+        {colonne.length === 0 && <option value="">{vuoto}</option>}
+        {colonne.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </select>
+    </>
+  );
+}
+
+/**
  * L'applicazione: il report di un dataset, con i controlli nel rail.
  *
- * Perché lo stato sta qui e non in un gestore esterno (Redux, Zustand): sono
- * cinque valori e una schermata sola. Aggiungere una libreria di stato adesso
- * significherebbe pagarne la complessità prima di avere il problema che risolve.
+ * Perché lo stato sta qui e non in un gestore esterno (Redux, Zustand): c'è una
+ * schermata sola, e ogni valore è letto dal componente che lo mostra o dai due
+ * o tre che gli stanno accanto. Una libreria di stato risolve la propagazione
+ * attraverso gerarchie profonde, che qui non ci sono: adottarla adesso
+ * significherebbe pagarne la complessità prima di avere il problema.
+ *
+ * Nemmeno un `useDataset()` che raccolga i valori del dataset: restituirebbe
+ * quattordici campi che il componente rimette subito in circolo: sposterebbe le
+ * righe senza dare loro un confine, e un hook che espone tutto lo stato di chi
+ * lo chiama non è un'astrazione, è un trasloco.
+ *
  * Il giorno in cui le schermate diventano tre, si sposta — è mezza giornata.
  */
 export default function App() {
@@ -61,15 +105,20 @@ export default function App() {
   // prenderla. Ora vede subito un report vero e i pulsanti restano li' per
   // cambiare dataset o caricare il proprio.
   //
-  // `dataset === null` nella condizione, non un flag "primo avvio": se l'utente
-  // ha gia' caricato qualcosa questo non deve sovrascriverglielo.
+  // Le due guardie proteggono da cose DIVERSE, e vale la pena distinguerle.
+  //
+  // `avviato` serve a `StrictMode`, che in sviluppo invoca ogni effetto due
+  // volte apposta: senza, il dataset verrebbe chiesto due volte a ogni
+  // ricaricamento della pagina. `dataset` e `caricamento` proteggono invece
+  // l'utente — se ha gia' caricato un file suo, questo non deve
+  // sovrascriverglielo.
   const [avviato, setAvviato] = useState(false);
   useEffect(() => {
     if (avviato || dataset || caricamento || !config?.demo_datasets?.length) return;
     setAvviato(true);
     void accogli(api.caricaEsempio(config.demo_datasets[0].name));
-    // `accogli` e `dataset` cambiano a ogni render: la guardia sopra e' cio' che
-    // impedisce il ciclo, non l'elenco delle dipendenze.
+    // `accogli` e `dataset` cambierebbero a ogni render: sono le guardie sopra a
+    // impedire il ciclo, non l'elenco delle dipendenze.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, avviato]);
 
@@ -227,27 +276,20 @@ export default function App() {
         {dataset && (
           <section className="rail-gruppo">
             <h2>Report</h2>
-            <span className="etichetta">Misura</span>
-            <select value={misura} onChange={(e) => setMisura(e.target.value)}>
-              {dataset.measures.length === 0 && (
-                <option value="">nessuna colonna numerica</option>
-              )}
-              {dataset.measures.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-
-            <span className="etichetta">Categoria</span>
-            <select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
-              {dataset.categories.length === 0 && <option value="">nessuna</option>}
-              {dataset.categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+            <ScegliColonna
+              etichetta="Misura"
+              valore={misura}
+              colonne={dataset.measures}
+              vuoto="nessuna colonna numerica"
+              onCambia={setMisura}
+            />
+            <ScegliColonna
+              etichetta="Categoria"
+              valore={categoria}
+              colonne={dataset.categories}
+              vuoto="nessuna"
+              onCambia={setCategoria}
+            />
 
             <span className="etichetta">Unità di misura</span>
             <input
