@@ -22,6 +22,21 @@ from nlda.log import get_logger
 log = get_logger(__name__)
 
 
+# Sotto questo valore il cap non protegge: IMPEDISCE.
+#
+# `RLIMIT_AS` limita lo spazio di INDIRIZZAMENTO, non la memoria occupata, e
+# pandas con numpy ne riservano molto piu' di quanto ne usino. Misurato nel
+# container: sotto 1 GB il worker muore prima ancora di eseguire `len(df)`,
+# mentre la memoria realmente occupata resta sui 130 MB.
+#
+# Un tetto cosi' basso non e' una misura di sicurezza, e' un guasto: ogni domanda
+# fallisce con "possibile esaurimento memoria" e l'app sembra rotta senza che
+# nulla nei log dica che a romperla e' stata la configurazione. Su un deploy
+# pubblico il contenimento vero lo da' comunque il limite del CONTAINER, che
+# l'orchestratore applica dall'esterno e nessuna variabile puo' abbassare.
+_MINIMO_UTILE_MB = 1024
+
+
 def _limit_memory(mb: int) -> None:
     """
     Limita la RAM del processo dove possibile.
@@ -37,6 +52,12 @@ def _limit_memory(mb: int) -> None:
         log.info("Cap memoria non disponibile su questa piattaforma (Windows): "
                  "il worker è contenuto dal solo timeout.")
         return
+    if mb < _MINIMO_UTILE_MB:
+        log.warning(
+            "MEMORY_LIMIT_MB=%d e' sotto il minimo utile (%d MB): con un tetto cosi' "
+            "basso il worker non riesce nemmeno a importare pandas. Uso %d MB.",
+            mb, _MINIMO_UTILE_MB, _MINIMO_UTILE_MB)
+        mb = _MINIMO_UTILE_MB
     try:
         b = mb * 1024 * 1024
         # attributi POSIX-only: su Windows mypy non li conosce (serve 'attr-defined'),

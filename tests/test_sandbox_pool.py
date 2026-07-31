@@ -180,3 +180,54 @@ def test_la_radice_contiene_il_pacchetto():
     """
     import pathlib
     assert (pathlib.Path(radice_progetto()) / "nlda" / "_sandbox_worker.py").exists()
+
+
+# --- Il cap di memoria non deve diventare un guasto ----------------------------
+def test_un_cap_di_memoria_inservibile_viene_alzato():
+    """
+    `RLIMIT_AS` limita lo SPAZIO DI INDIRIZZAMENTO, non la memoria occupata, e
+    pandas ne riserva molto piu' di quanto usi. Con 256 MB — un valore che sembra
+    generoso guardando i ~130 MB realmente occupati — il worker moriva prima di
+    importare pandas, e OGNI domanda falliva con "possibile esaurimento memoria".
+
+    Un tetto che impedisce qualunque esecuzione non protegge nulla: si alza al
+    minimo utile e lo si dice nei log, invece di lasciare un'app che sembra rotta
+    senza che niente spieghi perche'.
+    """
+    import logging
+
+    from nlda import _sandbox_worker as worker
+
+    applicati: list[int] = []
+    detti: list[str] = []
+
+    class _Ascolta(logging.Handler):
+        def emit(self, record):
+            detti.append(record.getMessage())
+
+    # Il handler si aggancia al logger del MODULO: `caplog` non vede nulla perche'
+    # `nlda.log` configura i logger senza propagazione verso la radice.
+    ascoltatore = _Ascolta()
+    worker.log.addHandler(ascoltatore)
+
+    class _ResourceFinto:
+        RLIMIT_AS = 9
+
+        @staticmethod
+        def setrlimit(_quale, coppia):
+            applicati.append(coppia[0] // (1024 * 1024))
+
+    import sys
+    sys.modules["resource"] = _ResourceFinto  # type: ignore[assignment]
+    try:
+        worker._limit_memory(256)
+        assert applicati == [worker._MINIMO_UTILE_MB]
+        # Alzarlo in silenzio nasconderebbe una configurazione sbagliata.
+        assert any("sotto il minimo utile" in m for m in detti)
+
+        applicati.clear()
+        worker._limit_memory(2048)
+        assert applicati == [2048], "un valore sensato si applica intatto"
+    finally:
+        del sys.modules["resource"]
+        worker.log.removeHandler(ascoltatore)
