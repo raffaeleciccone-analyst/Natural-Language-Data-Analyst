@@ -393,7 +393,21 @@ def report(dataset_id: str, measure: str | None = None,
 
     figure: dict[str, object] = {}
     if insights.get("top") is not None:
-        fig = charts.try_fig(charts.try_chart, insights["top"].data, kind="bar")
+        # La classifica per categoria e' l'unico grafico che il filtro su QUELLA
+        # categoria distrugge: restava una barra sola, larga quanto il pannello,
+        # e una classifica di un elemento non e' una classifica. Si ricalcola sui
+        # dati NON filtrati e si evidenzia la selezione — il confronto con le
+        # altre categorie e' l'informazione, e filtrandolo si perde.
+        #
+        # Gli altri grafici no: l'andamento e la distribuzione DEL sottoinsieme
+        # sono esattamente cio' che si e' chiesto filtrando.
+        classifica, evidenziate = insights["top"], None
+        if filtro and category and filtro.column == category:
+            fuori_filtro = analyze(voce.df, measure, category).get("top")
+            if fuori_filtro is not None:
+                classifica, evidenziate = fuori_filtro, filtro.values
+        fig = charts.try_fig(charts.try_chart, classifica.data, kind="bar",
+                             evidenzia=evidenziate)
         if fig is not None:
             figure["top"] = _figura_json(fig)
     if insights.get("trend") is not None:

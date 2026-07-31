@@ -719,3 +719,80 @@ def test_senza_nulla_da_riassumere_le_due_rotte_si_comportano_diversamente(
     r = client.post(f"/api/dataset/{d['dataset_id']}/executive-report")
     assert r.status_code == 400
     assert "riassumere" in r.json()["detail"]
+
+
+def _categorie_del_grafico(figura) -> list:
+    """
+    Le etichette di una figura a barre, comunque sia orientata.
+
+    `charts.to_chart` sceglie l'orientamento in base alla lunghezza e al numero
+    delle etichette: orizzontale mette le categorie su `y`, verticale su `x`. Un
+    test che ne desse per scontato uno si romperebbe rinominando una colonna.
+    """
+    traccia = figura["data"][0]
+    return list(traccia["y"] if traccia.get("orientation") == "h" else traccia["x"])
+
+
+def test_il_filtro_non_riduce_la_classifica_a_una_barra(client):
+    """
+    Cliccando una barra la pagina si filtra su quella categoria — e il grafico
+    della classifica restava con UNA barra sola, larga quanto il pannello. Una
+    classifica di un elemento non e' una classifica: il confronto con le altre e'
+    l'informazione, e filtrandolo si perde.
+
+    Ora quel grafico si calcola sui dati NON filtrati e la selezione si evidenzia
+    con l'opacita'.
+    """
+    righe = b"".join(f"R{i % 4},{100 + i * 7}\n".encode() for i in range(40))
+    d = client.post("/api/dataset",
+                    files={"file": ("r.csv", b"Regione,Vendite\n" + righe, "text/csv")}).json()
+
+    intere = _categorie_del_grafico(
+        client.get(f"/api/dataset/{d['dataset_id']}/report").json()["figures"]["top"])
+    assert len(intere) == 4, "il dataset ha quattro regioni"
+
+    filtrato = client.get(f"/api/dataset/{d['dataset_id']}/report",
+                          params={"filter_column": "Regione", "filter_values": ["R0"]}).json()
+    top = filtrato["figures"]["top"]
+    assert _categorie_del_grafico(top) == intere, "la classifica conserva tutte le categorie"
+
+    # La selezione si distingue: piena la scelta, attenuate le altre.
+    opacita = top["data"][0]["marker"]["opacity"]
+    assert sorted(opacita) == [0.32, 0.32, 0.32, 1.0]
+    scelta = _categorie_del_grafico(top)[list(opacita).index(1.0)]
+    assert scelta == "R0", "a essere piena dev'essere la barra cliccata"
+
+
+def test_senza_filtro_le_barre_sono_tutte_piene(client, csv_bytes):
+    """L'evidenziazione compare solo quando c'e' una selezione da evidenziare."""
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    top = client.get(f"/api/dataset/{d['dataset_id']}/report").json()["figures"]["top"]
+    assert "opacity" not in top["data"][0].get("marker", {})
+
+
+def test_un_filtro_su_un_ALTRA_colonna_restringe_la_classifica(client):
+    """
+    L'eccezione vale solo per la categoria che il grafico disegna. Filtrando su
+    una colonna diversa la classifica DEVE restringersi: e' la domanda che si e'
+    fatta ("le vendite per regione, ma solo per il segmento X").
+
+    Il dataset e' costruito perche' il segmento S0 esista solo in due regioni su
+    quattro: cosi' la differenza si vede nelle ETICHETTE, senza dover decodificare
+    gli array numerici che Plotly serializza in base64.
+    """
+    righe = b"".join(
+        f"R{i % 4},{'S0' if i % 4 < 2 else 'S1'},{100 + i * 7}\n".encode() for i in range(40))
+    d = client.post("/api/dataset",
+                    files={"file": ("s.csv", b"Regione,Segmento,Vendite\n" + righe,
+                                    "text/csv")}).json()
+
+    intero = client.get(f"/api/dataset/{d['dataset_id']}/report",
+                        params={"category": "Regione"}).json()
+    filtrato = client.get(f"/api/dataset/{d['dataset_id']}/report",
+                          params={"category": "Regione", "filter_column": "Segmento",
+                                  "filter_values": ["S0"]}).json()
+
+    assert sorted(_categorie_del_grafico(intero["figures"]["top"])) == ["R0", "R1", "R2", "R3"]
+    assert sorted(_categorie_del_grafico(filtrato["figures"]["top"])) == ["R0", "R1"]
+    # E nessuna evidenziazione: non c'e' una categoria selezionata da illuminare.
+    assert "opacity" not in filtrato["figures"]["top"]["data"][0].get("marker", {})
