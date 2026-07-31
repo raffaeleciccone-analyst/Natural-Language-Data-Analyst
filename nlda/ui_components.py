@@ -21,6 +21,40 @@ from nlda.utils import IT_NUM_FORMAT, fmt_num
 # (Totale) usa un teal più LUMINOSO, così risalta sugli altri.
 
 
+def senza_backtick(text: str) -> str:
+    """
+    Toglie i backtick che alcuni modelli spargono a caso.
+
+    In Markdown diventano frammenti monospace colorati senza motivo; nel riquadro
+    HTML restano backtick in chiaro. Serve a entrambi i modi di disegnare, ed e'
+    l'unica meta' di `md_safe` che il riquadro vuole.
+    """
+    return text.replace("`", "")
+
+
+def md_safe(text: str) -> str:
+    r"""
+    Testo narrativo pronto per `st.markdown`.
+
+    Oltre ai backtick, neutralizza i `$` della valuta: una COPPIA di `$` e' un
+    delimitatore LaTeX, e Streamlit renderebbe quel tratto come una formula in
+    corsivo con le parole appiccicate.
+
+    ## Perche' vive QUI e non in `nlda/utils.py`
+
+    E' un adattamento al markdown DI STREAMLIT, cioe' presentazione. Stava in un
+    modulo condiviso e veniva chiamato dentro `agent.py`: i `\$` finivano cosi'
+    anche nello stream che legge il frontend React, che non li interpreta e li
+    mostrava in chiaro ("216,36 \$"). Streamlit poi li DISFACEVA per salvare il
+    testo, cioe' un giro d'andata e ritorno di una trasformazione che il backend
+    non avrebbe dovuto fare.
+
+    Ora sta nel modulo che importa Streamlit: chi non lo importa non puo'
+    chiamarlo per sbaglio.
+    """
+    return senza_backtick(text).replace("$", r"\$")
+
+
 def answer_card(label: str, text: str, container=None) -> None:
     """
     Renderizza un testo in un riquadro dedicato (con escaping HTML).

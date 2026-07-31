@@ -44,11 +44,12 @@ from nlda.ui.session import (
 )
 from nlda.ui_components import (
     answer_card,
+    md_safe,
     readout,
     render_linked_charts,
     render_result,
 )
-from nlda.utils import fmt_num, md_safe, with_unit
+from nlda.utils import fmt_num, with_unit
 from nlda.views import join_datasets
 
 
@@ -484,11 +485,30 @@ def _render_turn_streaming(service: AnalysisService, question: str, turn: Turn,
     with st.chat_message("assistant"):
         testo = None
         if explain and isinstance(turn.result, ExecutionSuccess):
-            reso = st.write_stream(service.stream_explanation(question, turn.result, unit))
-            # Lo streaming ha reso i `$` come `\$` per non farli diventare LaTeX; nel
-            # testo CONSERVATO li riporta a `$`, perché il riquadro dello storico
-            # (answer_card) è HTML e mostrerebbe il backslash in chiaro.
-            testo = (str(reso).replace("\\$", "$").strip() or None)
+            # Due destinazioni, due forme. A SCHERMO il markdown di Streamlit vuole
+            # i `$` neutralizzati (una coppia sarebbe un delimitatore LaTeX);
+            # CONSERVATO serve invece il testo del modello com'è, perché il
+            # riquadro dello storico è HTML e un `\$` ci comparirebbe col
+            # backslash in chiaro.
+            #
+            # Prima l'escape lo faceva `agent.py` e qui si DISFACEVA: un giro
+            # d'andata e ritorno di una regola di Streamlit dentro il backend, che
+            # sporcava anche la chat React — lì nessuno lo disfaceva, e l'utente
+            # leggeva "216,36 \$". Ora si accumula il testo vero e si adatta solo
+            # la copia che va sullo schermo.
+            grezzo: list[str] = []
+            # Catturato PRIMA della chiusura: dentro, mypy perde il restringimento
+            # dell'`isinstance` qui sopra, perche' una variabile catturata puo'
+            # cambiare fra la definizione e la chiamata.
+            esito = turn.result
+
+            def per_lo_schermo():
+                for pezzo in service.stream_explanation(question, esito, unit):
+                    grezzo.append(pezzo)
+                    yield md_safe(pezzo)
+
+            st.write_stream(per_lo_schermo())
+            testo = ("".join(grezzo).strip() or None)
         render_result(turn.code, turn.result, explanation=None, kp="live",
                       columns=columns, question=question)
     return replace(turn, explanation=testo)

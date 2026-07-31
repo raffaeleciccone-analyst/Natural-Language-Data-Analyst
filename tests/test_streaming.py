@@ -76,10 +76,21 @@ def test_last_cost_modello_ignoto_e_none():
 
 
 # --- Agente: explain_stream ------------------------------------------------------
-def test_explain_stream_cede_blocchi_e_toglie_i_backtick():
-    agente = DataAgent(provider=_ConStream(["Le vendite ", "valgono `840`."]))
+def test_explain_stream_cede_i_blocchi_senza_toccarli():
+    r"""
+    I blocchi escono come li manda il modello: backtick e `$` compresi.
+
+    Prima venivano ripuliti qui, e quella pulizia — regole del markdown di
+    Streamlit — finiva anche nello stream che legge la chat React, che mostrava
+    "216,36 \$" in chiaro. Ora si adatta al momento di disegnare
+    (`ui_components.md_safe`), una volta per interfaccia.
+    """
+    agente = DataAgent(provider=_ConStream(["Le vendite ", "valgono `840` $."]))
     testo = "".join(agente.explain_stream("quanto?", "totale 840"))
-    assert testo == "Le vendite valgono 840."     # backtick rimossi, blocchi concatenati
+    assert testo == "Le vendite valgono `840` $."
+
+    from nlda.ui_components import md_safe
+    assert md_safe(testo) == r"Le vendite valgono 840 \$."
 
 
 def test_explain_stream_tollera_l_errore():
