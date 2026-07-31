@@ -495,6 +495,22 @@ def date_columns(df: pd.DataFrame) -> list[str]:
             and to_datetime_quiet(df[c]).notna().mean() > 0.8]
 
 
+def date_span_years(df: pd.DataFrame, column: "str | None") -> "float | None":
+    """
+    Quanti anni copre una colonna data. `None` se la colonna manca o è illeggibile.
+
+    Sta qui e non nell'API perché la usano ENTRAMBE le interfacce, e `nlda/ui/`
+    non deve importare da `nlda/api/`: FastAPI è un extra opzionale, e chi
+    installa la sola app Streamlit non ce l'ha.
+    """
+    if not column or column not in df.columns:
+        return None
+    valori = to_datetime_quiet(df[column], dayfirst=True).dropna()
+    if valori.empty:
+        return None
+    return float((valori.max() - valori.min()).days) / 365.25
+
+
 def category_columns(df: pd.DataFrame) -> list:
     """API pubblica: colonne categoriali (di testo) del dataset."""
     return [c for c in df.columns if column_kind(df[c]) == "testo"]

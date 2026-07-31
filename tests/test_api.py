@@ -547,8 +547,41 @@ def test_le_domande_d_esempio_arrivano_dal_backend(client, csv_bytes):
     assert any("Vendite" in q for q in d["example_questions"]), \
         "devono essere costruite sulle colonne di QUESTO dataset"
 
+    from nlda.loader import (
+        NamedBytesIO,
+        date_columns,
+        date_span_years,
+        measure_columns,
+        ordered_measures,
+        read_any,
+    )
     from nlda.suggestions import example_questions
-    assert d["example_questions"] == example_questions("Vendite", "Regione")
+
+    # Il confronto passa dalle STESSE informazioni che l'API ricava dal file:
+    # colonna data e misure. Confrontare con la funzione chiamata a mani vuote
+    # verificherebbe solo che due liste diverse sono diverse.
+    df = read_any(NamedBytesIO(csv_bytes, "v.csv"))
+    colonne_data = date_columns(df)
+    assert d["example_questions"] == example_questions(
+        "Vendite", "Regione",
+        date_column=colonne_data[0] if colonne_data else None,
+        date_span_years=date_span_years(df, colonne_data[0] if colonne_data else None),
+        other_measures=ordered_measures(measure_columns(df)))
+
+
+def test_le_domande_d_esempio_non_ripetono_il_report(client, csv_bytes):
+    """
+    Erano "Mostrami Vendite per Regione", "Quali sono i 5 Regione con piu'
+    Vendite?" e "Qual e' il totale di Vendite?": le prime due sono il grafico
+    della classifica, la terza e' il primo KPI in cima alla pagina. Chi le
+    provava riceveva un numero che aveva gia' sotto gli occhi.
+    """
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    domande = " | ".join(d["example_questions"]).lower()
+    assert "totale di" not in domande, "il totale e' gia' il primo KPI"
+    assert "mostrami vendite per regione" not in domande, "e' gia' il grafico della classifica"
+    # Il dataset ha una colonna data: la domanda sul tempo dev'esserci.
+    assert "in che" in domande
 
 
 def test_config_espone_le_liste_che_il_client_ribatteva(client):

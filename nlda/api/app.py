@@ -87,6 +87,7 @@ from nlda.loader import (
     best_category,
     category_columns,
     date_columns,
+    date_span_years,
     default_unit,
     load_dataset,
     measure_columns,
@@ -293,6 +294,11 @@ def _descrivi(df: pd.DataFrame, dataset_id: str, etichetta: str) -> DatasetRespo
     prof = profile(df)
     misure = ordered_measures(measure_columns(df))
     categorie = category_columns(df)
+    # Data e seconda misura servono alle domande d'esempio, per proporre cio' che
+    # il report NON risponde gia': il massimo nel tempo, il legame fra due misure.
+    date_disponibili = date_columns(df)
+    date_column = date_disponibili[0] if date_disponibili else None
+    span = date_span_years(df, date_column)
     # La percentuale di mancanti si ricalcola dal DataFrame invece di essere
     # estratta da `profile()`, che la restituisce già formattata per la lettura
     # ("0 (0%)"). Un'API deve dare un NUMERO: chi la consuma decide come mostrarlo,
@@ -310,8 +316,12 @@ def _descrivi(df: pd.DataFrame, dataset_id: str, etichetta: str) -> DatasetRespo
         suggested_measure=suggerita,
         suggested_category=best_category(df) if categorie else None,
         suggested_unit=default_unit(suggerita),
+        # Data e seconda misura servono a proporre domande che il report NON
+        # risponde gia': il massimo nel tempo, il legame fra due misure.
         example_questions=example_questions(
-            suggerita, best_category(df) if categorie else None),
+            suggerita, best_category(df) if categorie else None,
+            date_column=date_column, date_span_years=span,
+            other_measures=misure),
     )
 
 
