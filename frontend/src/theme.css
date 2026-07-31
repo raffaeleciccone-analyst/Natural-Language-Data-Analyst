@@ -105,8 +105,11 @@ body {
   min-height: 100vh;
 }
 
-/* Rail chiuso: la colonna sparisce e il contenuto prende tutta la finestra. */
-.impaginazione.rail-chiuso { grid-template-columns: 0 minmax(0, 1fr); }
+/* Rail chiuso: UNA colonna sola, non una da zero piu' una da 1fr.
+   `hidden` toglie l'<aside> dal flusso, quindi non occupa piu' la sua colonna e
+   il <main> scivola nella prima — che con `0 minmax(0,1fr)` era larga zero.
+   L'area di lavoro passava da 2241 px a 88, cioe' la pagina si distruggeva. */
+.impaginazione.rail-chiuso { grid-template-columns: minmax(0, 1fr); }
 
 /* Il comando di apertura sta fuori dal rail, altrimenti si chiuderebbe con lui.
    Segue il bordo del rail e resta al suo posto mentre la pagina scorre.
