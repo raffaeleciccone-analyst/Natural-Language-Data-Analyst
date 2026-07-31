@@ -76,3 +76,42 @@ def test_due_esempi_diversi_non_si_sovrascrivono(client, monkeypatch):
     monkeypatch.setattr("nlda.demo_data.CATALOGO", CATALOGO)
     b = magazzino.impronta(b"__demo__", "films.json")
     assert a["dataset_id"] != b
+
+
+def test_il_dataset_di_esempio_si_legge_una_volta_sola(client, monkeypatch):
+    """
+    Veniva riletto e ri-analizzato da disco a OGNI visita, anche se identico e
+    gia' in memoria: misurato sul deploy, 9,5 secondi per ogni utente che apriva
+    la pagina — piu' di sette volte il report che ne segue.
+    """
+    from nlda.api import app as modulo
+
+    letture: list[str] = []
+    vero = modulo.load_dataset
+
+    def conta(file_name="sales.csv"):
+        letture.append(file_name)
+        return vero(file_name)
+
+    monkeypatch.setattr(modulo, "load_dataset", conta)
+
+    primo = client.post("/api/dataset/demo?nome=sales").json()
+    secondo = client.post("/api/dataset/demo?nome=sales").json()
+
+    assert letture == ["sales.csv"], f"letto {len(letture)} volte invece di una"
+    assert primo["dataset_id"] == secondo["dataset_id"]
+    assert primo["rows"] == secondo["rows"]
+
+
+def test_esempi_diversi_si_leggono_entrambi(client, monkeypatch):
+    """La cache e' per FILE: chiedere l'altro esempio deve leggerlo davvero."""
+    from nlda.api import app as modulo
+
+    letture: list[str] = []
+    vero = modulo.load_dataset
+    monkeypatch.setattr(modulo, "load_dataset",
+                        lambda f="sales.csv": (letture.append(f), vero(f))[1])
+
+    client.post("/api/dataset/demo?nome=sales")
+    client.post("/api/dataset/demo?nome=films")
+    assert letture == ["sales.csv", "films.json"]
