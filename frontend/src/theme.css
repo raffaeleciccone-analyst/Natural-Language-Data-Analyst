@@ -265,7 +265,16 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 14px;
-  grid-auto-rows: 140px;
+  /* Altezza fissa: lo scheletro occupa ESATTAMENTE lo spazio delle card vere,
+     quindi all'arrivo dei numeri nulla si sposta.
+
+     148 e non 140 perche' era MISURATA male: a font massimo il contenuto ne
+     chiede 146, e i 6 che mancavano li toglieva il flex al valore, comprimendone
+     la scatola sotto la riga di testo. Con `overflow: hidden` il risultato era
+     un numero tagliato sopra e sotto — su tutte le card, non solo su quelle con
+     le lettere discendenti. Il valore e' MISURATO nel browser, non stimato: a
+     font massimo il testo resta dentro la sua scatola con un margine di 2 px. */
+  grid-auto-rows: 152px;
 }
 
 .kpi {
@@ -294,10 +303,15 @@ body {
 .kpi .k-valore {
   font-family: var(--mono);
   font-weight: 600;
-  font-size: min(1.9rem, calc(var(--vfs, 14) * 1cqi));
+  font-size: min(1.8rem, calc(var(--vfs, 14) * 1cqi));
   letter-spacing: -0.03em;
   margin-top: 10px;
-  line-height: 1.1;
+  /* 1.3 e non 1.1: sotto ~1.28 la riga e' piu' BASSA dell'area del carattere
+     (ascendenti + discendenti), e `overflow: hidden` — che serve ai puntini di
+     sospensione in orizzontale — taglia i glifi in verticale. */
+  line-height: 1.4;
+  /* Il valore e' l'elemento che conta: se lo spazio manca lo cedono gli altri. */
+  flex: none;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
@@ -978,29 +992,96 @@ button.tenue:hover:not(:disabled) {
   .bolla-etichetta { display: none; }
 }
 
-/* ===== Rail: separazione dei gruppi =========================================
-   Il rail era un elenco continuo di controlli tutti uguali. Le etichette ora
-   dividono in blocchi leggibili, e il primo controllo di ogni blocco non si
-   stacca dalla sua etichetta. */
-.rail h1 { font-size: 0.98rem; }
+/* ===== Rail: gruppi =========================================================
+   Il rail era un elenco continuo di campi identici: per trovare "Categoria"
+   bisognava leggerli tutti. Ora i controlli stanno in gruppi con un titolo, e
+   una riga separa i gruppi — non ogni singolo campo. */
+.rail-testata { margin-bottom: 4px; }
 
-.rail .etichetta { margin-top: 18px; }
-
-.rail .etichetta::before {
-  content: "";
-  display: block;
-  height: 1px;
-  background: var(--rail-line);
-  margin: 0 0 14px;
-  opacity: 0.7;
+.rail h1 {
+  font-size: 0.92rem;
+  line-height: 1.3;
+  max-width: 17ch;   /* "Natural Language" sta su una riga: a 12ch se ne facevano tre */
 }
 
-/* Il primo gruppo non ha bisogno di una riga che lo separi dal titolo. */
-.rail .etichetta:first-of-type::before { display: none; }
+.rail-gruppo { padding: 20px 0 4px; }
 
-/* Dentro i pannelli richiudibili la riga separerebbe controlli gia' raggruppati
-   dal bordo del pannello. */
-details.pannello-rail .etichetta::before { display: none; }
+.rail-gruppo + .rail-gruppo { border-top: 1px solid var(--rail-line); }
+
+.rail-gruppo > h2 {
+  font-family: var(--display);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: #fff;
+  margin: 0 0 12px;
+}
+
+/* Dentro un gruppo l'etichetta e' gia' preceduta dal titolo: le serve meno aria
+   di quanta ne servisse quando doveva separarsi da sola dal campo precedente. */
+.rail-gruppo .etichetta { margin: 16px 0 6px; }
+
+/* Solo l'etichetta ATTACCATA al titolo del gruppo perde il margine. Con
+   `:first-of-type` lo perdeva anche "oppure prova con", che invece segue un
+   pulsante e la sua nota — e ci si appiccicava sopra. */
+.rail-gruppo > h2 + .etichetta { margin-top: 0; }
+
+/* L'azione principale: caricare i PROPRI dati e' il motivo per cui l'app esiste,
+   e prima si leggeva come una delle tre opzioni di prova. */
+.rail button.primario {
+  width: 100%;
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+  font-weight: 600;
+}
+
+.rail button.primario:hover:not(:disabled) { background: var(--deep); border-color: var(--deep); }
+
+.nota-campo {
+  margin: 7px 0 0;
+  font-family: var(--mono);
+  font-size: 0.63rem;
+  letter-spacing: 0.04em;
+  color: var(--rail-soft);
+}
+
+/* Gli esempi: due righe ciascuno — cosa sono e cosa contengono. Il titolo da
+   solo ("Film (box office)") non dice se vale la pena aprirlo. */
+.rail button.esempio-dataset {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 7px;
+  padding: 9px 11px;
+  background: var(--rail2);
+  border: 1px solid var(--rail-line);
+  border-radius: 9px;
+  color: var(--rail-ink);
+  font-family: var(--sans);
+  cursor: pointer;
+}
+
+.rail button.esempio-dataset:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: #232a33;
+}
+
+.rail button.esempio-dataset strong {
+  display: block;
+  font-size: 0.83rem;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.rail button.esempio-dataset span {
+  display: block;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: var(--rail-soft);
+  white-space: normal;
+}
 
 .rail button.secondario {
   width: 100%;
@@ -1013,3 +1094,7 @@ details.pannello-rail .etichetta::before { display: none; }
   border-color: var(--accent);
   color: #fff;
 }
+
+/* I pannelli richiudibili chiudono il rail: senza margine sotto, l'ultimo si
+   appoggia al bordo della finestra. */
+.rail-gruppo details.pannello-rail:first-of-type { margin-top: 0; }
