@@ -19,6 +19,9 @@ import { Tabella } from "./components/Tabella";
 import { Unione } from "./components/Unione";
 import "./theme.css";
 
+/** Larghezza sotto la quale il rail diventa un cassetto. Vedi `theme.css`. */
+const SOGLIA_STRETTA = 820;
+
 /**
  * L'applicazione: il report di un dataset, con i controlli nel rail.
  *
@@ -36,7 +39,14 @@ export default function App() {
   const [errore, setErrore] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<FiltroSpec | null>(null);
   const [motore, setMotore] = useState<Motore>({});
-  const [railAperto, setRailAperto] = useState(true);
+  // Aperto sul desktop, CHIUSO sul telefono: li' e' un cassetto che copre la
+  // pagina, e aprire l'app su un velo scuro con i controlli davanti al contenuto
+  // e' il modo migliore per non far capire cosa fa. La soglia e' la stessa del
+  // CSS; sta in un posto solo perche' due valori che devono coincidere e non
+  // possono verificarsi a vicenda prima o poi divergono.
+  const [railAperto, setRailAperto] = useState(
+    () => !window.matchMedia(`(max-width: ${SOGLIA_STRETTA}px)`).matches,
+  );
   const inputFile = useRef<HTMLInputElement>(null);
 
   // La configurazione si chiede una volta all'avvio: contiene i suggerimenti e le
@@ -50,6 +60,9 @@ export default function App() {
     try {
       const d = await promessa;
       setDataset(d);
+      // Sul telefono il cassetto ha fatto il suo: lasciarlo aperto significa
+      // nascondere dietro un velo il report appena caricato.
+      if (window.matchMedia(`(max-width: ${SOGLIA_STRETTA}px)`).matches) setRailAperto(false);
       setFiltro(null);
       setMisura(d.suggested_measure ?? "");
       setCategoria(d.suggested_category ?? "");
@@ -120,6 +133,19 @@ export default function App() {
       >
         {railAperto ? "‹" : "›"}
       </button>
+
+      {/* Il velo: su un telefono toccare fuori dal cassetto lo chiude, che e'
+          quello che ci si aspetta da un cassetto. E' un <button> e non un <div>
+          perche' e' un comando: cosi' lo raggiunge anche chi naviga da tastiera,
+          e chi usa uno screen reader sente cosa fa. Sul desktop il CSS lo
+          nasconde — li' il rail non copre nulla. */}
+      {railAperto && (
+        <button
+          className="velo-rail"
+          onClick={() => setRailAperto(false)}
+          aria-label="Chiudi i controlli"
+        />
+      )}
 
       <aside className="rail" id="rail" hidden={!railAperto}>
         <div className="rail-testata">
