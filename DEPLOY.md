@@ -47,6 +47,44 @@ pannello web non è rivedibile, non è ripristinabile e non si sa chi l'ha cambi
 - **Il disco è effimero.** Va bene: i dataset caricati vivono già solo in memoria
   (`nlda/api/store.py`), con scadenza a un'ora.
 
+### Tenerla sveglia negli orari che contano
+
+Lo spegnimento si evita mandando traffico, ma **non 24 ore su 24**. L'aritmetica:
+il piano gratuito dà **750 ore-istanza al mese per workspace**, un mese di 31
+giorni ne ha **744**, e un servizio spento non ne consuma. Tenerla sveglia sempre
+significherebbe vivere a sei ore dal tetto — e superarlo sospende *tutti* i
+servizi gratuiti del workspace fino al primo del mese.
+
+Si sveglia quindi solo nella finestra in cui qualcuno la aprirebbe davvero:
+**lunedì-venerdì, 7:00-22:00**. Sono ~330 ore al mese, con un margine largo.
+
+Configurazione su <https://cron-job.org> (gratuito):
+
+| Campo | Valore |
+|---|---|
+| URL | `https://nlda.onrender.com/api/health` |
+| Intervallo | ogni **10 minuti** |
+| Ore | 7-21 |
+| Giorni | lunedì-venerdì |
+| Fuso | Europe/Rome |
+
+Tre dettagli che non sono arbitrari:
+
+- **`/api/health` e non la homepage**: risponde in 0,2 s, non calcola nulla e non
+  tocca la quota delle domande, che conta solo le rotte che chiamano il modello.
+- **10 minuti e non 14**: lo spegnimento scatta a 15 minuti di silenzio, e un
+  ping perso non deve bastare a farla addormentare.
+- **Dalle 7 e non dalle 8**: il risveglio costa un minuto, quindi il primo ping
+  deve arrivare *prima* dell'orario in cui la vuoi già pronta.
+
+**UptimeRobot non va bene per questo**: nel piano gratuito le finestre di
+manutenzione non ci sono, quindi controllerebbe 24/7 — cioè proprio lo scenario
+che l'aritmetica sopra sconsiglia.
+
+Render non dichiara se tenere sveglio un servizio gratuito sia permesso o
+scoraggiato: la documentazione non tocca il punto. Con la finestra oraria si resta
+comunque ampiamente dentro il consumo che il piano prevede.
+
 ### Verificare il container prima di pubblicarlo
 
 Vale la pena farlo in locale: gli errori di deploy sono i più lenti da diagnosticare

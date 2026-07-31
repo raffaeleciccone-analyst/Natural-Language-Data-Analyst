@@ -17,9 +17,11 @@ interpreta i numeri.
 Carica un CSV, oppure parti da uno dei due dataset di esempio. Nessuna
 registrazione, nessuna chiave da inserire.
 
-> Gira sul piano gratuito di Render, che spegne il servizio dopo 15 minuti di
-> inattività: **la prima visita può attendere circa un minuto** l'avvio. Le
-> domande all'AI hanno un tetto giornaliero condiviso — è la chiave del
+> Gira sul piano gratuito di Render. Nei giorni feriali dalle 7 alle 22 resta
+> sveglia; fuori da quella finestra si spegne dopo 15 minuti di inattività e
+> **la prima visita attende circa un minuto** l'avvio
+> ([perché non sempre](DEPLOY.md#tenerla-sveglia-negli-orari-che-contano)).
+> Le domande all'AI hanno un tetto giornaliero condiviso — è la chiave del
 > manutentore a pagarle ([perché](DEPLOY.md#il-tetto-di-spesa)).
 
 <table>
