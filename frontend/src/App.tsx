@@ -93,6 +93,20 @@ export default function App() {
     ...motore,
   };
 
+  // Il report resta quello VECCHIO finché il nuovo non arriva: cambiando dataset
+  // c'è un istante in cui l'id è già del file nuovo e le colonne sono ancora del
+  // precedente. In quell'istante la sintesi partiva davvero — vista nei log come
+  // `overview?measure=Sales&category=Region` su un archivio di film, che quelle
+  // colonne non le ha. Una chiamata al modello sprecata, una prosa costruita su
+  // numeri inesistenti, e nella demo pubblica una domanda scalata dalla quota.
+  //
+  // Si aspetta che le colonne del report esistano DAVVERO in questo dataset.
+  const reportCoerente =
+    report !== null &&
+    dataset !== null &&
+    (!report.measure || dataset.measures.includes(report.measure)) &&
+    (!report.category || dataset.categories.includes(report.category));
+
   return (
     <div className={`impaginazione${railAperto ? "" : " rail-chiuso"}`}>
       {/* Il bottone vive FUORI dal rail: dentro, chiudendolo, sparirebbe insieme
@@ -280,7 +294,7 @@ export default function App() {
               <div>
                 <h2 className="sezione">Report iniziale sui dati</h2>
 
-                {dataset && report && (
+                {dataset && reportCoerente && (
                   <Sintesi datasetId={dataset.dataset_id} opzioni={prosa} />
                 )}
 
@@ -340,7 +354,7 @@ export default function App() {
                   </div>
                 )}
 
-                {dataset && report && (
+                {dataset && reportCoerente && (
                   <ReportEsecutivo datasetId={dataset.dataset_id} opzioni={prosa} />
                 )}
 
