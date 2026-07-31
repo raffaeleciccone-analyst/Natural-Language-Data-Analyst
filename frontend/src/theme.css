@@ -109,10 +109,16 @@ body {
 .impaginazione.rail-chiuso { grid-template-columns: 0 minmax(0, 1fr); }
 
 /* Il comando di apertura sta fuori dal rail, altrimenti si chiuderebbe con lui.
-   Segue il bordo del rail e resta al suo posto mentre la pagina scorre. */
+   Segue il bordo del rail e resta al suo posto mentre la pagina scorre.
+
+   A META' ALTEZZA e non in cima: in cima competeva con il titolo e con
+   l'interruttore del tema, tre elementi in un angolo di 40 px. Al centro del
+   bordo e' l'unica cosa li' — e chi scorre a meta' pagina se lo trova sotto il
+   puntatore invece di dover risalire. */
 .interruttore-rail {
   position: fixed;
-  top: 14px;
+  top: 50%;
+  transform: translateY(-50%);
   left: calc(var(--rail-larghezza) - 13px);
   z-index: 30;
   width: 26px;
@@ -130,7 +136,7 @@ body {
   transition: left 0.18s ease, background 0.18s ease;
 }
 
-.impaginazione.rail-chiuso .interruttore-rail { left: 12px; }
+.impaginazione.rail-chiuso .interruttore-rail { left: 10px; }
 .interruttore-rail:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
 
 .rail-testata {
