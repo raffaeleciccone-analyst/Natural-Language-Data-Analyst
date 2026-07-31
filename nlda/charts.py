@@ -10,6 +10,8 @@ Questo modulo non sa nulla di sandbox ne' di esecuzione: prende dati e
 restituisce figure. La dipendenza va in una direzione sola, da chi esegue a chi
 disegna.
 """
+from collections.abc import Sequence
+
 import pandas as pd
 
 from nlda.log import get_logger
@@ -166,10 +168,22 @@ def _require_plotly():
         raise RuntimeError("Plotly non è installato (pip install plotly).")
 
 
-def to_chart(res, kind: str = "bar"):
+# Barre non selezionate quando una selezione c'e': stesso colore, meno presenza.
+# Non un grigio: l'opacita' conserva il legame visivo fra le barre — restano la
+# stessa serie, una e' solo in primo piano.
+_OPACITA_SPENTA = 0.32
+
+
+def to_chart(res, kind: str = "bar", evidenzia: "Sequence[str] | None" = None):
     """
     Costruisce una figura Plotly a partire da una Series/DataFrame aggregata.
     Usata come fallback quando il modello non produce direttamente una figura.
+
+    `evidenzia` mette in primo piano alcune categorie e attenua le altre, invece
+    di lasciare solo quelle scelte. Serve al filtro della pagina: filtrando su una
+    categoria, il grafico della classifica si riduceva a UNA barra sola, larga
+    quanto il pannello — e una classifica di un elemento non e' una classifica.
+    Il confronto con le altre e' l'informazione, e va conservato.
     """
     _require_plotly()
 
@@ -204,10 +218,18 @@ def to_chart(res, kind: str = "bar"):
         fig = px.bar(data, x=y, y=x, orientation="h", color_discrete_sequence=[_BAR])
     else:
         fig = px.bar(data, x=x, y=y, color_discrete_sequence=[_BAR])
+
+    if evidenzia:
+        scelte = {str(v) for v in evidenzia}
+        # Un'opacita' PER BARRA: `marker.opacity` accetta una sequenza, quindi non
+        # servono due tracce (che sdoppierebbero la legenda e il click).
+        fig.update_traces(marker_opacity=[
+            1.0 if str(v) in scelte else _OPACITA_SPENTA for v in data[x]
+        ])
     return apply_theme(fig)
 
 
-def try_chart(res, kind: str = "bar"):
+def try_chart(res, kind: str = "bar", evidenzia: "Sequence[str] | None" = None):
     """
     Come `to_chart`, ma restituisce None invece di sollevare quando il risultato
     non è graficabile.
@@ -219,7 +241,7 @@ def try_chart(res, kind: str = "bar"):
     `to_chart` di proposito continua a ricevere l'eccezione con la sua diagnosi.
     """
     try:
-        return to_chart(res, kind=kind)
+        return to_chart(res, kind=kind, evidenzia=evidenzia)
     except Exception as e:  # noqa: BLE001 — qualunque motivo: si mostrano i dati
         log.info("Grafico non applicabile al risultato (%s): si mostrano solo i dati.", e)
         return None
