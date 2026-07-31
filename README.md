@@ -12,17 +12,28 @@ interpreta i numeri.
 
 **I numeri li calcola Pandas; l'AI si limita a raccontarli.**
 
+## ▶️ [Prova la demo → nlda.onrender.com](https://nlda.onrender.com)
+
+Carica un CSV, oppure parti da uno dei due dataset di esempio. Nessuna
+registrazione, nessuna chiave da inserire.
+
+> Gira sul piano gratuito di Render, che spegne il servizio dopo 15 minuti di
+> inattività: **la prima visita può attendere circa un minuto** l'avvio. Le
+> domande all'AI hanno un tetto giornaliero condiviso — è la chiave del
+> manutentore a pagarle ([perché](DEPLOY.md#il-tetto-di-spesa)).
+
 <table>
 <tr>
 <td width="50%">
 
-### ▶️ Prova la demo
+### Due interfacce
 
-**[Interfaccia React](https://nlda.onrender.com)** · *da sostituire con l'URL di Render*
+La demo qui sopra è quella **React + FastAPI**, l'interfaccia principale.
 
-**[Interfaccia Streamlit](https://natural-language-data-analyst-v1.streamlit.app/)**
-
-*Due interfacce, un solo backend.*
+Esiste anche una **[versione Streamlit](https://natural-language-data-analyst-v1.streamlit.app/)**
+sullo stesso identico backend: stessi numeri, stesse risposte, meno controllo sul
+rendering. Non è un residuo — è la prova che la stratificazione dichiarata era
+vera ([confronto](#le-due-interfacce)).
 
 </td>
 <td width="50%">
@@ -66,12 +77,14 @@ domanda con la risposta e la tabella che l'ha prodotta.*
 | **Report automatico** | KPI, statistiche, classifiche, andamento nel tempo, correlazioni e distribuzioni — appena carichi un file, senza chiedere nulla. |
 | **Insight automatici** | Quota del leader, crescita di periodo, variazione recente e outlier: **calcolati in Pandas**, non dedotti dall'AI. |
 | **Report esecutivo** | Cinque sezioni pronte da presentare (Summary, Insights, Recommendations, Risks, Next Steps), scaricabili in Markdown. |
-| **Filtro globale** | Restringi l'intera analisi a un sottoinsieme: vale per report, KPI, confronto e domande. Cliccare una barra della classifica lo imposta. |
+| **Filtro globale** | Restringi l'intera analisi a un sottoinsieme: vale per report, KPI, confronto e domande. Cliccare una barra della classifica lo imposta, e la classifica resta intera con quella barra in evidenza. |
 | **Confronto tra periodi** | Una misura per mese, trimestre o anno con la variazione sul periodo precedente — dalla sezione dedicata o chiedendolo a parole. |
 | **Unione di due file** | Carica un secondo dataset e uniscilo al primo su una coppia di chiavi; da lì in poi report e domande valgono sui dati uniti. |
 | **Esporta la conversazione** | Ogni turno in Markdown, **codice Pandas generato compreso**. |
 | **Multi-provider LLM** | Ollama (locale, senza chiave), Groq, Anthropic, OpenAI, Gemini. Gli SDK sono opzionali: si installa solo quello che serve. |
 | **Chiedi al progetto** | Una modalità che risponde sul progetto stesso citando le fonti, con recupero TF-IDF sui documenti del repo. |
+| **Due dataset di esempio** | Vendite (9.800 ordini) e film (3.201 titoli con incassi e voti): domini diversi, per mostrare che il rilevamento di misure, categorie e date non è tarato su un file solo. |
+| **Tema chiaro e scuro** | Parte dalla preferenza di sistema; grafici compresi. |
 
 **Formati**: CSV, Excel (`.xlsx`/`.xls`), JSON. Tipi, date e colonne "misura"
 vengono rilevati da soli, e lo schema reale finisce nel prompt a ogni domanda.
@@ -82,12 +95,18 @@ Lo stesso backend, servito a due frontend diversi. Non è una vetrina: è la pro
 che la stratificazione dichiarata era vera — `nlda/api/app.py` non contiene
 logica, solo traduzione da e verso JSON.
 
-| | **React + FastAPI** | **Streamlit** |
+| | **React + FastAPI** — principale | **Streamlit** — secondaria |
 |---|---|---|
+| Demo | **[nlda.onrender.com](https://nlda.onrender.com)** | [su Streamlit Cloud](https://natural-language-data-analyst-v1.streamlit.app/) |
 | Dove | `frontend/` + `nlda/api/` | `main.py` + `nlda/ui/` |
 | Avvio | `uvicorn nlda.api.app:app` | `streamlit run main.py` |
 | Porta | 8000 | 8501 |
-| Punti forti | controllo pieno del rendering, nessuno scatto della pagina durante il caricamento, risposta in streaming | zero codice di interfaccia, ideale per iterare in fretta |
+| Punti forti | controllo pieno del rendering, nessuno scatto della pagina durante il caricamento, risposta in streaming, tema chiaro/scuro | zero codice di interfaccia, ideale per iterare in fretta |
+
+Perché la seconda resta: **è la verifica del confine**. Finché due frontend
+diversi producono gli stessi numeri chiamando le stesse funzioni, "il backend non
+conosce l'interfaccia" è un fatto verificabile e non una dichiarazione. Il giorno
+in cui divergessero, lo si scoprirebbe aprendo due schede.
 
 Sono avviabili **dalla stessa immagine Docker**: cambia il comando, non
 l'immagine.
