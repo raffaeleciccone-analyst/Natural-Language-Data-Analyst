@@ -166,9 +166,46 @@ jobs:
           print('sandbox ok nel container')
           "
 
-      - name: Log del container se qualcosa è fallito
+      # I controlli sopra avviano il container coi DEFAULT del codice. Il deploy
+      # invece gira con le variabili di `render.yaml`, che finora non leggeva
+      # nessuno: `MEMORY_LIMIT_MB=256` scritto li' faceva morire il worker della
+      # sandbox prima ancora di importare pandas, e ogni domanda della demo
+      # falliva mentre qui era tutto verde perche' valeva il default (1500).
+      #
+      # Il difetto non era nel codice, era in un file che nessun controllo
+      # apriva. Ora si apre.
+      - name: La configurazione del DEPLOY regge una domanda vera
+        run: |
+          pip install --quiet pyyaml
+          python scripts/env_da_blueprint.py > /tmp/deploy.env
+          echo "Variabili prese da render.yaml:"; cat /tmp/deploy.env
+
+          docker run -d --name nlda-deploy --env-file /tmp/deploy.env nlda:ci
+          for _ in $(seq 1 40); do
+            stato=$(docker inspect --format='{{.State.Health.Status}}' nlda-deploy)
+            [ "$stato" != "starting" ] && break
+            sleep 3
+          done
+          echo "HEALTHCHECK: $stato"
+          [ "$stato" = "healthy" ]
+
+          # Una domanda che passa DAVVERO per la sandbox, non un import: e' il
+          # percorso che si rompeva.
+          docker exec nlda-deploy python -c "
+          from nlda.loader import load_dataset
+          from nlda.results import ExecutionSuccess
+          from nlda.sandbox import execute_pandas_code
+          df = load_dataset('sales.csv')
+          esito = execute_pandas_code(\"result = df.groupby('Region')['Sales'].sum()\", df)
+          assert isinstance(esito, ExecutionSuccess), esito
+          print('la sandbox lavora con la configurazione del deploy')
+          "
+
+      - name: Log dei container se qualcosa è fallito
         if: failure()
-        run: docker logs nlda-ci
+        run: |
+          docker logs nlda-ci || true
+          docker logs nlda-deploy || true
 
   frontend:
     name: Frontend (TypeScript)
