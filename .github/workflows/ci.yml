@@ -232,6 +232,12 @@ jobs:
           # Sembra un controllo e non lo e'.
           npm run typecheck
           npx oxlint src
+          # I test dell'interfaccia. Il frontend e' rimasto a lungo senza: i
+          # difetti piu' visibili di questo progetto — la barra laterale che
+          # riduceva il contenuto a 88 px, i KPI tagliati, la sintesi chiesta
+          # con le colonne del dataset precedente — erano tutti qui, e la suite
+          # Python era verde mentre succedevano.
+          npm test
           npm run build
 
       - name: Nessuna vulnerabilita' nelle dipendenze

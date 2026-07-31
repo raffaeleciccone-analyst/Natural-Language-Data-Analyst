@@ -198,6 +198,10 @@ export default function App() {
         onClick={() => setRailAperto((v) => !v)}
         aria-expanded={railAperto}
         aria-controls="rail"
+        // `aria-label` e non solo `title`: quando un pulsante ha del testo
+        // dentro, quello diventa il suo nome accessibile — qui uno screen
+        // reader annunciava "‹", cioe' una parentesi.
+        aria-label={railAperto ? "Nascondi i controlli" : "Mostra i controlli"}
         title={railAperto ? "Nascondi i controlli" : "Mostra i controlli"}
       >
         {railAperto ? "‹" : "›"}
