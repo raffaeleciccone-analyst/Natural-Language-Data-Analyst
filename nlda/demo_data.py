@@ -11,6 +11,11 @@ poi dà 404.
 
 La conseguenza voluta: aggiungere un esempio è mettere il file in `data/` e una
 riga nel catalogo; toglierlo è cancellare il file.
+
+`films.json` è un SOTTOINSIEME della fonte pubblica (vega-datasets), ristretto a
+un decennio: come si ottiene sta in `scripts/prepara_dataset_film.py`, insieme al
+perché. Un file di dati committato senza la ricetta che lo produce è un file che
+nessuno sa piu' rigenerare.
 """
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,7 +56,7 @@ CATALOGO: tuple[DatasetDemo, ...] = (
         nome="films",
         file="films.json",
         etichetta="Film (box office)",
-        descrizione="3.201 film con incassi, budget, genere, regista e voti IMDB.",
+        descrizione="1.830 film usciti dal 2000 al 2009: incassi, budget, genere e voti IMDB.",
     ),
 )
 
