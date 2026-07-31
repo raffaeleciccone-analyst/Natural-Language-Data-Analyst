@@ -54,6 +54,7 @@ import threading
 from pathlib import Path
 
 import nlda
+from nlda._sandbox_worker import PRONTO
 from nlda.log import get_logger
 
 log = get_logger(__name__)
@@ -73,6 +74,35 @@ def radice_progetto() -> str:
 
 def _ambiente(root: str) -> dict:
     return dict(os.environ, PYTHONPATH=root + os.pathsep + os.environ.get("PYTHONPATH", ""))
+
+
+# Quanto si concede a un worker per esistere: importare pandas e plotly. NON e'
+# il budget del codice generato (`EXEC_TIMEOUT`), che parte solo dopo. Generoso
+# perche' su una CPU condivisa quegli import costano molto piu' del secondo
+# scarso che costano su una macchina scarica.
+ATTESA_AVVIO = 90.0
+
+
+def _attendi_pronto(proc: subprocess.Popen, timeout: float) -> bool:
+    """
+    Aspetta il marcatore di prontezza del worker. True se e' arrivato.
+
+    Il byte si legge in un THREAD perche' su Windows non si puo' mettere un
+    timeout su una pipe: senza, un worker che non parte bloccherebbe per sempre
+    chi lo aspetta.
+    """
+    esito: list[bytes] = []
+
+    def leggi() -> None:
+        try:
+            esito.append(proc.stdout.read(1) if proc.stdout else b"")
+        except Exception:  # noqa: BLE001 — pipe chiusa: vale come "non pronto"
+            esito.append(b"")
+
+    lettore = threading.Thread(target=leggi, daemon=True, name="nlda-pronto")
+    lettore.start()
+    lettore.join(timeout)
+    return bool(esito) and esito[0] == PRONTO
 
 
 def _avvia() -> subprocess.Popen:
@@ -97,11 +127,25 @@ class RiservaCalda:
 
     # --- preparazione ---------------------------------------------------------
     def _prepara(self) -> None:
-        """Avvia un worker di riserva. Gira in un thread: non deve far attendere nessuno."""
+        """
+        Avvia un worker di riserva e ne ASPETTA gli import.
+
+        Gira in un thread: nessuno sta aspettando, ed e' esattamente il punto —
+        il tempo degli import si paga qui, dove non e' nel percorso di nessuna
+        domanda. Una riserva messa da parte prima di aver finito di importare non
+        sarebbe pronta, e il costo si ripresenterebbe alla prima richiesta.
+        """
         try:
             proc = _avvia()
         except Exception as e:  # noqa: BLE001 — senza riserva si ripiega sull'avvio diretto
             log.warning("Impossibile preparare un worker di riserva: %s", e)
+            with self._lock:
+                self._in_preparazione = False
+            return
+        if not _attendi_pronto(proc, ATTESA_AVVIO):
+            log.warning("Il worker di riserva non si e' annunciato pronto in %.0fs.",
+                        ATTESA_AVVIO)
+            _termina(proc)
             with self._lock:
                 self._in_preparazione = False
             return
@@ -130,7 +174,16 @@ class RiservaCalda:
             return proc, True
         if proc is not None:                       # riserva morta nel frattempo
             log.info("Worker di riserva non piu' vivo: se ne avvia uno nuovo.")
-        return _avvia(), False
+
+        # Nessuna riserva: si paga l'avvio adesso, ma FUORI dal budget del codice.
+        # Prima questo tempo finiva dentro `EXEC_TIMEOUT` e un'infrastruttura
+        # lenta si presentava all'utente come "codice troppo lento".
+        nuovo = _avvia()
+        if not _attendi_pronto(nuovo, ATTESA_AVVIO):
+            _termina(nuovo)
+            raise RuntimeError(
+                f"Il worker della sandbox non e' partito entro {ATTESA_AVVIO:.0f}s.")
+        return nuovo, False
 
     def esegui(self, payload: bytes, timeout: float) -> tuple[int, bytes, bytes]:
         """

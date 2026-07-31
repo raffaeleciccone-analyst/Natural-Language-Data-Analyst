@@ -15,19 +15,35 @@ import subprocess
 
 import pytest
 
+from nlda._sandbox_worker import PRONTO
 from nlda.sandbox.pool import RiservaCalda, radice_progetto
+
+
+class _PipeFinta:
+    """La `stdout` del processo, per il solo byte di prontezza."""
+
+    def __init__(self, primo: bytes):
+        self._primo = primo
+
+    def read(self, n: int = -1) -> bytes:
+        dato, self._primo = self._primo, b""
+        return dato
 
 
 class _ProcessoFinto:
     """Imita quel tanto di `subprocess.Popen` che la riserva usa."""
 
-    def __init__(self, vivo: bool = True, returncode: int = 0, stdout: bytes = b"{}"):
+    def __init__(self, vivo: bool = True, returncode: int = 0, stdout: bytes = b"{}",
+                 pronto: bytes = PRONTO):
         self.pid = 1234
         self._vivo = vivo
         self.returncode = returncode
         self._stdout = stdout
         self.usato = False
         self.ucciso = False
+        # Il worker vero annuncia di aver finito gli import: qui si imita quello,
+        # perche' la riserva non mette da parte un processo che non l'ha fatto.
+        self.stdout = _PipeFinta(pronto)
 
     def poll(self):
         return None if self._vivo else 1
@@ -65,6 +81,9 @@ def _senza_thread(monkeypatch):
 
         def start(self):
             self._target()
+
+        def join(self, timeout=None):
+            """Gia' eseguito in `start`: non c'e' nulla da attendere."""
 
     monkeypatch.setattr("nlda.sandbox.pool.threading.Thread", _ThreadImmediato)
 
