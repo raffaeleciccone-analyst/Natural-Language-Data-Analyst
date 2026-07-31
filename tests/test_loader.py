@@ -351,3 +351,21 @@ def test_la_firma_e_indipendente_dalla_dimensione(sales_df: pd.DataFrame):
     finally:
         mod.pd.util.hash_pandas_object = originale
     assert chiamate and chiamate[0] <= 2 * mod._RIGHE_CAMPIONE, chiamate
+
+
+def test_con_una_sola_categoria_non_si_dice_che_pesa_il_100_percento():
+    """
+    Filtrando la pagina su una categoria l'insight diventava "East da solo pesa
+    il 100% del totale di Sales": non un'osservazione ma una tautologia, e in
+    cima all'elenco faceva dubitare anche degli altri.
+    """
+    df = pd.DataFrame({"Regione": ["East"] * 10, "Vendite": range(10, 20)})
+    findings = analyze(df, "Vendite", "Regione").get("findings", [])
+    assert not any("100" in f and "pesa" in f for f in findings)
+
+
+def test_con_piu_categorie_la_quota_del_leader_resta():
+    df = pd.DataFrame({"Regione": ["East", "West"] * 10,
+                       "Vendite": [30, 10] * 10})
+    findings = analyze(df, "Vendite", "Regione").get("findings", [])
+    assert any("pesa" in f and "East" in f for f in findings)
