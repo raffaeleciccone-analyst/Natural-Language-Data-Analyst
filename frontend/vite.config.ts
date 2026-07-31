@@ -18,6 +18,7 @@ export default defineConfig({
       "/api": { target: "http://127.0.0.1:8000", changeOrigin: true },
     },
   },
+
   build: {
     outDir: "dist",
     // Niente sourcemap in produzione: erano 11,4 MB dei 16,3 del frontend
