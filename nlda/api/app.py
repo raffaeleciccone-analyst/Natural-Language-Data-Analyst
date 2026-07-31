@@ -29,6 +29,7 @@ Che questo modulo sia corto è la prova che la stratificazione era vera: il lavo
 """
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Annotated, cast
 
@@ -76,6 +77,7 @@ from nlda.api.models import (
 )
 from nlda.api.streaming import trasmetti
 from nlda.config import settings
+from nlda.demo_data import DatasetDemo
 from nlda.demo_data import disponibili as demo_disponibili
 from nlda.demo_data import trova as trova_demo
 from nlda.export import conversation_to_markdown
@@ -348,6 +350,30 @@ async def carica(file: Annotated[UploadFile, File()]) -> DatasetResponse:
     return _descrivi(df, chiave, nome)
 
 
+def _demo_in_memoria(scelto: DatasetDemo) -> tuple[pd.DataFrame, str, str]:
+    """
+    Il dataset di esempio, letto da disco UNA volta sola.
+
+    Prima si rileggeva e ri-analizzava il file a ogni visita, anche se era
+    identico e gia' in memoria: misurato sul deploy, 9,5 secondi per ogni utente
+    che apriva la pagina — piu' di sette volte il report che ne segue. Il file di
+    esempio non cambia, quindi la seconda lettura non poteva dare niente di
+    diverso dalla prima.
+
+    L'impronta include il NOME del file: senza, due esempi diversi finirebbero
+    sulla stessa chiave e il secondo restituirebbe il primo.
+    """
+    chiave = store.impronta(b"__demo__", scelto.file)
+    etichetta = f"Esempio · {scelto.etichetta}"
+    voce = store.magazzino.prendi(chiave)
+    if voce is not None:
+        return voce.df, chiave, etichetta
+
+    df = load_dataset(scelto.file)
+    store.magazzino.aggiungi(chiave, df, etichetta)
+    return df, chiave, etichetta
+
+
 @router.post("/dataset/demo", response_model=DatasetResponse,
              summary="Carica il dataset di esempio")
 def carica_demo(nome: str | None = None) -> DatasetResponse:
@@ -364,13 +390,7 @@ def carica_demo(nome: str | None = None) -> DatasetResponse:
             detail=f"Dataset di esempio '{nome}' non disponibile in questa installazione."
             if nome else "Questa installazione non ha dataset di esempio.")
 
-    df = load_dataset(scelto.file)
-    etichetta = f"Esempio · {scelto.etichetta}"
-    # L'impronta include il NOME: senza, due dataset di esempio diversi
-    # finirebbero sulla stessa chiave e il secondo restituirebbe il primo.
-    chiave = store.impronta(b"__demo__", scelto.file)
-    store.magazzino.aggiungi(chiave, df, etichetta)
-    return _descrivi(df, chiave, etichetta)
+    return _descrivi(*_demo_in_memoria(scelto))
 
 
 # --- Report -------------------------------------------------------------------
@@ -705,6 +725,18 @@ def export(req: ExportRequest) -> ExportResponse:
         markdown=conversation_to_markdown(turni, dataset_label=req.dataset_label))
 
 
+def _scalda_demo() -> None:
+    """Mette in memoria il primo dataset di esempio. Un guasto qui non e' fatale:
+    la rotta lo rileggerebbe da disco, solo piu' lentamente."""
+    try:
+        scelti = demo_disponibili()
+        if scelti:
+            _demo_in_memoria(scelti[0])
+            log.info("demo_preriscaldata", extra={"dataset": scelti[0].nome})
+    except Exception as e:  # noqa: BLE001 — preriscaldamento: mai fatale
+        log.warning("Preriscaldamento del dataset di esempio non riuscito: %s", e)
+
+
 def create_app() -> FastAPI:
     """
     Costruisce l'applicazione. È una funzione e non un modulo-livello perché i test
@@ -734,6 +766,14 @@ def create_app() -> FastAPI:
     # `groupby` da tre righe, e l'errore diceva "codice troppo lento" — accusando
     # il codice di una lentezza che era dell'infrastruttura.
     riserva.prewarm()
+
+    # E il dataset di esempio si legge mentre nessuno guarda. Sul deploy la prima
+    # lettura costa ~20 secondi (0,1 vCPU, 2 MB di CSV da analizzare colonna per
+    # colonna): pagarli qui significa che il primo visitatore trova la pagina
+    # pronta invece di essere lui a pagarli. In un thread, perche' l'avvio non
+    # deve aspettare: chi arriva prima che finisca semplicemente la legge da
+    # disco come faceva prima.
+    threading.Thread(target=_scalda_demo, daemon=True, name="nlda-demo").start()
 
     log.info("api_pronta", extra={"timeout_exec": settings.exec_timeout})
     return app
