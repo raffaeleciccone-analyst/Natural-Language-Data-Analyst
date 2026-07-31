@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import type { Motore, OpzioniProsa } from "./api/client";
 import { messaggioErrore, useRichiesta } from "./api/useRichiesta";
@@ -52,6 +52,26 @@ export default function App() {
   // La configurazione si chiede una volta all'avvio: contiene i suggerimenti e le
   // frequenze, cioe' liste che il backend possiede e che il client ribatteva.
   const { dati: config } = useRichiesta(() => api.config(), []);
+
+  // All'apertura si carica da solo il primo dataset di esempio.
+  //
+  // Prima la pagina si apriva vuota, con una frase e tre pulsanti: chi arriva
+  // non sa ancora cosa fa l'app, e chiedergli di scegliere un file PRIMA di
+  // avergli mostrato qualcosa e' chiedere una decisione senza gli elementi per
+  // prenderla. Ora vede subito un report vero e i pulsanti restano li' per
+  // cambiare dataset o caricare il proprio.
+  //
+  // `dataset === null` nella condizione, non un flag "primo avvio": se l'utente
+  // ha gia' caricato qualcosa questo non deve sovrascriverglielo.
+  const [avviato, setAvviato] = useState(false);
+  useEffect(() => {
+    if (avviato || dataset || caricamento || !config?.demo_datasets?.length) return;
+    setAvviato(true);
+    void accogli(api.caricaEsempio(config.demo_datasets[0].name));
+    // `accogli` e `dataset` cambiano a ogni render: la guardia sopra e' cio' che
+    // impedisce il ciclo, non l'elenco delle dipendenze.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, avviato]);
 
   /** Percorso comune al caricamento di un file e del dataset di esempio. */
   async function accogli(promessa: Promise<DatasetResponse>) {
@@ -270,7 +290,9 @@ export default function App() {
         <p className="sottotitolo-pagina">
           {dataset
             ? `${dataset.label} — ${dataset.rows.toLocaleString("it-IT")} righe · ${dataset.columns} colonne`
-            : "Carica un file per iniziare, oppure usa il dataset di esempio."}
+            : caricamento
+              ? "Preparo il dataset di esempio…"
+              : "Carica un file per iniziare, oppure scegli un dataset di esempio."}
         </p>
 
         {filtro && (
