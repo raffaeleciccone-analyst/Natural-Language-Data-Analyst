@@ -12,26 +12,35 @@
  */
 
 :root {
-  /* Palette (fonte: nlda/ui_theme.py) */
-  --page: #f2f4f6;
-  --surface: #ffffff;
-  --surface2: #f7f9fb;
-  --border: #e4e8ec;
-  --strong: #d5dbe1;
-  --ink: #1b1f24;
-  --ink2: #586471;
-  --muted: #8b97a3;
-  --accent: #0d8a7d;
-  --deep: #0a6b61;
-  --tint: #e3f0ee;
-  --rail: #eef1f4;
-  --rail2: #ffffff;
-  --rail-ink: #1b1f24;
-  --rail-soft: #5c6873;
-  --rail-line: #dde2e8;
-  /* Il rail seguiva il tema della pagina solo a parole: era scuro anche in
-     modalita' chiara, e su uno schermo luminoso era una colonna nera accanto a
-     una pagina bianca. Ora i due temi lo ridefiniscono come tutto il resto. */
+  /* Palette (fonte: nlda/ui_theme.py), CHIARO e SCURO in una dichiarazione sola.
+     Erano due blocchi identici di sedici variabili — uno in `@media
+     (prefers-color-scheme: dark)`, uno in `:root[data-tema="scuro"]` — e bastava
+     cambiarne uno per far divergere l'interruttore manuale dalla preferenza di
+     sistema, senza che niente lo segnalasse.
+
+     `light-dark()` legge `color-scheme`: qui sotto `light dark` significa "segui
+     il sistema", e i due selettori in fondo lo fissano quando l'utente sceglie.
+     Come effetto secondario `color-scheme` sistema anche i controlli nativi —
+     caselle di spunta e barre di scorrimento — che prima andavano dichiarati a
+     parte. */
+  color-scheme: light dark;
+
+  --page: light-dark(#f2f4f6, #14181d);
+  --surface: light-dark(#ffffff, #1b2027);
+  --surface2: light-dark(#f7f9fb, #21272f);
+  --border: light-dark(#e4e8ec, #2b323b);
+  --strong: light-dark(#d5dbe1, #3a434e);
+  --ink: light-dark(#1b1f24, #e2e8ee);
+  --ink2: light-dark(#586471, #9aa6b3);
+  --muted: light-dark(#8b97a3, #75818e);
+  --accent: light-dark(#0d8a7d, #2bb3a3);
+  --deep: light-dark(#0a6b61, #46c9b8);
+  --tint: light-dark(#e3f0ee, #1d3330);
+  --rail: light-dark(#eef1f4, #191d23);
+  --rail2: light-dark(#ffffff, #20262e);
+  --rail-ink: light-dark(#1b1f24, #d6dde4);
+  --rail-soft: light-dark(#5c6873, #8a95a1);
+  --rail-line: light-dark(#dde2e8, #2b323b);
 
   --sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
   --display: "Space Grotesk", system-ui, sans-serif;
@@ -46,59 +55,11 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* ===== Tema scuro ===========================================================
-   Il rail e' scuro in entrambi i temi — e' la sua identita' — quindi qui
-   cambiano solo i colori della PAGINA: sfondo, superfici, testo e bordi. Le
-   variabili del rail restano quelle, e i componenti non sanno che il tema
-   esiste: chiedono `--surface` e ricevono la tinta giusta.
-
-   Due selettori e non uno: `data-tema` e' la scelta esplicita dell'utente e
-   deve vincere sul sistema, in entrambe le direzioni — anche per rimettere il
-   chiaro su un computer configurato in scuro. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-tema="chiaro"]) {
-    --page: #14181d;
-    --surface: #1b2027;
-    --surface2: #21272f;
-    --border: #2b323b;
-    --strong: #3a434e;
-    --ink: #e2e8ee;
-    --ink2: #9aa6b3;
-    --muted: #75818e;
-    --accent: #2bb3a3;
-    --deep: #46c9b8;
-    --tint: #1d3330;
-    --rail: #191d23;
-    --rail2: #20262e;
-    --rail-ink: #d6dde4;
-    --rail-soft: #8a95a1;
-    --rail-line: #2b323b;
-  }
-}
-
-:root[data-tema="scuro"] {
-  --page: #14181d;
-  --surface: #1b2027;
-  --surface2: #21272f;
-  --border: #2b323b;
-  --strong: #3a434e;
-  --ink: #e2e8ee;
-  --ink2: #9aa6b3;
-  --muted: #75818e;
-  --accent: #2bb3a3;
-  --deep: #46c9b8;
-  --tint: #1d3330;
-  --rail: #191d23;
-  --rail2: #20262e;
-  --rail-ink: #d6dde4;
-  --rail-soft: #8a95a1;
-  --rail-line: #2b323b;
-}
-
-/* Dice al browser di che tinta sono i controlli nativi: senza, le caselle di
-   spunta e le barre di scorrimento restano chiare su fondo scuro. */
-:root[data-tema="scuro"] { color-scheme: dark; }
+/* La scelta esplicita dell'utente fissa lo schema; senza attributo si segue il
+   sistema. Vale in ENTRAMBE le direzioni: anche per rimettere il chiaro su un
+   computer configurato in scuro. */
 :root[data-tema="chiaro"] { color-scheme: light; }
+:root[data-tema="scuro"] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 
