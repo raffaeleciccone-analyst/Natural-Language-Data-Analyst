@@ -394,6 +394,28 @@ def carica_demo(nome: str | None = None) -> DatasetResponse:
 
 
 # --- Report -------------------------------------------------------------------
+def _classifica(insights: dict, df_intero: pd.DataFrame, filtro: "FiltroSpec | None",
+                measure: str | None, category: str | None):
+    """
+    L'aggregato della classifica e i valori da evidenziare.
+
+    E' l'unico grafico che il filtro sulla PROPRIA categoria distrugge: restava
+    una barra sola, larga quanto il pannello, e una classifica di un elemento non
+    e' una classifica. Si ricalcola quindi sui dati non filtrati e si evidenzia
+    la selezione — il confronto con le altre categorie e' l'informazione, e
+    filtrandolo si perde.
+
+    Gli altri grafici no: l'andamento e la distribuzione DEL sottoinsieme sono
+    esattamente cio' che si e' chiesto filtrando.
+    """
+    if not (filtro and category and filtro.column == category):
+        return insights["top"], None
+    fuori_filtro = analyze(df_intero, measure, category).get("top")
+    if fuori_filtro is None:
+        return insights["top"], None
+    return fuori_filtro, filtro.values
+
+
 @router.get("/dataset/{dataset_id}/report", response_model=ReportResponse,
             summary="KPI, insight e grafici del report iniziale")
 def report(dataset_id: str, measure: str | None = None,
@@ -412,41 +434,30 @@ def report(dataset_id: str, measure: str | None = None,
     insights = analyze(df, measure, category)
 
     figure: dict[str, object] = {}
+
+    def disegna(nome: str, fn, *args, **kwargs) -> None:
+        """
+        Aggiunge una figura, se si e' potuta costruire.
+
+        `try_fig` fa come Streamlit: una colonna su cui l'istogramma esplode
+        toglie UN grafico, non fa cadere l'intera rotta con un 500. Questo
+        raccoglie quel "se e' venuta" che stava scritto quattro volte.
+        """
+        fig = charts.try_fig(fn, *args, **kwargs)
+        if fig is not None:
+            figure[nome] = _figura_json(fig)
+
     if insights.get("top") is not None:
-        # La classifica per categoria e' l'unico grafico che il filtro su QUELLA
-        # categoria distrugge: restava una barra sola, larga quanto il pannello,
-        # e una classifica di un elemento non e' una classifica. Si ricalcola sui
-        # dati NON filtrati e si evidenzia la selezione — il confronto con le
-        # altre categorie e' l'informazione, e filtrandolo si perde.
-        #
-        # Gli altri grafici no: l'andamento e la distribuzione DEL sottoinsieme
-        # sono esattamente cio' che si e' chiesto filtrando.
-        classifica, evidenziate = insights["top"], None
-        if filtro and category and filtro.column == category:
-            fuori_filtro = analyze(voce.df, measure, category).get("top")
-            if fuori_filtro is not None:
-                classifica, evidenziate = fuori_filtro, filtro.values
-        fig = charts.try_fig(charts.try_chart, classifica.data, kind="bar",
-                             evidenzia=evidenziate)
-        if fig is not None:
-            figure["top"] = _figura_json(fig)
+        classifica, evidenziate = _classifica(insights, voce.df, filtro, measure, category)
+        disegna("top", charts.try_chart, classifica.data, kind="bar", evidenzia=evidenziate)
     if insights.get("trend") is not None:
-        fig = charts.try_fig(charts.try_chart, insights["trend"].data, kind="line")
-        if fig is not None:
-            figure["trend"] = _figura_json(fig)
+        disegna("trend", charts.try_chart, insights["trend"].data, kind="line")
     if measure:
-        # Con `try_fig`, come fa Streamlit: una colonna su cui l'istogramma
-        # esplode toglie un grafico, non fa cadere l'intera rotta con un 500.
-        fig = charts.try_fig(charts.histogram, df, measure)
-        if fig is not None:
-            figure["dist"] = _figura_json(fig)
-    # La mappa di correlazione: il modello dei dati la prometteva gia' e l'API non
-    # la produceva mai, mentre Streamlit la disegna. Compare solo quando `analyze`
-    # trova almeno due misure e righe a sufficienza (vedi loader._correlations).
+        disegna("dist", charts.histogram, df, measure)
+    # La mappa di correlazione compare solo quando `analyze` trova almeno due
+    # misure e righe a sufficienza (vedi `loader._correlations`).
     if insights.get("corr") is not None:
-        fig = charts.try_fig(charts.corr_heatmap, insights["corr"])
-        if fig is not None:
-            figure["corr"] = _figura_json(fig)
+        disegna("corr", charts.corr_heatmap, insights["corr"])
 
     stats = insights.get("numeric_stats")
     return ReportResponse(
