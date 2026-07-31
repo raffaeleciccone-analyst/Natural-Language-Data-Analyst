@@ -116,42 +116,57 @@ export default function App() {
           <Tema />
         </div>
 
-        <span className="etichetta">Dataset</span>
-        <input
-          ref={inputFile}
-          type="file"
-          accept=".csv,.xlsx,.xls,.json"
-          style={{ display: "none" }}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void accogli(api.caricaFile(f));
-          }}
-        />
-        <button
-          className="secondario"
-          onClick={() => inputFile.current?.click()}
-          disabled={caricamento}
-        >
-          Carica un file
-        </button>
-        {/* Un pulsante per dataset: l'elenco arriva da `/config` e riflette i
-            file DAVVERO presenti, quindi non promette un esempio che manca.
-            Con uno solo si legge come prima; con due diventa una scelta. */}
-        {(config?.demo_datasets ?? []).map((d) => (
+        {/* I controlli stanno in GRUPPI: caricare un file e scegliere la misura
+            sono decisioni di natura diversa, e un elenco piatto di campi uguali
+            costringe a leggerli tutti per trovare quello che serve. */}
+        <section className="rail-gruppo">
+          <h2>Dati</h2>
+
+          <input
+            ref={inputFile}
+            type="file"
+            accept=".csv,.xlsx,.xls,.json"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void accogli(api.caricaFile(f));
+            }}
+          />
+          {/* L'azione principale si vede che lo e': prima erano tre pulsanti
+              identici, e "carica i TUOI dati" — il motivo per cui l'app esiste —
+              si leggeva come una delle tre opzioni di prova. */}
           <button
-            key={d.name}
-            className="secondario"
-            style={{ marginTop: 8 }}
-            onClick={() => void accogli(api.caricaEsempio(d.name))}
+            className="primario"
+            onClick={() => inputFile.current?.click()}
             disabled={caricamento}
-            title={d.description}
           >
-            {d.label}
+            Carica un file
           </button>
-        ))}
+          <p className="nota-campo">CSV, Excel o JSON · max 25 MB</p>
+
+          {/* L'elenco arriva da `/config` e riflette i file DAVVERO presenti,
+              quindi non promette un esempio che manca. */}
+          {(config?.demo_datasets ?? []).length > 0 && (
+            <>
+              <span className="etichetta">oppure prova con</span>
+              {(config?.demo_datasets ?? []).map((d) => (
+                <button
+                  key={d.name}
+                  className="esempio-dataset"
+                  onClick={() => void accogli(api.caricaEsempio(d.name))}
+                  disabled={caricamento}
+                >
+                  <strong>{d.label}</strong>
+                  <span>{d.description}</span>
+                </button>
+              ))}
+            </>
+          )}
+        </section>
 
         {dataset && (
-          <>
+          <section className="rail-gruppo">
+            <h2>Report</h2>
             <span className="etichetta">Misura</span>
             <select value={misura} onChange={(e) => setMisura(e.target.value)}>
               {dataset.measures.length === 0 && (
@@ -192,17 +207,22 @@ export default function App() {
               onCambia={setFiltro}
             />
 
-            {/* Stessa `key`: unito un file, il pannello riparte pulito invece
-                di conservare le chiavi del dataset precedente. */}
+          </section>
+        )}
+
+        <section className="rail-gruppo">
+          <h2>Avanzate</h2>
+          {dataset && (
+            /* Stessa `key`: unito un file, il pannello riparte pulito invece di
+               conservare le chiavi del dataset precedente. */
             <Unione
               key={`unione-${dataset.dataset_id}`}
               dataset={dataset}
               onUnito={(nuovo) => void accogli(Promise.resolve(nuovo))}
             />
-          </>
-        )}
-
-        <Modello config={config} motore={motore} onCambia={setMotore} />
+          )}
+          <Modello config={config} motore={motore} onCambia={setMotore} />
+        </section>
       </aside>
 
       <main className="spazio-lavoro">
