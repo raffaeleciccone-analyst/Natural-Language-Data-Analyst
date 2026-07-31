@@ -21,6 +21,8 @@ from nlda.loader import (
     analyze,
     best_category,
     category_columns,
+    date_columns,
+    date_span_years,
     default_unit,
     measure_columns,
     ordered_measures,
@@ -549,7 +551,15 @@ def render_chat(service: AnalysisService, df: pd.DataFrame, limits: DemoLimits,
     # di richiesta funziona, e cliccarne una equivale a scriverla e inviarla.
     if not turns:
         st.caption("Non sai da dove iniziare? Prova una di queste 👇")
-        for j, ex in enumerate(example_questions(sel_measure, sel_category)):
+        # Stesse informazioni che riceve l'API: le due interfacce devono proporre
+        # le stesse domande, non due liste che divergono al primo ritocco.
+        colonne_data = date_columns(df)
+        altre = [m for m in ordered_measures(measure_columns(df)) if m != sel_measure]
+        for j, ex in enumerate(example_questions(
+                sel_measure, sel_category,
+                date_column=colonne_data[0] if colonne_data else None,
+                date_span_years=date_span_years(df, colonne_data[0] if colonne_data else None),
+                other_measures=altre)):
             if st.button(ex, key=f"esempio_{j}", width="stretch"):
                 question = ex
 
