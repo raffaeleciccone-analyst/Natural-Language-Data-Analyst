@@ -25,6 +25,12 @@ import { useTema } from "../useTema";
  */
 const ALTEZZA = 300;
 
+/** Vero se la figura porta annotazioni, che il backend disegna sopra i dati. */
+function haNote(figura: Record<string, unknown>): boolean {
+  const layout = figura.layout as { annotations?: unknown[] } | undefined;
+  return Boolean(layout?.annotations?.length);
+}
+
 /** Colori degli assi in tema scuro: la griglia guida l'occhio, non compete. */
 const ASSE_SCURO = { gridcolor: "#2b323b", linecolor: "#3a434e", zerolinecolor: "#3a434e" };
 
@@ -96,7 +102,13 @@ export function Grafico({
               // L'altezza la comanda il contenitore, non la figura: una figura che
               // porta la propria altezza sposterebbe il layout appena arriva.
               height: ALTEZZA,
-              margin: { l: 55, r: 18, t: 10, b: 45 },
+              // Il margine superiore dipende da cosa c'e' sopra il grafico.
+              // `charts.histogram` scrive le sue note a `y: 1.06`, cioe' FUORI
+              // dall'area dei dati: con 10 px finivano 13 px oltre il bordo
+              // dell'SVG, tagliate via. Le note dicevano quanti record erano
+              // stati esclusi dalla vista — l'informazione che rende onesto un
+              // grafico parziale — e in React non le ha mai lette nessuno.
+              margin: { l: 55, r: 18, t: haNote(figura) ? 34 : 10, b: 45 },
             }}
             config={{
               // Come in Streamlit, che mostra la barra strumenti di Plotly al
