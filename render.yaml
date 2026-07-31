@@ -66,3 +66,16 @@ services:
       # portarsi via l'istanza.
       - key: MEMORY_LIMIT_MB
         value: "256"
+
+      # Il piano gratuito da' 0,1 vCPU condivisa: l'avvio del worker della
+      # sandbox — un interprete che importa pandas e plotly — richiede li' molto
+      # piu' dei 2 secondi misurati in locale, e quel tempo rientra nel budget di
+      # EXEC_TIMEOUT. Col default di 12 s andava in timeout persino `len(df)`,
+      # cioe' un calcolo che non calcola nulla: l'utente leggeva "codice troppo
+      # lento" per un'attesa che il suo codice non aveva causato.
+      #
+      # 60 s e' generoso di proposito: la spesa vera la limita la quota
+      # giornaliera, non questo timeout, e un errore su una domanda legittima
+      # costa piu' di un'attesa lunga su una patologica.
+      - key: EXEC_TIMEOUT
+        value: "60"
