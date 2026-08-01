@@ -9,6 +9,7 @@ import pandas as pd
 from nlda.checks import (
     claimed_missing_columns,
     columns_referenced,
+    hallucination_warning,
     sanity_warnings,
     unknown_columns_referenced,
 )
@@ -120,6 +121,33 @@ def test_nessuna_menzione_esplicita_non_avvisa():
 def test_piu_colonne_inventate_dedup_ordine():
     q = "somma della colonna Fatturato e della colonna Fatturato, più df['Ghost']"
     assert claimed_missing_columns(q, _COLS) == ["Fatturato", "Ghost"]
+
+
+# --- Messaggio anti-allucinazione condiviso con l'API ----------------------------
+def test_avviso_nomina_colonna_inventata_cita_le_colonne_usate():
+    avviso = hallucination_warning(
+        "somma della colonna Fatturato", "df['Sales'].sum()", _COLS)
+    assert avviso is not None
+    assert "«Fatturato»" in avviso and "non è una colonna" in avviso
+    # Deve dire su cosa si è basata davvero la risposta: la trasparenza è l'avviso.
+    assert "Sales" in avviso
+
+
+def test_avviso_plurale_quando_piu_colonne_inventate():
+    avviso = hallucination_warning(
+        "df['Ghost'] e la colonna Fantasma", "df['Region'].size", _COLS)
+    assert avviso is not None and "non sono colonne" in avviso
+
+
+def test_nessun_avviso_quando_la_domanda_e_pulita():
+    # Nessuna colonna inventata: nessun avviso (None, non stringa vuota).
+    assert hallucination_warning("vendite per regione", "df.groupby('Region')", _COLS) is None
+
+
+def test_nessun_avviso_sui_nomi_concetto_nudi():
+    # 'profitto' è un concetto, non una colonna nominata: l'avviso resta ad alta
+    # precisione e NON scatta (distinguere concetto da colonna assente è semantico).
+    assert hallucination_warning("qual è il profitto totale?", "df['Sales'].sum()", _COLS) is None
 
 
 # --- Sanity check: scattano solo quando devono -----------------------------------
