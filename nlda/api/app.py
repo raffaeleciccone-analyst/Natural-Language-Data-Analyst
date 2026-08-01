@@ -494,11 +494,21 @@ def _risposta(turn: Turn, colonne, *, includi_spiegazione: bool = True) -> dict:
     tipo di divergenza che si nota solo quando un client ne usa una e si aspetta
     l'altra.
     """
+    # Avviso anti-allucinazione: se la domanda nomina una colonna inesistente, il
+    # modello tende a sostituirla in silenzio con una reale e a spacciarla per quella
+    # chiesta. Si calcola PRIMA del bivio successo/fallimento perché vale in entrambi:
+    # la colonna sostituita può far riuscire il codice tanto quanto farlo fallire. È
+    # lo stesso avviso che l'app Streamlit mostra — ora prodotto una volta sola, in
+    # `checks`, così le due interfacce non possono divergere.
+    allucinazione = checks.hallucination_warning(turn.question, turn.code, colonne)
+    avvisi_domanda = [allucinazione] if allucinazione else []
+
     if not isinstance(turn.result, ExecutionSuccess):
         return AskResponse(ok=False, question=turn.question, code=turn.code,
                            failure_kind=turn.result.kind,
                            message=turn.result.message,
-                           advice=advice_for(turn.result.kind)).model_dump()
+                           advice=advice_for(turn.result.kind),
+                           warnings=avvisi_domanda).model_dump()
 
     valore, tipo = _valore_serializzabile(turn.result.value)
     return AskResponse(
@@ -507,7 +517,7 @@ def _risposta(turn: Turn, colonne, *, includi_spiegazione: bool = True) -> dict:
         value=valore, value_kind=tipo,
         figure=_figura_json(turn.result.fig) if turn.result.fig is not None else None,
         columns_used=checks.columns_referenced(turn.code, colonne),
-        warnings=checks.sanity_warnings(turn.result.value),
+        warnings=avvisi_domanda + checks.sanity_warnings(turn.result.value),
     ).model_dump()
 
 
