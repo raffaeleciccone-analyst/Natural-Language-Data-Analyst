@@ -27,6 +27,10 @@ jobs:
   verifica:
     name: La demo risponde
     runs-on: ubuntu-latest
+    # Il caso peggiore dello script e' circa 11 minuti (7 di risveglio piu' 4 di
+    # domanda). Il tetto serve a chi resta appeso oltre: meglio un fallimento in
+    # 20 minuti che un job fermo a consumare minuti di Actions.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
