@@ -30,6 +30,31 @@ def test_non_confonde_id_con_date():
     assert not pd.api.types.is_datetime64_any_dtype(out["codice"])
 
 
+def test_importo_europeo_non_diventa_una_data():
+    # Regressione: '1234,56' (decimale all'europea) veniva letto come l'anno 1234,
+    # trasformando il fatturato in una colonna di date. I numeri nudi vanno esclusi
+    # dal rilevamento date, anche quando il nome della colonna è un indizio ('anno'
+    # non c'entra: qui il nome NON è un indizio, ma la difesa deve valere comunque).
+    df = pd.DataFrame({"Fatturato": ["1234,56", "2345,67", "987,65", "1500,00"]})
+    out = _maybe_parse_dates(df.copy())
+    assert not pd.api.types.is_datetime64_any_dtype(out["Fatturato"])
+
+
+def test_importo_europeo_non_diventa_data_neanche_con_nome_suggestivo():
+    # Il nome 'periodo' è un indizio di data (soglia più bassa, 50%), ma valori tutti
+    # numerici restano numeri: l'indizio nel nome non deve vincere sui dati.
+    df = pd.DataFrame({"periodo": ["1234,56", "2345,67", "987,65"]})
+    out = _maybe_parse_dates(df.copy())
+    assert not pd.api.types.is_datetime64_any_dtype(out["periodo"])
+
+
+def test_date_vere_con_separatori_restano_date():
+    # La guardia sui numeri non deve toccare le date con separatori.
+    df = pd.DataFrame({"quando": ["2023-01-01", "2023-02-01", "2023-03-01"]})
+    out = _maybe_parse_dates(df.copy())
+    assert pd.api.types.is_datetime64_any_dtype(out["quando"])
+
+
 def test_measure_columns_esclude_identificatori():
     # Sales con valori ripetuti (una misura reale non è quasi-tutta distinta),
     # Customer ID sequenziale (chiave), Year costante (dimensione temporale).

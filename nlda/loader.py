@@ -31,12 +31,25 @@ class Grouped(NamedTuple):
 
 _DATE_HINT = re.compile(r'(date|data|time|giorno|mese|anno|timestamp|periodo|scadenza)', re.I)
 
+# Un numero 'nudo': intero o decimale, senza NESSUN separatore di data. È il tipo di
+# valore che pandas legge come un ANNO ('1234' -> 1234-01-01, '1234,56' -> 1234-01-01),
+# trasformando in silenzio una colonna di importi in una colonna di anni fasulli. Le
+# date vere portano separatori ('/', '-', ':') o nomi di mese; questa forma non li ha.
+_NUMERO_NUDO = re.compile(r"-?\d+(?:[.,]\d+)?")
+
 
 def _maybe_parse_dates(df: pd.DataFrame) -> pd.DataFrame:
     """
     Converte in datetime le colonne testuali che sembrano date, a prescindere dal
     nome: se il nome contiene un indizio ('date/data/time/...') basta che ≥50% dei
     valori sia parsabile; altrimenti serve ≥90% (evita falsi positivi su ID/codici).
+
+    Prima del parsing c'è una guardia contro i NUMERI: un CSV europeo scrive gli
+    importi con la virgola decimale ('1234,56'), e `to_datetime` li accetta leggendo
+    la parte intera come un anno. Senza questa guardia il fatturato diventava una
+    colonna di date (l'anno 1234) e ci si costruiva persino un grafico temporale. Se
+    la maggioranza del campione è un numero nudo, la colonna è numerica: la si lascia
+    a `_maybe_parse_numbers`, che sa leggere i separatori europei.
     """
     for col in df.columns:
         s = df[col]
@@ -44,6 +57,10 @@ def _maybe_parse_dates(df: pd.DataFrame) -> pd.DataFrame:
             continue
         sample = s.dropna()
         if sample.empty:
+            continue
+        # I numeri nudi non sono date: una colonna fatta in prevalenza di essi va
+        # esclusa PRIMA del parsing, altrimenti '1234,56' diventa l'anno 1234.
+        if sample.astype(str).str.strip().str.fullmatch(_NUMERO_NUDO).mean() >= 0.5:
             continue
         try:
             parsed = to_datetime_quiet(sample, dayfirst=True)
