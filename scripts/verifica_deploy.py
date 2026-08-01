@@ -36,7 +36,14 @@ URL_PREDEFINITO = "https://nlda.onrender.com"
 
 # Generoso di proposito: sul piano gratuito il servizio si spegne dopo 15 minuti
 # di inattività e la prima richiesta aspetta l'avvio del container.
-ATTESA_RISVEGLIO = 180
+#
+# Il risveglio è a tentativi e non a singola attesa lunga perché mentre il
+# container parte Render non tiene la connessione aperta in silenzio: la chiude,
+# o risponde 502/503 dal suo proxy. Un solo tentativo da tre minuti si arrende
+# alla prima di queste — ed è già successo, il 1º agosto 2026.
+BUDGET_RISVEGLIO = 420
+ATTESA_TENTATIVO = 60
+PAUSA_TENTATIVI = 5
 ATTESA_DOMANDA = 240
 
 
@@ -63,6 +70,27 @@ def _chiama(url: str, corpo: dict | None = None, timeout: int = 60) -> tuple[dic
         raise Fallito(f"{url} non raggiungibile: {e}") from e
 
 
+def _sveglia(url: str) -> tuple[dict, float, int]:
+    """Insiste finché il servizio non risponde. Restituisce (json, secondi, tentativi).
+
+    Solleva `Fallito` con l'ultima causa se il budget finisce: a quel punto non è
+    più un container che parte piano, è una demo giù.
+    """
+    inizio = time.perf_counter()
+    for tentativo in range(1, 1_000):
+        try:
+            salute, _ = _chiama(url, timeout=ATTESA_TENTATIVO)
+            return salute, time.perf_counter() - inizio, tentativo
+        except Fallito as e:
+            trascorso = time.perf_counter() - inizio
+            if trascorso + ATTESA_TENTATIVO > BUDGET_RISVEGLIO:
+                raise Fallito(f"{e} — non si è svegliato in {trascorso:.0f}s "
+                              f"({tentativo} tentativi)") from None
+            _riga("··", f"tentativo {tentativo} a vuoto dopo {trascorso:.0f}s, riprovo")
+            time.sleep(PAUSA_TENTATIVI)
+    raise AssertionError("irraggiungibile: il budget scade molto prima")  # pragma: no cover
+
+
 def _riga(esito: str, testo: str, secondi: float | None = None) -> None:
     tempo = f"  ({secondi:.1f}s)" if secondi is not None else ""
     print(f"  {esito}  {testo}{tempo}")
@@ -73,11 +101,11 @@ def verifica(base: str, con_modello: bool) -> list[str]:
     problemi: list[str] = []
 
     # 1. È vivo (e possibilmente si sta svegliando).
-    salute, t = _chiama(f"{base}/api/health", timeout=ATTESA_RISVEGLIO)
+    salute, t, tentativi = _sveglia(f"{base}/api/health")
     if salute.get("status") != "ok":
         problemi.append(f"/api/health non dice ok: {salute}")
     _riga("OK", "il servizio risponde", t)
-    if t > 20:
+    if t > 20 or tentativi > 1:
         _riga("··", "era spento: la prima visita di un utente aspetta altrettanto")
 
     # 2. La configurazione è quella che ci si aspetta da una demo pubblica.
