@@ -17,7 +17,7 @@
 # Il build di Vite avviene QUI e non sulla macchina di chi costruisce: cosi'
 # l'immagine non dipende da quale Node abbia in locale, e `dist/` non va
 # committato. Node serve solo a compilare — nell'immagine finale non entra.
-FROM node:24-slim AS frontend
+FROM node:25-slim AS frontend
 
 WORKDIR /fe
 # Prima solo i manifest: se non cambiano, Docker riusa il livello con le
