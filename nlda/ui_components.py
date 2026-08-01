@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 
 from nlda.charts import to_chart
-from nlda.checks import claimed_missing_columns, columns_referenced, sanity_warnings
+from nlda.checks import columns_referenced, hallucination_warning, sanity_warnings
 from nlda.loader import monthly_trend
 from nlda.results import EXECUTED_OK, ExecutionFailure, ExecutionResult
 from nlda.utils import IT_NUM_FORMAT, fmt_num
@@ -201,15 +201,13 @@ def render_result(code: str, result: ExecutionResult,
     # 0. Avviso anti-allucinazione, PRIMA della risposta: se la domanda nomina
     # esplicitamente una colonna inesistente, il modello tende a sostituirla in
     # silenzio con una reale e a spacciarla per quella chiesta. Lo si dice qui, in
-    # chiaro, non lo si nasconde nel pannello del codice.
+    # chiaro, non lo si nasconde nel pannello del codice. Il messaggio lo compone
+    # `checks.hallucination_warning`, lo stesso che usa l'API: una sola voce per le
+    # due interfacce.
     if columns is not None and question:
-        inventate = claimed_missing_columns(question, columns)
-        if inventate:
-            etichetta = ", ".join(f"«{c}»" for c in inventate)
-            verbo = "non è una colonna" if len(inventate) == 1 else "non sono colonne"
-            base = columns_referenced(code, columns)
-            suffisso = f" La risposta si basa su: {', '.join(base)}." if base else ""
-            st.warning(f"⚠️ {etichetta} {verbo} del dataset.{suffisso}")
+        avviso = hallucination_warning(question, code, columns)
+        if avviso:
+            st.warning(f"⚠️ {avviso}")
 
     # 1. Risposta testuale (in un riquadro dedicato)
     if explanation:

@@ -160,6 +160,54 @@ def test_ask_riuscita(client, csv_bytes, monkeypatch):
     assert "Vendite" in j["columns_used"], "le colonne toccate fanno parte della risposta"
 
 
+def test_avviso_anti_allucinazione_arriva_al_client(client, csv_bytes, monkeypatch):
+    """
+    Se la domanda nomina una colonna inesistente e il modello ripiega su una reale,
+    l'API deve dirlo nei `warnings` — la stessa protezione che Streamlit aveva e che
+    la demo React non riceveva. La colonna «Fatturato» non esiste; il codice usa
+    Vendite: l'avviso va emesso e deve citare la colonna su cui ci si è basati.
+    """
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    _finto_servizio(monkeypatch, Turn(
+        question="qual è il totale della colonna Fatturato?",
+        code="risultato = df['Vendite'].sum()",
+        result=ExecutionSuccess(fig=None, value=700, summary="700"),
+        explanation="Il totale è 700."))
+
+    j = client.post("/api/ask", json={"dataset_id": d["dataset_id"],
+                                      "question": "qual è il totale della colonna Fatturato?"}).json()
+    assert j["ok"] is True
+    assert any("«Fatturato»" in a for a in j["warnings"]), j["warnings"]
+    assert any("Vendite" in a for a in j["warnings"])
+
+
+def test_avviso_anti_allucinazione_anche_quando_il_codice_fallisce(client, csv_bytes, monkeypatch):
+    """L'avviso vale anche in caso di fallimento: la colonna sostituita può far
+    fallire il codice tanto quanto farlo riuscire, e l'utente deve saperlo comunque."""
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    _finto_servizio(monkeypatch, Turn(
+        question="somma della colonna Sconto",
+        code="risultato = df['Sconto'].sum()",
+        result=ExecutionFailure("runtime", "colonna 'Sconto' non presente")))
+
+    j = client.post("/api/ask", json={"dataset_id": d["dataset_id"],
+                                      "question": "somma della colonna Sconto"}).json()
+    assert j["ok"] is False
+    assert any("«Sconto»" in a for a in j["warnings"]), j["warnings"]
+
+
+def test_domanda_pulita_non_produce_avvisi(client, csv_bytes, monkeypatch):
+    """Nessuna colonna inventata: `warnings` resta vuoto (niente falsi allarmi)."""
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    _finto_servizio(monkeypatch, Turn(
+        question="totale delle vendite", code="risultato = df['Vendite'].sum()",
+        result=ExecutionSuccess(fig=None, value=700, summary="700")))
+
+    j = client.post("/api/ask", json={"dataset_id": d["dataset_id"],
+                                      "question": "totale delle vendite"}).json()
+    assert j["warnings"] == []
+
+
 def test_un_fallimento_non_e_un_errore_http(client, csv_bytes, monkeypatch):
     """
     Un codice rifiutato dalla sandbox e' un ESITO, non un guasto del servizio:

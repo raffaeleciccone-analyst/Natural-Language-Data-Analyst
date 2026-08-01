@@ -118,6 +118,31 @@ def claimed_missing_columns(question: str, columns) -> list[str]:
     return fuori
 
 
+def hallucination_warning(question: str, code: str, columns) -> str | None:
+    """
+    L'avviso da mostrare quando la DOMANDA nomina una colonna che non esiste.
+
+    Compone il messaggio in un posto solo, perché lo usano DUE interfacce: l'app
+    Streamlit e l'API (quindi il frontend React). Prima il testo viveva dentro
+    `ui_components`, e l'API non lo produceva affatto: la demo React restava senza
+    l'avviso anti-allucinazione anche quando Streamlit lo mostrava — la stessa
+    domanda giudicata in due modi a seconda dell'interfaccia. Tenerlo qui, come
+    stringa pura senza icone né Markdown, garantisce che le due lo diano identico e
+    che ciascuna lo presenti a modo suo.
+
+    Restituisce `None` quando non c'è nulla da segnalare (il caso normale), così chi
+    chiama distingue "nessun avviso" da "avviso" senza controllare una lista vuota.
+    """
+    inventate = claimed_missing_columns(question, columns)
+    if not inventate:
+        return None
+    etichetta = ", ".join(f"«{c}»" for c in inventate)
+    verbo = "non è una colonna" if len(inventate) == 1 else "non sono colonne"
+    base = columns_referenced(code, columns)
+    suffisso = f" La risposta si basa su: {', '.join(base)}." if base else ""
+    return f"{etichetta} {verbo} del dataset.{suffisso}"
+
+
 def sanity_warnings(value) -> list[str]:
     """
     Segnali deterministici che un risultato è sospetto. Volutamente pochi e ad alta
