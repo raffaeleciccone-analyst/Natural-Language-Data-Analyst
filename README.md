@@ -387,6 +387,7 @@ I parametri di runtime sono centralizzati in `nlda/config.py`:
 | `ALLOW_INPROCESS_FALLBACK` | `false` = fallisci chiuso invece di degradare la sandbox |
 | `LLM_REQUEST_TIMEOUT`, `LLM_MAX_RETRIES` | timeout e ritentativi verso il provider |
 | `MAX_ROWS`, `MAX_COLUMNS` | limiti sul file caricato: soglie di *usabilità*, non di memoria |
+| `MAX_STORE_RAM_MB` | quanta RAM possono occupare insieme i dataset tenuti in memoria dall'API; oltre, si sfratta il meno usato di recente. Si tara sul **container**, non sulla macchina |
 | `LOG_LEVEL`, `LOG_FORMAT` | `json` emette una riga strutturata per evento, con `turn_id`, latenza, token e costo stimato |
 | `PROVIDER`, `MODEL` | quale modello usare quando il client non lo specifica |
 | `DEMO_MODE`, `DEMO_MAX_QUESTIONS`, `DEMO_MAX_DAILY` | quota della demo pubblica (vedi [DEPLOY.md](DEPLOY.md)) |
