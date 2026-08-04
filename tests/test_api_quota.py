@@ -46,6 +46,12 @@ def _domanda(client, dataset_id: str, **kwargs):
                        **kwargs)
 
 
+def _domanda_in_streaming(client, dataset_id: str, **kwargs):
+    """La stessa domanda dalla rotta che la chat React usa DAVVERO."""
+    return client.post("/api/ask/stream",
+                       json={"dataset_id": dataset_id, "question": "totale?"}, **kwargs)
+
+
 @pytest.fixture
 def dataset(client, csv_bytes, monkeypatch):
     """Un dataset caricato e un agente finto: nessuna rete verso un modello."""
@@ -68,6 +74,32 @@ def test_esaurita_la_quota_personale_si_riceve_429(client, dataset, monkeypatch)
     r = _domanda(client, dataset)
     assert r.status_code == 429
     assert "limite della demo" in r.json()["detail"]
+
+
+def test_anche_la_domanda_in_streaming_scala_la_quota(client, dataset, monkeypatch):
+    """
+    E' LA rotta della demo: la chat React chiama solo `/ask/stream` (`Chat.tsx`).
+    Finche' il tetto valeva sulla sola `/ask`, la demo pubblica spendeva il
+    credito del manutentore senza che nulla lo contasse — un tetto che non copre
+    la strada percorsa non e' un tetto.
+    """
+    q = _con_quota(monkeypatch, max_questions=1, max_daily=100)
+
+    assert _domanda_in_streaming(client, dataset).status_code == 200
+    assert q.usate_oggi == 1, "la domanda in streaming deve essere contata"
+
+    r = _domanda_in_streaming(client, dataset)
+    assert r.status_code == 429
+    assert "limite della demo" in r.json()["detail"]
+
+
+def test_i_due_modi_di_chiedere_spendono_lo_stesso_budget(client, dataset, monkeypatch):
+    """Un solo credito, non uno per rotta: alternarle non deve raddoppiarlo."""
+    _con_quota(monkeypatch, max_questions=2, max_daily=100)
+
+    assert _domanda(client, dataset).status_code == 200
+    assert _domanda_in_streaming(client, dataset).status_code == 200
+    assert _domanda(client, dataset).status_code == 429
 
 
 def test_il_tetto_giornaliero_vale_su_tutti_i_visitatori(client, dataset, monkeypatch):

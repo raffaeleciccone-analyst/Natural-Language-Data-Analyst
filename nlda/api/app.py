@@ -579,8 +579,13 @@ def ask_stream(req: AskRequest, request: Request,
     Il RISULTATO arriva prima della spiegazione, quindi tabella e grafico
     compaiono appena esistono invece di aspettare la prosa — che e' la parte
     lenta. Dettagli del protocollo in `nlda.api.streaming`.
+
+    La quota si scala QUI, nel corpo della rotta, non dentro il generatore: un
+    429 deve essere una risposta HTTP con il suo messaggio, non un evento
+    `error` dentro un flusso gia' aperto con stato 200.
     """
     voce = _dataset(req.dataset_id)
+    _consuma_quota(request, x_api_key)
     df, _ = _filtrato(voce.df, req.filtro)
     service = AnalysisService(_agente(req.provider, req.model, x_api_key))
 
