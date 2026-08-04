@@ -768,11 +768,23 @@ L'immutabilità la rende un valore prevedibile e sicuro da leggere.
 | `ALLOW_INPROCESS_FALLBACK` | true | fallback in-process se il subprocess non parte |
 | `MAX_ROWS` | 2.000.000 | tetto di **usabilità** sul file caricato |
 | `MAX_COLUMNS` | 500 | idem |
+| `MAX_STORE_RAM_MB` | 256 | tetto di RAM sui dataset che l'API tiene in memoria |
 | `LLM_REQUEST_TIMEOUT` | 30.0 | timeout singola chiamata LLM |
 | `LLM_MAX_RETRIES` | 1 | tentativi extra oltre al primo |
 | `LLM_RETRY_BACKOFF` | 0.8 | base del backoff esponenziale |
 | `LOG_LEVEL` | INFO | verbosità |
 | `LOG_FORMAT` | text | `text` per sviluppo, `json` per produzione |
+
+**`MAX_STORE_RAM_MB` è il limite di memoria, e sta altrove per un motivo.** `MAX_ROWS`
+governa *un* file; questo governa la *somma* dei dataset che l'API tiene fra una
+richiesta e l'altra. Il magazzino aveva già un tetto sul **numero** di tabelle (8),
+che non è un tetto di RAM: otto file entro `MAX_ROWS` fanno 2,7 GB, più del container
+da 2 GB e cinque volte i 512 MB del piano su cui gira la demo. Ora si contano i byte
+(`memory_usage(deep=True)`, misurato una volta per caricamento) e si sfratta il meno
+usato di recente. Un singolo dataset più grande del tetto **si tiene** — buttarlo
+lascerebbe l'utente senza il file appena caricato, e la RAM sarebbe occupata comunque
+— ma emette un `magazzino_oltre_il_tetto` nei log: un tetto tarato male si deve poter
+vedere.
 
 **`MAX_ROWS` non è un limite di memoria, ed è dichiarato.** Il commento nel codice
 lo dice: 3 milioni di righe costano ~340 MB di picco, dentro i 2 GB del container.

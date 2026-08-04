@@ -9,6 +9,7 @@ progetto piu' facile da rompere per distrazione.
 """
 import io
 import json
+import logging
 from unittest.mock import MagicMock
 
 import pandas as pd
@@ -353,6 +354,77 @@ def test_il_magazzino_sfratta_il_meno_usato():
     assert len(m) == 2
     assert m.prendi("k0") is None, "il piu' vecchio e' stato sfrattato"
     assert m.prendi("k2") is not None
+
+
+def _tabella(mega: float) -> pd.DataFrame:
+    """Una tabella di circa `mega` MB: 8 byte a riga, una colonna di interi."""
+    return pd.DataFrame({"a": range(int(mega * 1024 * 1024 / 8))})
+
+
+def test_il_magazzino_sfratta_anche_quando_e_la_RAM_a_finire():
+    """
+    Il tetto sul NUMERO di tabelle non e' un tetto di memoria: otto dataset entro
+    i limiti del caricatore stanno in otto, ma non in 2 GB. Qui la capienza e'
+    larga apposta — a sfrattare deve essere il conto dei byte.
+    """
+    m = store.MagazzinoDataset(capienza=100, ram_mb=4)
+    for i in range(4):
+        m.aggiungi(f"k{i}", _tabella(1.5), f"f{i}")
+    assert m.byte_totali() <= 4 * 1024 * 1024
+    assert m.prendi("k0") is None and m.prendi("k1") is None
+    assert m.prendi("k3") is not None, "l'ultima caricata deve restare"
+
+
+def test_lo_sfratto_per_memoria_segue_l_uso_non_l_ordine_di_arrivo():
+    m = store.MagazzinoDataset(capienza=100, ram_mb=4)
+    m.aggiungi("vecchia", _tabella(1.5), "a")
+    m.aggiungi("mezzo", _tabella(1.5), "b")
+    m.prendi("vecchia")             # rinfresca: ora la meno usata e' "mezzo"
+    m.aggiungi("nuova", _tabella(1.5), "c")
+    assert m.prendi("mezzo") is None
+    assert m.prendi("vecchia") is not None
+
+
+def test_la_lru_non_dipende_dalla_risoluzione_dell_orologio(monkeypatch):
+    """
+    Orologio fermo = due usi dentro lo stesso scatto, che su Windows dura ~15 ms.
+    Chi e' stato usato per ultimo si sa lo stesso, perche' l'ordine e' contato e
+    non cronometrato: qui la vittima giusta e' `k1`, mai toccata dopo l'arrivo.
+    """
+    monkeypatch.setattr(store.time, "monotonic", lambda: 1000.0)
+    m = store.MagazzinoDataset(capienza=2)
+    m.aggiungi("k0", pd.DataFrame({"a": [0]}), "f0")
+    m.aggiungi("k1", pd.DataFrame({"a": [1]}), "f1")
+    m.prendi("k0")
+    m.aggiungi("k2", pd.DataFrame({"a": [2]}), "f2")
+    assert m.prendi("k1") is None, "sfrattata la voce sbagliata"
+    assert m.prendi("k0") is not None
+
+
+def test_un_dataset_piu_grande_del_tetto_si_tiene_e_lo_si_dichiara(caplog):
+    """
+    Sfrattare l'unica voce lascerebbe l'utente senza il file che ha appena
+    caricato, e la memoria sarebbe occupata lo stesso dal DataFrame ricevuto. Si
+    tiene — ma finisce nei log, perche' un tetto tarato male si deve poter vedere.
+    """
+    m = store.MagazzinoDataset(capienza=100, ram_mb=1)
+    registro = logging.getLogger("nlda.api.store")
+    with caplog.at_level(logging.WARNING, logger="nlda.api.store"):
+        registro.addHandler(caplog.handler)   # il logger del progetto non propaga
+        try:
+            m.aggiungi("unica", _tabella(3), "grande")
+        finally:
+            registro.removeHandler(caplog.handler)
+    assert m.prendi("unica") is not None
+    assert "magazzino_oltre_il_tetto" in caplog.text
+
+
+def test_i_byte_tornano_indietro_quando_una_voce_scade():
+    """Il conto della memoria e' derivato dalle voci: non puo' restare indietro."""
+    m = store.MagazzinoDataset(ttl=-1)
+    m.aggiungi("k", _tabella(1), "f")
+    assert m.prendi("k") is None      # scaduta: rimossa
+    assert m.byte_totali() == 0
 
 
 def test_il_magazzino_scade():
