@@ -48,6 +48,26 @@ def _describe_schema(df: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+def _split_commenti_iniziali(code: str) -> tuple[str, str]:
+    """
+    Separa i commenti in testa dal codice vero: `("# mappa: ...\\n", "df.sum()")`.
+
+    Serve a `_wrap_chart`, che inserisce il codice dentro un'assegnazione: con la
+    regola 10 il modello scrive delle righe di commento prima dell'espressione, e
+    `result = # mappa: ...` sarebbe un errore di sintassi. La testa torna col suo
+    a-capo così si può riattaccare davanti senza ricomporre nulla.
+    """
+    righe = code.split("\n")
+    tagliato = 0
+    for riga in righe:
+        if riga.strip().startswith("#") or not riga.strip():
+            tagliato += 1
+        else:
+            break
+    testa = "\n".join(righe[:tagliato])
+    return (testa + "\n" if testa else ""), "\n".join(righe[tagliato:]).strip()
+
+
 def _example_columns(df: pd.DataFrame):
     """Sceglie una colonna categoriale e una numerica reali per un esempio calzante."""
     cat = num = None
@@ -251,8 +271,13 @@ class DataAgent:
             return code
 
         pulito = code.strip().rstrip(";")
-        if self._is_single_expression(pulito):
-            return f"result = {pulito}\nfig = try_chart(result, kind='{kind}')"
+        # I commenti in testa — la mappa termine→colonna della regola 10 — vanno
+        # tenuti FUORI dall'espressione: `result = # mappa: ...` non è codice, e
+        # l'AST non aiuta a scoprirlo perché i commenti per lui non esistono.
+        # Restano davanti, dove il modello li ha scritti e dove l'utente li legge.
+        testa, espressione = _split_commenti_iniziali(pulito)
+        if self._is_single_expression(espressione):
+            return f"{testa}result = {espressione}\nfig = try_chart(result, kind='{kind}')"
 
         nome = self._final_result_name(pulito)
         if nome:

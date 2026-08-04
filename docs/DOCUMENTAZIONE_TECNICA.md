@@ -1088,20 +1088,42 @@ Dettaglio fine: `ast.walk` è in ampiezza, non in ordine sorgente, quindi le col
 si riordinano per posizione perché `df.groupby('Region')['Sales']` dia
 `[Region, Sales]` come **si legge**.
 
-**`unknown_columns_referenced`** è il complemento: avvisa quando la *domanda* nomina
-una colonna che nel dataset non esiste — l'errore più comune dell'utente, e quello
-che genera le risposte più confuse.
+**`unknown_columns_referenced`** guarda il *codice*: le colonne che il codice generato
+**legge** da `df` e che non esistono. È la stessa causa di un `KeyError`, ma còlta
+**prima** di eseguire — così l'app non calcola su una colonna fantasma e il messaggio
+elenca le colonne vere, guidando la correzione.
 
-**`claimed_missing_columns`** guarda dalla parte opposta: verifica che la
-*spiegazione* del modello non nomini colonne o entità **assenti dal risultato**. È
-il §2 applicato al narratore: non può aggiungere fatti.
+**`claimed_missing_columns`** guarda la *domanda*: i nomi che l'utente presenta
+esplicitamente come colonne (`df['X']`, «la colonna Fatturato») e che non esistono.
+È il segnale dietro l'avviso anti-allucinazione, e resta **lessicale**: cattura solo
+ciò che l'utente ha marcato come colonna, quindi niente falsi positivi.
+
+**`declared_mapping` / `mapping_warnings`** chiudono il caso che il lessicale non può
+vedere: la grandezza chiesta con un **nome-concetto nudo** («qual è il profitto?») su
+un dataset che non ce l'ha. Lì il modello tende a rispondere con una colonna simile —
+`Sales` — e a spacciarla per quella chiesta: un numero giusto per una domanda che
+nessuno ha fatto. Distinguere `vendite → Sales` (traduzione legittima) da
+`profitto → Sales` (sostituzione) è **semantico**, e l'unico che ha quel contesto è il
+modello: la **regola 10** del prompt gli impone quindi di dichiarare la mappa
+termine→colonna come commento (`# mappa: profitto -> NESSUNA`), e qui la si verifica
+contro le colonne vere. Due avvisi, entrambi certi: la grandezza dichiarata assente, e
+la colonna dichiarata ma inesistente. **Non** si segnala il termine mappato su un nome
+diverso — sarebbe rumore su quasi ogni domanda.
+Che restino **commenti** è una scelta: non toccano l'esecuzione (l'AST li ignora),
+viaggiano dentro `code` fino a entrambe le interfacce senza aggiungere un campo a
+`Turn`, e l'utente li legge nel pannello del codice generato.
 
 **`sanity_warnings`** sono pochi segnali ad **alta confidenza**: una quota fuori da
 0–100%, un risultato NaN, una tabella vuota. **Conservativi di proposito** — «un
 avviso che grida al lupo troppo spesso viene ignorato». È la frase che difende la
 scelta di *non* aggiungerne altri.
 
-**Funzioni pure, nessuno Streamlit:** la UI le chiama, ma si testano da sole. 26 test.
+**`question_warnings`** è l'unica **porta** da cui entrambe le interfacce prendono gli
+avvisi sulla domanda. Non è un dettaglio di stile: l'avviso anti-allucinazione era
+nato dentro la UI di Streamlit, e l'API — quindi la demo React — non lo emetteva
+affatto. La stessa domanda giudicata in due modi a seconda dell'interfaccia.
+
+**Funzioni pure, nessuno Streamlit:** la UI le chiama, ma si testano da sole. 39 test.
 
 **Principi:** onestà sui limiti dello strumento, alta precisione preferita all'alta
 copertura, purezza.
