@@ -538,8 +538,9 @@ def _risposta(turn: Turn, colonne, *, includi_spiegazione: bool = True) -> dict:
     # la colonna sostituita può far riuscire il codice tanto quanto farlo fallire. È
     # lo stesso avviso che l'app Streamlit mostra — ora prodotto una volta sola, in
     # `checks`, così le due interfacce non possono divergere.
-    allucinazione = checks.hallucination_warning(turn.question, turn.code, colonne)
-    avvisi_domanda = [allucinazione] if allucinazione else []
+    # Include anche la verifica della mappa termine→colonna dichiarata dal modello
+    # (regola 10 del prompt): «profitto» su un dataset che non ce l'ha.
+    avvisi_domanda = checks.question_warnings(turn.question, turn.code, colonne)
 
     if not isinstance(turn.result, ExecutionSuccess):
         return AskResponse(ok=False, question=turn.question, code=turn.code,

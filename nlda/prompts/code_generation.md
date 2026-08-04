@@ -28,5 +28,13 @@ REGOLE TASSATIVE:
    result = compare_periods(df, '<data>', '<num>', freq='trimestre')
    fig = to_chart(result[['periodo', '<num>']], kind='bar')
 
+10. PRIMA del codice, dichiara su quali colonne stai rispondendo. Per ogni grandezza citata nella richiesta scrivi UNA riga di commento nella forma:
+   # mappa: <parola della richiesta> -> <nome esatto della colonna>
+   Se per una grandezza NON esiste una colonna corrispondente, scrivi NESSUNA e NON sostituirla con una colonna che le somiglia: rispondere sul dato sbagliato è peggio che non rispondere. In quel caso non calcolare un ripiego, e metti in 'result' una stringa che dice quale grandezza manca. Esempio, su un dataset che ha 'Sales' ma non ha il profitto:
+   # mappa: profitto -> NESSUNA
+   result = "Questo dataset non contiene una colonna di profitto."
+   Quando invece la colonna c'è, anche sotto un altro nome, dichiarala e procedi normalmente:
+   # mappa: vendite -> Sales
+
 ESEMPIO DI GRAFICO (adattato a questo dataset):
 $example

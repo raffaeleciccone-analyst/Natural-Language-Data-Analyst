@@ -9,7 +9,10 @@ import pandas as pd
 from nlda.checks import (
     claimed_missing_columns,
     columns_referenced,
+    declared_mapping,
     hallucination_warning,
+    mapping_warnings,
+    question_warnings,
     sanity_warnings,
     unknown_columns_referenced,
 )
@@ -148,6 +151,75 @@ def test_nessun_avviso_sui_nomi_concetto_nudi():
     # 'profitto' è un concetto, non una colonna nominata: l'avviso resta ad alta
     # precisione e NON scatta (distinguere concetto da colonna assente è semantico).
     assert hallucination_warning("qual è il profitto totale?", "df['Sales'].sum()", _COLS) is None
+
+
+# --- Mappa termine -> colonna dichiarata dal modello ------------------------------
+def test_la_mappa_dichiarata_si_legge_dal_codice():
+    code = ("# mappa: vendite -> Sales\n"
+            "# mappa: regione -> Region\n"
+            "result = df.groupby('Region', as_index=False)['Sales'].sum()")
+    assert declared_mapping(code) == {"vendite": "Sales", "regione": "Region"}
+
+
+def test_la_riga_della_mappa_tollera_maiuscole_e_spazi():
+    """La scrive un modello: la forma esatta non gliela si puo' imporre."""
+    assert declared_mapping("#Mappa:  profitto  ->  Profit  ") == {"profitto": "Profit"}
+
+
+def test_codice_senza_dichiarazione_da_mappa_vuota():
+    """Un modello che non segue la regola non deve rompere la risposta."""
+    assert declared_mapping("result = df['Sales'].sum()") == {}
+    assert mapping_warnings("result = df['Sales'].sum()", _COLS) == []
+
+
+def test_grandezza_senza_colonna_avvisa():
+    """Il difetto centrale: 'profitto' non c'e', e il modello lo dichiara."""
+    code = ("# mappa: profitto -> NESSUNA\n"
+            'result = "Questo dataset non contiene una colonna di profitto."')
+    avvisi = mapping_warnings(code, _COLS)
+    assert len(avvisi) == 1
+    assert "«profitto»" in avvisi[0] and "non ha una colonna corrispondente" in avvisi[0]
+
+
+def test_piu_grandezze_assenti_in_un_avviso_solo():
+    code = "# mappa: profitto -> NESSUNA\n# mappa: sconto -> nessuna\nresult = None"
+    avvisi = mapping_warnings(code, _COLS)
+    assert len(avvisi) == 1
+    assert "«profitto»" in avvisi[0] and "«sconto»" in avvisi[0] and "non hanno" in avvisi[0]
+
+
+def test_una_colonna_dichiarata_ma_inesistente_avvisa():
+    """La dichiarazione contraddice il dataset: si legge nella lingua della domanda."""
+    code = "# mappa: profitto -> Profit\nresult = df['Profit'].sum()"
+    avvisi = mapping_warnings(code, _COLS)
+    assert len(avvisi) == 1
+    assert "«profitto»" in avvisi[0] and "'Profit'" in avvisi[0]
+
+
+def test_una_traduzione_corretta_non_avvisa():
+    """
+    'vendite' -> 'Sales' e' una traduzione, non una sostituzione. Segnalarla
+    sarebbe rumore su quasi ogni domanda, e il rumore fa ignorare gli avvisi veri.
+    """
+    code = "# mappa: vendite -> Sales\nresult = df['Sales'].sum()"
+    assert mapping_warnings(code, _COLS) == []
+
+
+def test_la_porta_unica_raccoglie_i_due_tipi_di_avviso():
+    """
+    Le due interfacce leggono da qui: se una prendesse solo meta' degli avvisi,
+    la stessa domanda sarebbe giudicata in due modi (ed e' gia' successo).
+    """
+    code = "# mappa: profitto -> NESSUNA\nresult = df['Sales'].sum()"
+    avvisi = question_warnings("qual e' il profitto? e la colonna Fatturato?", code, _COLS)
+    assert len(avvisi) == 2
+    assert any("Fatturato" in a for a in avvisi), "l'avviso lessicale c'e' ancora"
+    assert any("«profitto»" in a for a in avvisi), "e quello semantico si e' aggiunto"
+
+
+def test_una_domanda_pulita_non_produce_avvisi():
+    code = "# mappa: vendite -> Sales\nresult = df['Sales'].sum()"
+    assert question_warnings("totale vendite", code, _COLS) == []
 
 
 # --- Sanity check: scattano solo quando devono -----------------------------------
