@@ -63,6 +63,28 @@ def test_wrap_chart_riusa_lultima_variabile_di_codice_multiriga():
         codice + "\nfig = try_chart(result, kind='bar')")
 
 
+def test_wrap_chart_non_infila_i_commenti_dentro_l_assegnazione():
+    """
+    Con la regola 10 il modello scrive la mappa termine->colonna PRIMA del codice.
+    `result = # mappa: ...` non e' Python, e l'AST non aiuta a scoprirlo: per lui
+    i commenti non esistono, quindi l'espressione sembrava singola e valida. La
+    dichiarazione resta davanti, dove il modello l'ha scritta e l'utente la legge.
+    """
+    codice = "# mappa: vendite -> S\ndf.groupby('R')['S'].sum()"
+    wrapped = _agent()._wrap_chart(codice, wants=True, kind="bar")
+    assert wrapped == ("# mappa: vendite -> S\n"
+                       "result = df.groupby('R')['S'].sum()\n"
+                       "fig = try_chart(result, kind='bar')")
+    compile(wrapped, "<test>", "exec")   # deve essere Python valido, non solo simile
+
+
+def test_wrap_chart_conserva_la_mappa_anche_riusando_la_variabile():
+    codice = "# mappa: vendite -> S\nresult = df.groupby('R')['S'].sum()"
+    wrapped = _agent()._wrap_chart(codice, wants=True, kind="bar")
+    assert wrapped.startswith("# mappa: vendite -> S\n")
+    compile(wrapped, "<test>", "exec")
+
+
 def test_wrap_chart_lascia_stare_il_codice_che_non_sa_gestire():
     # Non termina con un'assegnazione a un nome semplice: meglio nessun grafico
     # che codice rotto.

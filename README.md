@@ -82,6 +82,7 @@ domanda con la risposta e la tabella che l'ha prodotta.*
 | **Filtro globale** | Restringi l'intera analisi a un sottoinsieme: vale per report, KPI, confronto e domande. Cliccare una barra della classifica lo imposta, e la classifica resta intera con quella barra in evidenza. |
 | **Confronto tra periodi** | Una misura per mese, trimestre o anno con la variazione sul periodo precedente — dalla sezione dedicata o chiedendolo a parole. |
 | **Unione di due file** | Carica un secondo dataset e uniscilo al primo su una coppia di chiavi; da lì in poi report e domande valgono sui dati uniti. |
+| **Dice quando NON può rispondere** | Se chiedi il «profitto» e il dataset non ce l'ha, non ti dà le vendite fingendo siano quelle: il modello è tenuto a dichiarare su quale colonna sta rispondendo (`# mappa: profitto -> NESSUNA`), la dichiarazione viene verificata contro le colonne vere e l'avviso arriva in entrambe le interfacce. |
 | **Esporta la conversazione** | Ogni turno in Markdown, **codice Pandas generato compreso**. |
 | **Multi-provider LLM** | Ollama (locale, senza chiave), Groq, Anthropic, OpenAI, Gemini. Gli SDK sono opzionali: si installa solo quello che serve. |
 | **Chiedi al progetto** | Una modalità che risponde sul progetto stesso citando le fonti, con recupero TF-IDF sui documenti del repo. |
