@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from nlda.api import store
-from nlda.api.app import app
+from nlda.api.app import _colonna, app
 from nlda.results import ExecutionFailure, ExecutionSuccess
 from nlda.service import Turn
 
@@ -133,6 +133,78 @@ def test_report_di_un_dataset_inesistente_da_404(client):
     r = client.get("/api/dataset/inventato/report")
     assert r.status_code == 404
     assert "ricaricalo" in r.json()["detail"]
+
+
+# --- Parametri di colonna -----------------------------------------------------
+# Un nome di colonna arriva dalla querystring, cioe' da fuori: valeva 500 per
+# quattro strade diverse. Il 500 dice "il servizio e' guasto"; qui il servizio sta
+# benissimo ed e' la richiesta a essere sbagliata.
+def test_una_misura_testuale_da_400_non_500(client, csv_bytes):
+    """Esisteva ma non era numerica: `build_kpis` ne faceva la media."""
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    r = client.get(f"/api/dataset/{d['dataset_id']}/report", params={"measure": "Regione"})
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert "non contiene numeri" in detail
+    assert "'Vendite'" in detail, "il messaggio deve dire quali misure ci sono"
+
+
+def test_una_misura_inesistente_da_400(client, csv_bytes):
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    r = client.get(f"/api/dataset/{d['dataset_id']}/report", params={"measure": "Inventata"})
+    assert r.status_code == 400
+    assert "measure" in r.json()["detail"]
+
+
+def test_una_categoria_inesistente_da_400(client, csv_bytes):
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    r = client.get(f"/api/dataset/{d['dataset_id']}/report", params={"category": "Boh"})
+    assert r.status_code == 400
+    assert "category" in r.json()["detail"]
+
+
+def test_gli_spazi_ai_bordi_del_nome_si_tollerano(client, csv_bytes):
+    """`?measure=Vendite ` e' un URL scritto a mano, non una colonna diversa."""
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    r = client.get(f"/api/dataset/{d['dataset_id']}/report", params={"measure": "Vendite "})
+    assert r.status_code == 200
+    assert r.json()["measure"] == "Vendite"
+
+
+def test_la_colonna_che_si_chiama_davvero_con_lo_spazio_vince():
+    """
+    La tolleranza e' un RIPIEGO, non una normalizzazione: se il dataset ha davvero
+    una colonna `'Vendite '`, chi la chiede per nome deve ricevere quella. Provato
+    sull'helper perche' un CSV con due colonne cosi' simili non e' scrivibile in
+    modo credibile passando dal caricatore.
+    """
+    df = pd.DataFrame({"Vendite ": [1, 2], "Vendite": [10, 20]})
+    assert _colonna(df, "measure", "Vendite ") == "Vendite "
+    assert _colonna(df, "measure", "Vendite") == "Vendite"
+
+
+def test_una_misura_vuota_ricade_sul_default(client, csv_bytes):
+    """`?measure=` non e' una colonna sbagliata: e' nessuna scelta."""
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    r = client.get(f"/api/dataset/{d['dataset_id']}/report", params={"measure": ""})
+    assert r.status_code == 200
+    assert r.json()["measure"] == "Vendite"
+
+
+def test_la_sintesi_rifiuta_la_misura_sbagliata_senza_chiamare_il_modello(
+        client, csv_bytes, monkeypatch):
+    """
+    Il parametro si valida PRIMA della quota e del provider: altrimenti una misura
+    sbagliata costava al visitatore una domanda del budget e produceva una sintesi
+    che quel parametro l'aveva ignorato — cioe' una risposta a una domanda diversa.
+    """
+    def _vietato(**_):
+        raise AssertionError("il modello non deve essere chiamato")
+
+    monkeypatch.setattr("nlda.api.app.DataAgent", _vietato)
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    r = client.post(f"/api/dataset/{d['dataset_id']}/overview", params={"measure": "Regione"})
+    assert r.status_code == 400
 
 
 # --- Domande ------------------------------------------------------------------
@@ -375,6 +447,15 @@ def test_confronto_tra_periodi(client, csv_bytes):
     assert len(righe) == 4
     assert righe[0]["change_pct"] is None, "il primo periodo non ha un prima"
     assert righe[1]["change_pct"] == pytest.approx(100.0)   # 100 -> 200
+
+
+def test_periodi_con_misura_testuale_da_400(client, csv_bytes):
+    """`compare_periods` divide per il periodo prima: su testo era un TypeError."""
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    r = client.get(f"/api/dataset/{d['dataset_id']}/periods",
+                   params={"date_column": "Data", "measure": "Regione"})
+    assert r.status_code == 400
+    assert "non contiene numeri" in r.json()["detail"]
 
 
 def test_periodi_con_frequenza_ignota_da_400(client, csv_bytes):
