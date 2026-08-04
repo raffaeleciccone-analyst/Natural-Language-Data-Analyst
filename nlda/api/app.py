@@ -562,8 +562,12 @@ def _risposta(turn: Turn, colonne, *, includi_spiegazione: bool = True) -> dict:
 @router.post("/ask", response_model=AskResponse, summary="Fai una domanda sui dati")
 def ask(req: AskRequest, request: Request,
         x_api_key: str | None = Header(default=None)) -> AskResponse:
-    _consuma_quota(request, x_api_key)
+    # Prima si guarda se il dataset c'e', poi si scala la quota. Al contrario, chi
+    # torna su una scheda lasciata aperta e trova il dataset scaduto pagava il
+    # 404 con una domanda del suo budget: gli si toglieva una risposta senza
+    # dargliene una. Lo stesso ordine vale in `ask_stream`.
     voce = _dataset(req.dataset_id)
+    _consuma_quota(request, x_api_key)
     df, _ = _filtrato(voce.df, req.filtro)
     service = AnalysisService(_agente(req.provider, req.model, x_api_key))
     turn = service.answer(req.question, df, explain=req.explain, unit=req.unit)
