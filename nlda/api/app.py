@@ -186,24 +186,57 @@ def _filtrato(df: pd.DataFrame,
     """
     if filtro is None:
         return df, ""
-    _esigi_colonne(df, filter_column=filtro.column)
-    return apply_filter(df, (filtro.column, tuple(filtro.values)))
+    colonna = _colonna(df, "filter_column", filtro.column)
+    return apply_filter(df, (colonna, tuple(filtro.values)))
 
 
-def _esigi_colonne(df: pd.DataFrame, **colonne: str) -> None:
+def _colonna(df: pd.DataFrame, parametro: str, nome: str) -> str:
     """
-    400 se una colonna nominata dal client non esiste, con lo STESSO messaggio
-    ovunque. Il nome del parametro fa da etichetta, cosi' chi legge l'errore sa
-    quale campo della richiesta correggere.
+    Il nome di colonna cosi' come lo scrive il dataset, o 400 se non esiste —
+    con lo STESSO messaggio ovunque. Il nome del parametro fa da etichetta, cosi'
+    chi legge l'errore sa quale campo della richiesta correggere.
 
     Prima il controllo era ripetuto in quattro rotte con tre messaggi diversi: chi
     integra l'API imparava a riconoscerne uno e trovava gli altri.
+
+    Gli spazi ai bordi si tollerano solo come RIPIEGO — `?measure=Vendite `
+    capita a chi compone l'URL a mano o incolla un'etichetta — e mai a scapito
+    del dataset: se una colonna si chiama davvero `'Vendite '`, vince quella. Per
+    questo il nome RISOLTO si restituisce: chi poi indicizza il DataFrame deve
+    usare questo, non quello arrivato nella richiesta.
     """
-    for parametro, nome in colonne.items():
-        if nome not in df.columns:
-            raise HTTPException(
-                status_code=400,
-                detail=f"{parametro}: la colonna '{nome}' non esiste in questo dataset.")
+    if nome in df.columns:
+        return nome
+    senza_spazi = nome.strip()
+    if senza_spazi and senza_spazi in df.columns:
+        return senza_spazi
+    raise HTTPException(
+        status_code=400,
+        detail=f"{parametro}: la colonna '{nome}' non esiste in questo dataset.")
+
+
+def _esigi_misura(df: pd.DataFrame, parametro: str, nome: str) -> str:
+    """
+    Come `_colonna`, ma per una misura: esistere non basta, deve contenere numeri.
+
+    `build_kpis` ne fa una media e `compare_periods` una divisione: su una colonna
+    di testo Pandas solleva `TypeError`, che diventava un **500** — cioe' "il
+    servizio e' guasto" — per quello che e' un errore di CHIAMATA. Stessa
+    distinzione del resto del modulo: 4xx a chi ha sbagliato la richiesta.
+
+    Le misure vere l'API le ha gia' dichiarate caricando il dataset (`measures`
+    nella risposta di `/api/dataset`); il messaggio le ripete perche' chi sbaglia
+    il parametro non debba andare a ripescarle.
+    """
+    nome = _colonna(df, parametro, nome)
+    if not pd.api.types.is_numeric_dtype(df[nome]):
+        disponibili = ordered_measures(measure_columns(df))
+        elenco = ", ".join(f"'{m}'" for m in disponibili) if disponibili else "nessuna"
+        raise HTTPException(
+            status_code=400,
+            detail=f"{parametro}: la colonna '{nome}' non contiene numeri, quindi non "
+                   f"puo' fare da misura. Misure disponibili: {elenco}.")
+    return nome
 
 
 def _dataset(dataset_id: str) -> store.Voce:
@@ -426,6 +459,11 @@ def report(dataset_id: str, measure: str | None = None,
     filtro = (FiltroSpec(column=filter_column, values=filter_values)
               if filter_column and filter_values else None)
     df, etichetta_filtro = _filtrato(voce.df, filtro)
+    # I parametri si validano PRIMA di calcolare: `analyze` tollera una misura
+    # sbagliata, `build_kpis` no — e senza questo controllo il 500 arrivava da
+    # li', a report quasi finito.
+    measure = _esigi_misura(df, "measure", measure) if measure else None
+    category = _colonna(df, "category", category) if category else None
     misure = ordered_measures(measure_columns(df))
     measure = measure or (misure[0] if misure else None)
     category = category or best_category(df)
@@ -578,6 +616,10 @@ def _testo_insight(dataset_id: str, measure: str | None,
     farne (una sintesi vuota o un errore) lo decide la rotta.
     """
     df = _dataset(dataset_id).df
+    # Anche qui prima di tutto: una misura sbagliata deve costare un 400, non una
+    # chiamata al modello pagata per riassumere numeri che non sono stati chiesti.
+    measure = _esigi_misura(df, "measure", measure) if measure else None
+    category = _colonna(df, "category", category) if category else None
     misure = ordered_measures(measure_columns(df))
     measure = measure or (misure[0] if misure else None)
     testo = analyze(df, measure, category or best_category(df)).get("text")
@@ -661,7 +703,7 @@ def project_qa(req: ProjectQaRequest, request: Request,
             summary="Valori distinti di una colonna, per costruire un filtro")
 def distinct(dataset_id: str, column: str) -> DistinctResponse:
     voce = _dataset(dataset_id)
-    _esigi_colonne(voce.df, column=column)
+    column = _colonna(voce.df, "column", column)
     # Ordinati e come STRINGHE: il filtro confronta su stringa (views.apply_filter),
     # quindi cio' che si mostra e cio' che si confronta sono la stessa cosa.
     valori = sorted(voce.df[column].dropna().astype(str).unique())
@@ -686,7 +728,8 @@ def periods(dataset_id: str, date_column: str, measure: str,
     direttamente. Tre strade, una implementazione.
     """
     voce = _dataset(dataset_id)
-    _esigi_colonne(voce.df, date_column=date_column, measure=measure)
+    date_column = _colonna(voce.df, "date_column", date_column)
+    measure = _esigi_misura(voce.df, "measure", measure)
     try:
         tabella = compare_periods(voce.df, date_column, measure, freq=freq)
     except ValueError as e:
@@ -707,18 +750,19 @@ def periods(dataset_id: str, date_column: str, measure: str,
              summary="Unisce due dataset gia' caricati")
 def join(req: JoinRequest) -> DatasetResponse:
     sinistra, destra = _dataset(req.left_id), _dataset(req.right_id)
-    _esigi_colonne(sinistra.df, left_on=req.left_on)
-    _esigi_colonne(destra.df, right_on=req.right_on)
+    left_on = _colonna(sinistra.df, "left_on", req.left_on)
+    right_on = _colonna(destra.df, "right_on", req.right_on)
     try:
-        unito = join_datasets(sinistra.df, destra.df, req.left_on, req.right_on, how=req.how)
+        unito = join_datasets(sinistra.df, destra.df, left_on, right_on, how=req.how)
     except Exception as e:  # noqa: BLE001 - chiavi incompatibili: si spiega
         raise HTTPException(status_code=400, detail=f"Unione non riuscita: {e}") from e
 
     etichetta = f"{sinistra.etichetta} + {destra.etichetta}"
-    # L'identificativo deriva dai due di partenza e dai parametri: rifare la stessa
-    # unione ridà la stessa voce invece di duplicarla in memoria.
+    # L'identificativo deriva dai due di partenza e dai parametri RISOLTI: rifare
+    # la stessa unione ridà la stessa voce invece di duplicarla in memoria, anche
+    # se la seconda richiesta ha scritto la chiave con uno spazio in coda.
     chiave = store.impronta(
-        f"{req.left_id}|{req.right_id}|{req.left_on}|{req.right_on}|{req.how}".encode())
+        f"{req.left_id}|{req.right_id}|{left_on}|{right_on}|{req.how}".encode())
     store.magazzino.aggiungi(chiave, unito, etichetta)
     return _descrivi(unito, chiave, etichetta)
 
