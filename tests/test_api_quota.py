@@ -102,6 +102,19 @@ def test_i_due_modi_di_chiedere_spendono_lo_stesso_budget(client, dataset, monke
     assert _domanda(client, dataset).status_code == 429
 
 
+def test_un_dataset_scaduto_non_costa_una_domanda(client, dataset, monkeypatch):
+    """
+    Chi torna su una scheda lasciata aperta trova il dataset scaduto: gli si deve
+    dire "ricaricalo", non togliergli una risposta del budget per un 404. Vale su
+    entrambe le rotte, che ormai scalano lo stesso credito.
+    """
+    q = _con_quota(monkeypatch, max_questions=5, max_daily=100)
+
+    for rotta in (_domanda, _domanda_in_streaming):
+        assert rotta(client, "mai-esistito").status_code == 404
+    assert q.usate_oggi == 0
+
+
 def test_il_tetto_giornaliero_vale_su_tutti_i_visitatori(client, dataset, monkeypatch):
     """
     E' il limite che protegge davvero il credito: quello personale basta cambiare
