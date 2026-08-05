@@ -12,6 +12,7 @@ export interface AskRequest {
   provider?: string | null;
   model?: string | null;
   unit?: string;
+  /** Se falso, si restituiscono solo i numeri: niente narrazione, e nessuna seconda chiamata al modello. Vale su entrambe le rotte, `/ask` e `/ask/stream` */
   explain?: boolean;
   /** Se presente, la domanda vale sul sottoinsieme filtrato */
   filtro?: FiltroSpec | null;
