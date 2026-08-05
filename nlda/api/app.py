@@ -106,7 +106,7 @@ from nlda.sandbox.pool import riserva
 from nlda.service import AnalysisService, Turn
 from nlda.suggestions import FREQUENCIES, PROJECT_QUESTIONS, example_questions
 from nlda.utils import with_unit
-from nlda.views import apply_filter, join_datasets
+from nlda.views import apply_filter, join_datasets, join_warning
 
 log = get_logger(__name__)
 
@@ -325,7 +325,8 @@ def health() -> dict[str, object]:
 
 
 # --- Dataset ------------------------------------------------------------------
-def _descrivi(df: pd.DataFrame, dataset_id: str, etichetta: str) -> DatasetResponse:
+def _descrivi(df: pd.DataFrame, dataset_id: str, etichetta: str,
+              avvisi: "list[str] | None" = None) -> DatasetResponse:
     prof = profile(df)
     misure = ordered_measures(measure_columns(df))
     categorie = category_columns(df)
@@ -357,6 +358,7 @@ def _descrivi(df: pd.DataFrame, dataset_id: str, etichetta: str) -> DatasetRespo
             suggerita, best_category(df) if categorie else None,
             date_column=date_column, date_span_years=span,
             other_measures=misure),
+        warnings=avvisi or [],
     )
 
 
@@ -774,7 +776,10 @@ def join(req: JoinRequest) -> DatasetResponse:
     chiave = store.impronta(
         f"{req.left_id}|{req.right_id}|{left_on}|{right_on}|{req.how}".encode())
     store.magazzino.aggiungi(chiave, unito, etichetta)
-    return _descrivi(unito, chiave, etichetta)
+    # Un'unione che moltiplica le righe non fallisce: gonfia i totali in silenzio.
+    # Stesso avviso che mostra Streamlit, composto in `views`: una voce sola.
+    avviso = join_warning(sinistra.df, destra.df, unito, left_on, right_on)
+    return _descrivi(unito, chiave, etichetta, [avviso] if avviso else [])
 
 
 @router.post("/export", response_model=ExportResponse,

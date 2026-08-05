@@ -50,7 +50,7 @@ from nlda.ui_components import (
     render_result,
 )
 from nlda.utils import fmt_num, with_unit
-from nlda.views import join_datasets
+from nlda.views import join_datasets, join_warning
 
 
 def render_sidebar_config(limits: DemoLimits) -> SidebarConfig:
@@ -144,6 +144,11 @@ def render_join(left: pd.DataFrame, left_label: str):
             return left, left_label
 
         st.caption(f"Unione riuscita: {len(merged)} righe · {merged.shape[1]} colonne.")
+        # Un join che moltiplica le righe non fallisce: gonfia i totali in silenzio.
+        # L'avviso lo compone `views.join_warning`, lo stesso che usa l'API.
+        avviso = join_warning(left, right, merged, left_on, right_on)
+        if avviso:
+            st.warning(f"⚠️ {avviso}")
         return merged, f"{left_label} ⨝ {second.name}"
 
 

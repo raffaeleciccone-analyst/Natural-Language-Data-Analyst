@@ -571,6 +571,37 @@ def test_la_stessa_unione_non_duplica_la_memoria(client, csv_bytes):
     assert primo["dataset_id"] == secondo["dataset_id"]
 
 
+def test_l_unione_che_duplica_le_righe_lo_dice_anche_all_API(client, csv_bytes):
+    """
+    Lo stesso avviso che vede Streamlit: se arrivasse solo a una delle due
+    interfacce, la stessa unione sarebbe giudicata in due modi. La demo React lo
+    mostra nel pannello dell'unione.
+    """
+    a = client.post("/api/dataset", files={"file": ("a.csv", csv_bytes, "text/csv")}).json()
+    # Due righe per 'Nord': ogni ordine del Nord si duplichera'.
+    doppio = b"Regione,Responsabile\nNord,Anna\nNord,Bruno\nSud,Carla\n"
+    b_ = client.post("/api/dataset", files={"file": ("b.csv", doppio, "text/csv")}).json()
+
+    r = client.post("/api/dataset/join", json={
+        "left_id": a["dataset_id"], "right_id": b_["dataset_id"],
+        "left_on": "Regione", "right_on": "Regione", "how": "inner"})
+    assert r.status_code == 200
+    unito = r.json()
+    assert unito["rows"] == 6, "premessa: 4 righe diventate 6"
+    assert unito["warnings"], "l'API deve dire che le righe sono state duplicate"
+    assert "gonfiati" in unito["warnings"][0]
+
+
+def test_un_unione_pulita_non_produce_avvisi(client, csv_bytes):
+    a = client.post("/api/dataset", files={"file": ("a.csv", csv_bytes, "text/csv")}).json()
+    pulito = b"Regione,Responsabile\nNord,Anna\nSud,Bruno\n"
+    b_ = client.post("/api/dataset", files={"file": ("b.csv", pulito, "text/csv")}).json()
+    r = client.post("/api/dataset/join", json={
+        "left_id": a["dataset_id"], "right_id": b_["dataset_id"],
+        "left_on": "Regione", "right_on": "Regione"})
+    assert r.json()["warnings"] == []
+
+
 def test_unione_su_colonna_inesistente_da_400(client, csv_bytes):
     a = client.post("/api/dataset", files={"file": ("a.csv", csv_bytes, "text/csv")}).json()
     r = client.post("/api/dataset/join", json={

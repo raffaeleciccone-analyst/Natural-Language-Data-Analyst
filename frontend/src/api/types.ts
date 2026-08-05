@@ -94,6 +94,8 @@ export interface DatasetResponse {
   suggested_unit: string;
   /** Domande d'esempio costruite sulle colonne di QUESTO dataset */
   example_questions?: string[];
+  /** Avvisi sul dataset appena prodotto (es. un'unione che ha duplicato le righe). Vuoto nel caso normale. */
+  warnings?: string[];
 }
 
 /** Un dataset di esempio offerto da questa installazione. */

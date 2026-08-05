@@ -27,6 +27,7 @@ export function Unione({
   const [tipo, setTipo] = useState<"inner" | "left">("inner");
   const [inCorso, setInCorso] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
+  const [avvisi, setAvvisi] = useState<string[]>([]);
   const inputFile = useRef<HTMLInputElement>(null);
 
   async function carica(file: File) {
@@ -60,6 +61,10 @@ export function Unione({
         right_on: destra,
         how: tipo,
       });
+      // Un'unione che duplica le righe riesce: gonfia i totali senza fallire.
+      // L'avviso arriva dal backend, dove lo produce la stessa funzione che
+      // serve l'app Streamlit, e resta visibile dopo la chiusura del pannello.
+      setAvvisi(unito.warnings ?? []);
       onUnito(unito);
       setSecondo(null);
     } catch (e) {
@@ -121,6 +126,12 @@ export function Unione({
           </button>
         </>
       )}
+
+      {avvisi.map((a, i) => (
+        <div className="avviso" key={i}>
+          {a}
+        </div>
+      ))}
 
       {errore && <div className="errore">{errore}</div>}
     </details>
