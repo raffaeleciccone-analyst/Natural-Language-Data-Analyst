@@ -240,6 +240,16 @@ jobs:
           npm test
           npm run build
 
+      # Le prove di IMPAGINAZIONE: quelle sopra girano su jsdom, che il DOM lo
+      # costruisce ma non lo impagina — non calcola larghezze, non applica media
+      # query, non sa dire se un elemento sborda. Il telefono e' rimasto per
+      # questo l'unica area del progetto mai verificata: serviva un browser vero.
+      - name: Il layout su telefono e tablet
+        working-directory: frontend
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
       - name: Nessuna vulnerabilita' nelle dipendenze
         working-directory: frontend
         run: npm audit --audit-level=high
