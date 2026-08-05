@@ -16,7 +16,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from nlda.api import store
+from nlda.api import cache, store
 from nlda.api.app import _colonna, app
 from nlda.results import ExecutionFailure, ExecutionSuccess
 from nlda.service import Turn
@@ -25,6 +25,11 @@ from nlda.service import Turn
 @pytest.fixture
 def client():
     store.magazzino.svuota()
+    # Anche i ricordi dei report: senza, un test che carica gli stessi byte di
+    # un altro riceverebbe la risposta calcolata la' — stesso contenuto, stesso
+    # identificativo, stessa chiave. Verissimo in produzione, veleno fra due test
+    # che si aspettano scelte diverse.
+    cache.ricordi.svuota()
     return TestClient(app)
 
 
@@ -1179,3 +1184,70 @@ def test_un_filtro_su_un_ALTRA_colonna_restringe_la_classifica(client):
     assert sorted(_categorie_del_grafico(filtrato["figures"]["top"])) == ["R0", "R1"]
     # E nessuna evidenziazione: non c'e' una categoria selezionata da illuminare.
     assert "opacity" not in filtrato["figures"]["top"]["data"][0].get("marker", {})
+
+
+# --- I report gia' calcolati non si rifanno -----------------------------------
+def test_lo_stesso_report_non_si_ricalcola(client, csv_bytes, monkeypatch):
+    """
+    Cliccare una barra filtra la pagina, ricliccarla toglie il filtro: a quel
+    punto serve ESATTAMENTE il report di un secondo prima. Sulla demo quel
+    ritorno costava 1,5 secondi di attesa e di CPU su un container che di CPU ne
+    ha un decimo. Si conta il numero di CALCOLI, non la latenza: e' il lavoro
+    risparmiato la cosa da difendere.
+    """
+    import nlda.api.app as modulo
+
+    calcoli = []
+    vero = modulo.analyze
+    monkeypatch.setattr(modulo, "analyze",
+                        lambda *a, **k: (calcoli.append(1), vero(*a, **k))[1])
+
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    primo = client.get(f"/api/dataset/{d['dataset_id']}/report")
+    secondo = client.get(f"/api/dataset/{d['dataset_id']}/report")
+
+    assert primo.json() == secondo.json()
+    assert len(calcoli) == 1, "il secondo report e' stato ricalcolato"
+
+
+def test_parametri_diversi_non_condividono_il_ricordo(client, csv_bytes):
+    """
+    E' il difetto peggiore che una cache possa avere: mostrare i numeri
+    dell'intero dataset dicendo che sono quelli filtrati. La chiave deve
+    contenere TUTTO cio' da cui la risposta dipende.
+    """
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    did = d["dataset_id"]
+    intero = client.get(f"/api/dataset/{did}/report").json()
+    filtrato = client.get(f"/api/dataset/{did}/report",
+                          params={"filter_column": "Regione", "filter_values": "Nord"}).json()
+
+    assert intero["filter_label"] == ""
+    assert filtrato["filter_label"]
+    assert intero["kpis"][0]["value"] != filtrato["kpis"][0]["value"]
+
+
+def test_un_dataset_scaduto_da_404_anche_se_il_report_e_ricordato(client, csv_bytes):
+    """
+    Il ricordo non deve tenere in vita un dataset che il magazzino ha lasciato
+    andare: la pagina resterebbe consultabile mentre le domande falliscono, e
+    l'utente non capirebbe perche'. Il controllo del dataset viene PRIMA.
+    """
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    did = d["dataset_id"]
+    assert client.get(f"/api/dataset/{did}/report").status_code == 200
+
+    store.magazzino.svuota()          # scaduto o sfrattato
+    assert client.get(f"/api/dataset/{did}/report").status_code == 404
+
+
+def test_un_errore_non_diventa_permanente(client, csv_bytes):
+    """Se si ricordassero anche i fallimenti, un guasto momentaneo resterebbe
+    per tutti finche' la voce non esce dalla cache."""
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    did = d["dataset_id"]
+    assert client.get(f"/api/dataset/{did}/report",
+                      params={"measure": "Regione"}).status_code == 400
+    assert client.get(f"/api/dataset/{did}/report",
+                      params={"measure": "Regione"}).status_code == 400
+    assert len(cache.ricordi) == 0, "un errore e' finito fra i ricordi"
