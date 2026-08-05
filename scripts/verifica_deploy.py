@@ -32,6 +32,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from urllib.parse import quote
 
 URL_PREDEFINITO = "https://nlda.onrender.com"
 
@@ -53,22 +54,25 @@ class Fallito(Exception):
 
 
 def _chiama(url: str, corpo: dict | None = None, timeout: int = 60) -> tuple[dict, float]:
-    """Chiama l'API e restituisce (json, secondi). Solleva `Fallito` con la causa."""
+    """
+    Chiama l'API e restituisce (json, secondi). Solleva `Fallito` con la causa.
+
+    La richiesta la costruisce `_prova` (definita piu' sotto, accanto agli altri
+    aiutanti delle difese): qui si aggiunge solo la POLITICA — un codice diverso
+    da 200 e' un guasto, non un esito da controllare. Prima `Request`, `urlopen`
+    e la cattura degli errori erano scritti due volte, cioe' due punti in cui
+    aggiungere un header o un proxy, e uno da dimenticare.
+    """
     dati = json.dumps(corpo).encode() if corpo is not None else None
-    intestazioni = {"Content-Type": "application/json"} if dati else {}
-    richiesta = urllib.request.Request(url, data=dati, headers=intestazioni,
-                                       method="POST" if dati is not None else "GET")
     inizio = time.perf_counter()
-    try:
-        with urllib.request.urlopen(richiesta, timeout=timeout) as r:  # nosec B310 — https
-            return json.loads(r.read()), time.perf_counter() - inizio
-    except urllib.error.HTTPError as e:
-        # `from None`: il messaggio dice gia' tutto (codice e corpo della
-        # risposta), e la traccia di urllib qui non aggiunge nulla di leggibile.
-        raise Fallito(
-            f"{url} ha risposto {e.code}: {e.read()[:200].decode(errors='replace')}") from None
-    except Exception as e:  # noqa: BLE001 — rete: qualunque motivo va riportato
-        raise Fallito(f"{url} non raggiungibile: {e}") from e
+    stato, testo = _prova(url, dati,
+                          {"Content-Type": "application/json"} if dati else {}, timeout)
+    if stato == 200:
+        return json.loads(testo), time.perf_counter() - inizio
+    # Stato 0 = non ha risposto affatto, e `_prova` ha gia' messo il perche' nel
+    # corpo; altrimenti si riporta il codice con l'inizio della risposta.
+    raise Fallito(f"{url} {testo}" if stato == 0
+                  else f"{url} ha risposto {stato}: {testo[:200]}")
 
 
 def _sveglia(url: str) -> tuple[dict, float, int]:
@@ -215,9 +219,7 @@ def difese(base: str) -> list[str]:
     problemi: list[str] = []
 
     def controlla(nome: str, ok: bool, dettaglio: str = "") -> None:
-        _riga("OK" if ok else "NO", nome)
-        if not ok:
-            problemi.append(f"{nome} — {dettaglio[:160]}")
+        _controlla(problemi, nome, ok, dettaglio)
 
     # 1. File che non sono quello che dicono di essere. Un caricamento che RIESCE
     #    sul file sbagliato è peggio di uno che fallisce: produce numeri con l'aria
@@ -236,41 +238,8 @@ def difese(base: str) -> list[str]:
                   stato == 400 and atteso.lower() in messaggio.lower(),
                   f"stato {stato}: {messaggio}")
 
-    # 2. Il tetto di MEMORIA, che è ciò che tiene in vita il processo. Il file si
-    #    tara sul tetto dichiarato: sotto un tetto largo (sviluppo) verrebbe
-    #    accettato, ed è giusto così — non è un difetto, è un'altra installazione.
-    config, _ = _chiama(f"{base}/api/config")
-    tetto = int(config.get("max_dataset_ram_mb", 0))
-    # Otto byte per cella in memoria contro i due su disco: per sforare il tetto
-    # bisogna spedire un quarto della sua dimensione. Si punta a 1,25 volte e non
-    # al doppio perché il file va caricato per davvero a ogni esecuzione, e la
-    # stima del servizio sbaglia di circa il 5%: il margine basta, il traffico si
-    # dimezza.
-    oltre = 1.25
-    colonne = 100
-    da_spedire_mb = tetto * oltre / 4
-    if tetto and da_spedire_mb > config.get("max_upload_mb", 25):
-        # Su un'installazione con memoria abbondante nessun file ammesso
-        # dall'upload può sforare il tetto: il controllo non ha modo di dire nulla,
-        # e fingere un esito sarebbe peggio che dichiararlo. Provando questo caso
-        # lo script generava un file da 1,3 GB e riportava un 413 come se fosse
-        # il tetto a mancare.
-        _riga("··", f"tetto di memoria ({tetto} MB) più alto di quanto un caricamento "
-                    f"possa raggiungere (max {config.get('max_upload_mb')} MB): "
-                    f"controllo saltato")
-    elif tetto:
-        righe = int(tetto * oltre * 1024 * 1024 / (colonne * 8))
-        dati = _csv_di_numeri(righe, colonne)
-        stato, corpo = _carica(base, "pesante.csv", dati)
-        controlla(f"un dataset da ~{round(tetto * oltre)} MB in memoria → rifiutato "
-                  f"(tetto dichiarato: {tetto} MB, file inviato: {len(dati) / 1e6:.0f} MB)",
-                  stato == 400 and "memoria" in _dettaglio(corpo).lower(),
-                  f"stato {stato}: {_dettaglio(corpo)}")
-        salute, _ = _chiama(f"{base}/api/health")
-        controlla("…e il servizio è ancora vivo dopo il rifiuto",
-                  salute.get("status") == "ok", str(salute))
-    else:
-        _riga("··", "tetto di memoria non dichiarato da /api/config: controllo saltato")
+    # 2. Il tetto di MEMORIA, che è ciò che tiene in vita il processo.
+    problemi += _difese_sulla_memoria(base)
 
     # 3. Parametri sbagliati: 400 con un messaggio utile, non 500. Il 500 dice "il
     #    servizio è guasto"; qui sta benissimo, ed è la richiesta a essere sbagliata.
@@ -278,7 +247,7 @@ def difese(base: str) -> list[str]:
     did = dataset["dataset_id"]
     categoria = (dataset.get("categories") or [""])[0]
     for nome, percorso in [
-        ("una misura testuale", f"/api/dataset/{did}/report?measure={_url(categoria)}"),
+        ("una misura testuale", f"/api/dataset/{did}/report?measure={quote(categoria)}"),
         ("una misura inesistente", f"/api/dataset/{did}/report?measure=Inventata"),
         ("una categoria inesistente", f"/api/dataset/{did}/report?category=Inventata"),
     ]:
@@ -308,11 +277,64 @@ def difese(base: str) -> list[str]:
     return problemi
 
 
-def _url(valore: str) -> str:
-    """Un valore dentro una querystring. `quote` sta qui e non fra gli import in
-    testa perché è l'unica riga che ne ha bisogno."""
-    from urllib.parse import quote
-    return quote(valore)
+def _controlla(problemi: list[str], nome: str, ok: bool, dettaglio: str = "") -> None:
+    """Stampa l'esito di un controllo e, se è andato male, lo aggiunge all'elenco."""
+    _riga("OK" if ok else "NO", nome)
+    if not ok:
+        problemi.append(f"{nome} — {dettaglio[:160]}")
+
+
+def _difese_sulla_memoria(base: str) -> list[str]:
+    """
+    Il tetto di memoria: il file di prova si tara sul tetto DICHIARATO.
+
+    Sta in una funzione sua perché è l'unico controllo che deve prima chiedere
+    come è configurato il servizio e poi decidere se ha senso eseguirsi: cinque
+    variabili di calcolo che, dentro `difese`, restavano vive per tutti i blocchi
+    successivi.
+
+    Sotto un tetto largo (tipico in sviluppo) il file verrebbe accettato, e non è
+    un difetto — è un'altra installazione. In quel caso si dichiara saltato.
+    """
+    problemi: list[str] = []
+    config, _ = _chiama(f"{base}/api/config")
+    tetto = int(config.get("max_dataset_ram_mb", 0))
+
+    def controlla(nome: str, ok: bool, dettaglio: str = "") -> None:
+        _controlla(problemi, nome, ok, dettaglio)
+
+    # Otto byte per cella in memoria contro i due su disco: per sforare il tetto
+    # bisogna spedire un quarto della sua dimensione. Si punta a 1,25 volte e non
+    # al doppio perché il file va caricato per davvero a ogni esecuzione, e la
+    # stima del servizio sbaglia di circa il 5%: il margine basta, il traffico si
+    # dimezza.
+    oltre = 1.25
+    colonne = 100
+    da_spedire_mb = tetto * oltre / 4
+    if tetto and da_spedire_mb > config.get("max_upload_mb", 25):
+        # Su un'installazione con memoria abbondante nessun file ammesso
+        # dall'upload può sforare il tetto: il controllo non ha modo di dire nulla,
+        # e fingere un esito sarebbe peggio che dichiararlo. Provando questo caso
+        # lo script generava un file da 1,3 GB e riportava un 413 come se fosse
+        # il tetto a mancare.
+        _riga("··", f"tetto di memoria ({tetto} MB) più alto di quanto un caricamento "
+                    f"possa raggiungere (max {config.get('max_upload_mb')} MB): "
+                    f"controllo saltato")
+    elif tetto:
+        righe = int(tetto * oltre * 1024 * 1024 / (colonne * 8))
+        dati = _csv_di_numeri(righe, colonne)
+        stato, corpo = _carica(base, "pesante.csv", dati)
+        controlla(f"un dataset da ~{round(tetto * oltre)} MB in memoria → rifiutato "
+                  f"(tetto dichiarato: {tetto} MB, file inviato: {len(dati) / (1024 * 1024):.0f} MB)",
+                  stato == 400 and "memoria" in _dettaglio(corpo).lower(),
+                  f"stato {stato}: {_dettaglio(corpo)}")
+        salute, _ = _chiama(f"{base}/api/health")
+        controlla("…e il servizio è ancora vivo dopo il rifiuto",
+                  salute.get("status") == "ok", str(salute))
+    else:
+        _riga("··", "tetto di memoria non dichiarato da /api/config: controllo saltato")
+
+    return problemi
 
 
 def main() -> int:

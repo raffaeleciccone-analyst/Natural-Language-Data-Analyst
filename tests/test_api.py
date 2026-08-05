@@ -65,16 +65,17 @@ def test_la_config_dichiara_ENTRAMBI_i_limiti_sul_file(client):
     Chi lo legge da fuori — il frontend, e lo script che verifica il deploy — non
     ha altro modo di sapere cosa questa installazione concede davvero.
     """
-    from nlda.api import app as modulo
     from nlda.config import settings
+    from nlda.loader import tetto_upload_byte
 
     j = client.get("/api/config").json()
     assert j["max_upload_mb"] == settings.max_upload_mb
     assert j["max_dataset_ram_mb"] == settings.max_dataset_ram_mb
-    # Il tetto applicato dalla rotta e quello dichiarato sono lo STESSO valore:
-    # erano due, uno scritto nel codice e uno nella configurazione, e un deploy
-    # che ne cambiasse uno avrebbe annunciato un limite diverso da quello imposto.
-    assert modulo.MAX_UPLOAD_MB == settings.max_upload_mb
+    # Il tetto DICHIARATO qui e quello IMPOSTO dal caricatore sono lo stesso
+    # valore: erano due — uno scritto nella rotta, uno nella configurazione — e
+    # un deploy che ne cambiasse uno avrebbe annunciato un limite diverso da
+    # quello davvero applicato.
+    assert tetto_upload_byte() == j["max_upload_mb"] * 1024 * 1024
 
 
 def test_lo_schema_openapi_si_genera(client):
@@ -1251,3 +1252,46 @@ def test_un_errore_non_diventa_permanente(client, csv_bytes):
     assert client.get(f"/api/dataset/{did}/report",
                       params={"measure": "Regione"}).status_code == 400
     assert len(cache.ricordi) == 0, "un errore e' finito fra i ricordi"
+
+
+def test_i_ricordi_contano_i_BYTE_non_le_voci():
+    """
+    Contare le voci e' contare le tabelle un'altra volta — l'errore che il
+    magazzino ha gia' fatto e gia' pagato. Una risposta di report non pesa
+    sempre uguale: su 300.000 righe ne pesa 3,3 MB, perche' la figura della
+    distribuzione si porta dentro ogni valore della colonna misura. Trenta voci
+    cosi' sarebbero 96 MB su un container da 512.
+    """
+    class Risposta:
+        def __init__(self, mega: float):
+            self._testo = "x" * int(mega * 1024 * 1024)
+
+        def model_dump_json(self) -> str:
+            return self._testo
+
+    ricordi = cache.Ricordi(ram_mb=4)
+    for i in range(6):
+        ricordi.ottieni(f"k{i}", lambda i=i: Risposta(1.5))
+
+    assert ricordi.byte_totali() <= 4 * 1024 * 1024
+    assert len(ricordi) < 6, "con un tetto a byte le voci non possono restare tutte"
+
+
+def test_una_risposta_piu_grande_del_tetto_si_tiene_e_lo_si_dichiara(caplog):
+    """Come il magazzino: buttarla non aiuterebbe chi l'ha appena chiesta, ma un
+    tetto tarato male si deve poter vedere nei log."""
+    class Enorme:
+        def model_dump_json(self) -> str:
+            return "x" * (5 * 1024 * 1024)
+
+    ricordi = cache.Ricordi(ram_mb=1)
+    registro = logging.getLogger("nlda.api.cache")
+    with caplog.at_level(logging.WARNING, logger="nlda.api.cache"):
+        registro.addHandler(caplog.handler)   # il logger del progetto non propaga
+        try:
+            ricordi.ottieni("grande", Enorme)
+        finally:
+            registro.removeHandler(caplog.handler)
+
+    assert len(ricordi) == 1
+    assert "cache_voce_oltre_il_tetto" in caplog.text
