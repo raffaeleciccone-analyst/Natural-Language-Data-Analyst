@@ -430,6 +430,53 @@ def test_un_dataset_piu_grande_del_tetto_si_tiene_e_lo_si_dichiara(caplog):
     assert "magazzino_oltre_il_tetto" in caplog.text
 
 
+def test_fai_spazio_sfratta_per_un_dataset_che_deve_ancora_arrivare():
+    """
+    Lo sfratto di `aggiungi` arriva troppo tardi per chi sta LEGGENDO: mentre il
+    parser lavora, i dataset vecchi occupano ancora la loro memoria e i due costi
+    si sommano. Misurato sulla demo: 40 MB in magazzino + 40 MB in arrivo
+    uccidevano il container, e nessuno dei due da solo sforava il tetto.
+    """
+    m = store.MagazzinoDataset(capienza=100, ram_mb=4)
+    m.aggiungi("k0", _tabella(1.5), "f0")
+    m.aggiungi("k1", _tabella(1.5), "f1")
+    usciti = m.fai_spazio(3 * 1024 * 1024)
+    assert usciti == 1
+    assert m.prendi("k0") is None, "doveva uscire il meno usato di recente"
+    assert m.prendi("k1") is not None
+
+
+def test_fai_spazio_non_sfratta_l_ultima_voce():
+    """
+    Buttare l'unico dataset rimasto non aiuterebbe chi sta caricando (il posto
+    non basterebbe comunque) e toglierebbe i dati a chi li sta usando. Quel caso
+    lo ferma il tetto per dataset del caricatore, prima di arrivare qui.
+    """
+    m = store.MagazzinoDataset(capienza=100, ram_mb=4)
+    m.aggiungi("unica", _tabella(1.5), "f")
+    assert m.fai_spazio(100 * 1024 * 1024) == 0
+    assert m.prendi("unica") is not None
+
+
+def test_l_upload_fa_posto_PRIMA_di_leggere(client, csv_bytes, monkeypatch):
+    """
+    L'ordine è tutta la difesa: fare posto dopo la lettura significa averla già
+    pagata. Si registra la sequenza reale delle due chiamate.
+    """
+    from nlda.api import app as modulo
+
+    ordine: list[str] = []
+    vero_read_any = modulo.read_any
+    monkeypatch.setattr(store.magazzino, "fai_spazio",
+                        lambda byte: (ordine.append("spazio"), 0)[1])
+    monkeypatch.setattr(modulo, "read_any",
+                        lambda f: (ordine.append("lettura"), vero_read_any(f))[1])
+
+    r = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")})
+    assert r.status_code == 200
+    assert ordine == ["spazio", "lettura"]
+
+
 def test_i_byte_tornano_indietro_quando_una_voce_scade():
     """Il conto della memoria e' derivato dalle voci: non puo' restare indietro."""
     m = store.MagazzinoDataset(ttl=-1)
