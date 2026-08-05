@@ -31,6 +31,7 @@ import json
 import time
 import urllib.error
 import urllib.request
+import uuid
 
 URL_PREDEFINITO = "https://nlda.onrender.com"
 
@@ -91,6 +92,45 @@ def _sveglia(url: str) -> tuple[dict, float, int]:
     raise AssertionError("irraggiungibile: il budget scade molto prima")  # pragma: no cover
 
 
+def _prova(url: str, corpo: bytes | None = None,
+           intestazioni: dict | None = None, timeout: int = 120) -> tuple[int, str]:
+    """
+    Come `_chiama`, ma un 4xx è un ESITO da controllare, non un guasto.
+
+    Le difese qui sotto si verificano proprio dai codici di errore: un 400 con il
+    messaggio giusto è il comportamento corretto, e sollevare su quello renderebbe
+    impossibile distinguerlo da un servizio rotto.
+    """
+    richiesta = urllib.request.Request(url, data=corpo, headers=intestazioni or {},
+                                       method="POST" if corpo is not None else "GET")
+    try:
+        with urllib.request.urlopen(richiesta, timeout=timeout) as r:  # nosec B310 — https
+            return r.status, r.read().decode(errors="replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode(errors="replace")
+    except Exception as e:  # noqa: BLE001 — rete: qualunque motivo va riportato
+        return 0, f"non raggiungibile: {e}"
+
+
+def _carica(base: str, nome: str, dati: bytes) -> tuple[int, str]:
+    """Carica un file come farebbe un browser. Multipart scritto a mano: questo
+    script non deve avere dipendenze da installare per girare in CI."""
+    bordo = f"----verifica{uuid.uuid4().hex}"
+    corpo = (f"--{bordo}\r\nContent-Disposition: form-data; name=\"file\"; "
+             f"filename=\"{nome}\"\r\nContent-Type: text/csv\r\n\r\n").encode() \
+        + dati + f"\r\n--{bordo}--\r\n".encode()
+    return _prova(f"{base}/api/dataset", corpo,
+                  {"Content-Type": f"multipart/form-data; boundary={bordo}"})
+
+
+def _dettaglio(corpo: str) -> str:
+    """Il messaggio per l'utente dentro una risposta d'errore dell'API."""
+    try:
+        return str(json.loads(corpo).get("detail", corpo))
+    except ValueError:
+        return corpo
+
+
 def _riga(esito: str, testo: str, secondi: float | None = None) -> None:
     tempo = f"  ({secondi:.1f}s)" if secondi is not None else ""
     print(f"  {esito}  {testo}{tempo}")
@@ -149,17 +189,148 @@ def verifica(base: str, con_modello: bool) -> list[str]:
     return problemi
 
 
+def _csv_di_numeri(righe: int, colonne: int) -> bytes:
+    """
+    Un CSV leggero su disco e pesante in memoria: due byte per cella diventano
+    otto. È la forma che ha ucciso la demo il 5 agosto 2026 — dentro `MAX_ROWS` e
+    dentro `MAX_COLUMNS`, e fuori da qualunque memoria disponibile.
+    """
+    intestazione = ",".join(f"c{i}" for i in range(colonne))
+    riga = ",".join("7" for _ in range(colonne))
+    return f"{intestazione}\n".encode() + f"{riga}\n".encode() * righe
+
+
+def difese(base: str) -> list[str]:
+    """
+    Le difese che il servizio deve opporre a un input sbagliato, provate da fuori.
+
+    Perché non bastano i test: ognuna di queste difese ha un test che la copre, e
+    tutti erano verdi mentre in produzione la difesa non c'era — perché dipendeva
+    da una variabile che l'host non aveva applicato, o girava su un container con
+    un decimo della memoria. La CI prova il CODICE; questo prova il SERVIZIO.
+
+    Nessun modello viene chiamato: non costa quota e si può lanciare a ogni
+    deploy. Ciò che resta fuori è dichiarato in coda alla funzione.
+    """
+    problemi: list[str] = []
+
+    def controlla(nome: str, ok: bool, dettaglio: str = "") -> None:
+        _riga("OK" if ok else "NO", nome)
+        if not ok:
+            problemi.append(f"{nome} — {dettaglio[:160]}")
+
+    # 1. File che non sono quello che dicono di essere. Un caricamento che RIESCE
+    #    sul file sbagliato è peggio di uno che fallisce: produce numeri con l'aria
+    #    di essere giusti.
+    for nome, contenuto, atteso in [
+        ("un PDF travestito da .csv", b"%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n", "pdf"),
+        ("uno ZIP travestito da .csv", b"PK\x03\x04" + b"\x00" * 60, "zip"),
+        ("un file vuoto", b"", "vuot"),
+        ("un file con la sola intestazione", b"regione,vendite\n", "intestazione"),
+        ("una riga con più campi dell'intestazione",
+         b"regione,vendite\nNord,100\nSud,200,999\n", "riga 3"),
+    ]:
+        stato, corpo = _carica(base, "prova.csv", contenuto)
+        messaggio = _dettaglio(corpo)
+        controlla(f"{nome} → 400 che dice cosa non va",
+                  stato == 400 and atteso.lower() in messaggio.lower(),
+                  f"stato {stato}: {messaggio}")
+
+    # 2. Il tetto di MEMORIA, che è ciò che tiene in vita il processo. Il file si
+    #    tara sul tetto dichiarato: sotto un tetto largo (sviluppo) verrebbe
+    #    accettato, ed è giusto così — non è un difetto, è un'altra installazione.
+    config, _ = _chiama(f"{base}/api/config")
+    tetto = int(config.get("max_dataset_ram_mb", 0))
+    # Otto byte per cella in memoria contro i due su disco: per sforare il tetto
+    # bisogna spedire un quarto della sua dimensione. Si punta a 1,25 volte e non
+    # al doppio perché il file va caricato per davvero a ogni esecuzione, e la
+    # stima del servizio sbaglia di circa il 5%: il margine basta, il traffico si
+    # dimezza.
+    oltre = 1.25
+    colonne = 100
+    da_spedire_mb = tetto * oltre / 4
+    if tetto and da_spedire_mb > config.get("max_upload_mb", 25):
+        # Su un'installazione con memoria abbondante nessun file ammesso
+        # dall'upload può sforare il tetto: il controllo non ha modo di dire nulla,
+        # e fingere un esito sarebbe peggio che dichiararlo. Provando questo caso
+        # lo script generava un file da 1,3 GB e riportava un 413 come se fosse
+        # il tetto a mancare.
+        _riga("··", f"tetto di memoria ({tetto} MB) più alto di quanto un caricamento "
+                    f"possa raggiungere (max {config.get('max_upload_mb')} MB): "
+                    f"controllo saltato")
+    elif tetto:
+        righe = int(tetto * oltre * 1024 * 1024 / (colonne * 8))
+        dati = _csv_di_numeri(righe, colonne)
+        stato, corpo = _carica(base, "pesante.csv", dati)
+        controlla(f"un dataset da ~{round(tetto * oltre)} MB in memoria → rifiutato "
+                  f"(tetto dichiarato: {tetto} MB, file inviato: {len(dati) / 1e6:.0f} MB)",
+                  stato == 400 and "memoria" in _dettaglio(corpo).lower(),
+                  f"stato {stato}: {_dettaglio(corpo)}")
+        salute, _ = _chiama(f"{base}/api/health")
+        controlla("…e il servizio è ancora vivo dopo il rifiuto",
+                  salute.get("status") == "ok", str(salute))
+    else:
+        _riga("··", "tetto di memoria non dichiarato da /api/config: controllo saltato")
+
+    # 3. Parametri sbagliati: 400 con un messaggio utile, non 500. Il 500 dice "il
+    #    servizio è guasto"; qui sta benissimo, ed è la richiesta a essere sbagliata.
+    dataset, _ = _chiama(f"{base}/api/dataset/demo", corpo={})
+    did = dataset["dataset_id"]
+    categoria = (dataset.get("categories") or [""])[0]
+    for nome, percorso in [
+        ("una misura testuale", f"/api/dataset/{did}/report?measure={_url(categoria)}"),
+        ("una misura inesistente", f"/api/dataset/{did}/report?measure=Inventata"),
+        ("una categoria inesistente", f"/api/dataset/{did}/report?category=Inventata"),
+    ]:
+        stato, corpo = _prova(f"{base}{percorso}")
+        controlla(f"{nome} → 400", stato == 400, f"stato {stato}: {_dettaglio(corpo)}")
+
+    # 4. L'unione che moltiplica le righe non fallisce: gonfia i totali in silenzio.
+    _, sinistra = _carica(base, "ordini.csv", b"ordine,totale\nA,100\nB,200\n")
+    _, destra = _carica(base, "righe.csv", b"ordine,prodotto\nA,penna\nA,quaderno\nB,gomma\n")
+    try:
+        corpo_join = json.dumps({
+            "left_id": json.loads(sinistra)["dataset_id"],
+            "right_id": json.loads(destra)["dataset_id"],
+            "left_on": "ordine", "right_on": "ordine", "how": "inner"}).encode()
+        stato, corpo = _prova(f"{base}/api/dataset/join", corpo_join,
+                              {"Content-Type": "application/json"})
+        avvisi = json.loads(corpo).get("warnings") if stato == 200 else None
+        controlla("un'unione che duplica le righe avvisa", bool(avvisi),
+                  f"stato {stato}: {corpo[:160]}")
+    except (ValueError, KeyError) as e:
+        controlla("un'unione che duplica le righe avvisa", False, f"risposta inattesa: {e}")
+
+    # Cosa NON copre, per scelta: la quota. Verificarla richiede domande vere al
+    # modello — cioè budget speso a ogni esecuzione — e un'identità di visitatore
+    # pulita, che si ottiene solo falsificando `X-Forwarded-For`. Si è verificata a
+    # mano quando il tetto è stato messo, e la difendono i test di `test_api_quota`.
+    return problemi
+
+
+def _url(valore: str) -> str:
+    """Un valore dentro una querystring. `quote` sta qui e non fra gli import in
+    testa perché è l'unica riga che ne ha bisogno."""
+    from urllib.parse import quote
+    return quote(valore)
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--url", default=URL_PREDEFINITO, help="base del servizio da verificare")
     p.add_argument("--senza-modello", action="store_true",
                    help="salta la domanda: nessun consumo di quota")
+    p.add_argument("--difese", action="store_true",
+                   help="prova anche le difese su input sbagliati (nessun consumo di quota)")
     args = p.parse_args()
 
     base = args.url.rstrip("/")
     print(f"Verifica di {base}")
     try:
         problemi = verifica(base, con_modello=not args.senza_modello)
+        if args.difese:
+            print("\nLe difese su input sbagliati:")
+            problemi += difese(base)
     except Fallito as e:
         print(f"  NO  {e}")
         return 1

@@ -311,6 +311,7 @@ def config() -> ConfigResponse:
         demo_mode=_quota.limiti.enabled,
         max_questions=_quota.limiti.max_questions if _quota.limiti.enabled else 0,
         max_upload_mb=MAX_UPLOAD_MB,
+        max_dataset_ram_mb=settings.max_dataset_ram_mb,
         supported_extensions=list(SUPPORTED_EXTENSIONS),
         # Le stesse liste che usa l'app Streamlit: erano ribattute nel client.
         project_questions=list(PROJECT_QUESTIONS),

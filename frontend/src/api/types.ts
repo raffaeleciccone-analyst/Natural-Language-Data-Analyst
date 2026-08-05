@@ -68,6 +68,8 @@ export interface ConfigResponse {
   /** Domande per sessione in modalità demo */
   max_questions: number;
   max_upload_mb: number;
+  /** Quanta MEMORIA può occupare un dataset letto. È un limite diverso da `max_upload_mb`: un CSV piccolo su disco può diventare enorme in memoria, e oltre questa soglia il file viene rifiutato */
+  max_dataset_ram_mb: number;
   supported_extensions: string[];
   /** Domande d'esempio sul progetto: le stesse che mostra l'app Streamlit */
   project_questions?: string[];

@@ -53,6 +53,20 @@ def test_config_elenca_i_provider(client):
     assert "csv" in j["supported_extensions"]
 
 
+def test_la_config_dichiara_ENTRAMBI_i_limiti_sul_file(client):
+    """
+    Il tetto di upload e quello di memoria sono limiti diversi, e il secondo non
+    si deduce dal primo: un CSV piccolo su disco puo' essere enorme in memoria.
+    Chi lo legge da fuori — il frontend, e lo script che verifica il deploy — non
+    ha altro modo di sapere cosa questa installazione concede davvero.
+    """
+    from nlda.config import settings
+
+    j = client.get("/api/config").json()
+    assert j["max_upload_mb"] > 0
+    assert j["max_dataset_ram_mb"] == settings.max_dataset_ram_mb
+
+
 def test_lo_schema_openapi_si_genera(client):
     """Se lo schema non si genera, il frontend non puo' derivarne i tipi."""
     r = client.get("/openapi.json")
