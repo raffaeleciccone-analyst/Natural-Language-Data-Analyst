@@ -138,6 +138,25 @@ _RIGA_MAPPA = re.compile(
 # Come il modello dichiara "per questa grandezza non c'è nessuna colonna".
 _NESSUNA = "nessuna"
 
+# Nomi che NON sono colonne e che il modello a volte scrive a destra della
+# freccia: `df` è il DataFrame, che il prompt gli insegna per nome. Trattarlo
+# come una colonna inventata produceva l'avviso «"dataset" è stato associato
+# alla colonna 'df', che non esiste nel dataset» — vero alla lettera e inutile.
+_NON_SONO_COLONNE = {"df", "dataframe", "none", "null"}
+
+
+def _dichiara_assenza(colonna: str) -> bool:
+    """
+    Il modello sta dicendo "questa grandezza non ce l'ho"?
+
+    Non basta l'uguaglianza con "nessuna": interrogato su un file di sistema ha
+    risposto `# mappa: utenti -> NESSUNA (il file /etc/passwd non è un
+    dataframe)`, e quella parentesi lo faceva finire fra le colonne INVENTATE —
+    con un avviso che citava come nome di colonna un'intera frase. La
+    dichiarazione è la parola iniziale; ciò che segue è un commento suo.
+    """
+    return colonna.strip().lower().startswith(_NESSUNA)
+
 
 def declared_mapping(code: str) -> dict[str, str]:
     """
@@ -190,8 +209,11 @@ def mapping_warnings(code: str, columns) -> list[str]:
     """
     nomi = {str(c) for c in columns}
     mappa = declared_mapping(code)
-    assenti = [t for t, c in mappa.items() if c.lower() == _NESSUNA]
-    inventate = [(t, c) for t, c in mappa.items() if c.lower() != _NESSUNA and c not in nomi]
+    assenti = [t for t, c in mappa.items() if _dichiara_assenza(c)]
+    inventate = [(t, c) for t, c in mappa.items()
+                 if not _dichiara_assenza(c)
+                 and c.strip().lower() not in _NON_SONO_COLONNE
+                 and c not in nomi]
 
     avvisi: list[str] = []
     if assenti:

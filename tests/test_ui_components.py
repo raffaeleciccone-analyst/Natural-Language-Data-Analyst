@@ -339,3 +339,16 @@ def test_coefficiente_proporzionale_alla_lunghezza():
 def test_valore_vuoto_non_divide_per_zero():
     # Una card può nascere senza valore (dataset degenere): non deve esplodere.
     assert _vfs("") == pytest.approx(153, abs=0.05)
+
+
+def test_una_misura_tutta_vuota_non_diventa_un_totale_di_zero():
+    """
+    `sum()` di una colonna interamente vuota vale 0, e "Totale = 0" e' un NUMERO
+    dove non c'e' nessun dato: chi legge conclude che le vendite sono state zero,
+    non che la colonna e' vuota. Media e massimo dicevano gia' "—" da soli.
+    Trovato caricando sulla demo un CSV con la misura tutta vuota.
+    """
+    df = pd.DataFrame({"Regione": ["Nord", "Sud"], "Vendite": [None, None]})
+    valori = {label: value for label, value, *_ in build_kpis(df, "Vendite", "Regione", "$")}
+    assert valori["Totale Vendite"] == "— $"
+    assert valori["Media Vendite"] == "— $"
