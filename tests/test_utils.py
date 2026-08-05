@@ -59,3 +59,26 @@ def test_fmt_num_distingue_infinito_da_mancante():
     dato anomalo dietro il trattino dei buchi."""
     assert fmt_num(float("nan")) == "—"
     assert fmt_num(float("inf")) != fmt_num(float("nan"))
+
+
+def test_i_numeri_fuori_scala_non_diventano_righe_di_trecento_cifre():
+    """
+    `1e308` si stampava con 309 cifre: nella struttura delle colonne sfondava la
+    tabella, in una card KPI il riquadro. Oltre 2^53 quelle cifre non sono
+    nemmeno un dato — sono la codifica binaria che affiora.
+    """
+    assert fmt_num(1e308) == "1,00e+308"
+    assert len(fmt_num(1e308)) < 15
+
+
+def test_un_numero_piccolissimo_non_si_stampa_come_zero():
+    """Il difetto opposto: `1e-10` diventava "0,00", cioè un numero diverso."""
+    assert fmt_num(1e-10) == "1,00e-10"
+    assert fmt_num(0.004) == "0,0040"   # piccolo ma leggibile: bastano più decimali
+
+
+def test_i_numeri_normali_non_sono_cambiati():
+    """Il rischio di una regola nuova è che tocchi il caso di tutti i giorni."""
+    assert fmt_num(2261537) == "2.261.537"
+    assert fmt_num(230.77) == "230,77"
+    assert fmt_num(0) == "0"
