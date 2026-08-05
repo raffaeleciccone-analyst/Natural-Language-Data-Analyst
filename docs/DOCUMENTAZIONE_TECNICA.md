@@ -2,7 +2,7 @@
 # Natural Language Data Analyst
 
 > **Versione documento:** 2.0 — 30 luglio 2026  
-> **Progetto documentato:** `natural-language-data-analyst` v1.1.0 (174 commit)  
+> **Progetto documentato:** `natural-language-data-analyst` v2.0.0 (251 commit)  
 > **Scopo:** rendere un nuovo sviluppatore capace non solo di *usare* il codice, ma di
 > *comprenderlo, modificarlo e difenderne ogni scelta* in un colloquio tecnico.  
 > **Livello del lettore atteso:** Python intermedio, prima esposizione a Streamlit/LLM.

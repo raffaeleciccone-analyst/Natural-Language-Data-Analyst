@@ -47,7 +47,7 @@ from fastapi import (
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from nlda import charts, checks
+from nlda import __version__, charts, checks
 from nlda.agent import DataAgent
 from nlda.api import quota, store
 from nlda.api.models import (
@@ -830,7 +830,9 @@ def create_app() -> FastAPI:
     """
     app = FastAPI(
         title="Natural Language Data Analyst — API",
-        version="1.1.0",
+        # Dal pacchetto, non ricopiata: la versione che l'API dichiara nello
+        # schema OpenAPI è la stessa che il progetto distribuisce.
+        version=__version__,
         summary="Interroga i tuoi dati in linguaggio naturale: l'LLM racconta, Pandas calcola.",
     )
 

@@ -4,7 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "natural-language-data-analyst"
-version = "1.1.0"
+# La versione sta in `nlda/__init__.py` ed è letta da lì: era ricopiata anche
+# nell'API, e due copie di un numero che deve cambiare insieme prima o poi
+# divergono.
+dynamic = ["version"]
 description = "Interroga i tuoi dati in linguaggio naturale: l'LLM racconta, Pandas calcola."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -60,6 +63,9 @@ Repository = "https://github.com/raffaeleciccone-analyst/Natural-Language-Data-A
 # Il pacchetto importabile è `nlda`; il resto del repo (app, test, dati) non fa
 # parte della distribuzione. Il nome non è generico di proposito: una libreria
 # installata non deve occupare un namespace comune come `core`.
+[tool.hatch.version]
+path = "nlda/__init__.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["nlda"]
 
