@@ -54,7 +54,55 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Le risposte alle letture già fatte, per non richiederle due volte.
+ *
+ * ## Perché serve
+ *
+ * Cliccare una barra del grafico filtra la pagina, e ricliccarla toglie il
+ * filtro: a quel punto il report che serve è **esattamente quello di un secondo
+ * prima**, che avevamo già in mano e abbiamo buttato. Misurato sulla demo, ogni
+ * ritorno costava 1,5 secondi di attesa e di CPU — su un container che di CPU ne
+ * ha un decimo, e mentre la pagina mostrava di nuovo gli scheletri.
+ *
+ * ## Perché è sicuro tenerle
+ *
+ * Si memorizzano solo le GET, che leggono e non cambiano nulla, e il dataset è
+ * indirizzato dall'**impronta del suo contenuto**: a parità di identificativo i
+ * dati sono gli stessi per definizione, quindi la risposta di prima è ancora
+ * quella giusta. Non è una cache "a scadenza sperata": è una funzione pura di
+ * cui si ricorda il risultato.
+ *
+ * Limite dichiarato: un dataset scade nel magazzino del server dopo un'ora, e
+ * qui la sua pagina resta consultabile. Non mostra numeri sbagliati — sono i
+ * numeri di quei dati — ma la domanda successiva riceverà un 404 onesto.
+ */
+const RISPOSTE_TENUTE = 12;
+const cache = new Map<string, unknown>();
+
+/** Chiave: il metodo e il percorso completo, cioè tutto ciò da cui la risposta
+ *  dipende. Le POST non entrano: possono cambiare lo stato del server. */
+function chiaveCache(percorso: string, init?: RequestInit): string | null {
+  const metodo = (init?.method ?? "GET").toUpperCase();
+  return metodo === "GET" ? `GET ${percorso}` : null;
+}
+
+/** Solo per i test: riparte da zero fra un caso e l'altro. */
+export function svuotaCache(): void {
+  cache.clear();
+}
+
 async function richiesta<T>(percorso: string, init?: RequestInit): Promise<T> {
+  const chiave = chiaveCache(percorso, init);
+  if (chiave && cache.has(chiave)) {
+    // `Map` conserva l'ordine di inserimento: rimettere la voce la sposta in
+    // fondo, e lo sfratto qui sotto prende sempre la meno usata di recente.
+    const tenuta = cache.get(chiave) as T;
+    cache.delete(chiave);
+    cache.set(chiave, tenuta);
+    return tenuta;
+  }
+
   let risposta: Response;
   try {
     risposta = await fetch(`${BASE}${percorso}`, init);
@@ -68,7 +116,14 @@ async function richiesta<T>(percorso: string, init?: RequestInit): Promise<T> {
 
   if (!risposta.ok) throw await erroreDaRisposta(risposta);
 
-  return (await risposta.json()) as T;
+  const dati = (await risposta.json()) as T;
+  if (chiave) {
+    cache.set(chiave, dati);
+    // Un report pesa fino a 130 KB: una dozzina di voci è meno di 2 MB, cioè
+    // niente per un browser, e copre l'andirivieni fra i filtri di una sessione.
+    if (cache.size > RISPOSTE_TENUTE) cache.delete(cache.keys().next().value!);
+  }
+  return dati;
 }
 
 /**
