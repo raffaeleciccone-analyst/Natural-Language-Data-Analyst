@@ -177,6 +177,14 @@ def _run_code(code: str, df: pd.DataFrame) -> ExecutionResult:
         # porterebbe allo stesso blocco. Va intercettata PRIMA del generico Exception.
         log.warning("Sandbox: traversata bloccata a runtime (%s) — %r", e, code[:200])
         return ExecutionFailure("security", f"Errore di sicurezza: {e}.", code)
+    except ImportError as e:
+        # Libreria assente (copre ModuleNotFoundError). NON è un difetto del codice
+        # generato: al secondo tentativo la libreria mancherà ancora. Classificarlo
+        # 'runtime' lo rendeva ritentabile — tre chiamate al modello, tutte
+        # destinate a fallire — e faceva leggere all'utente "forse una colonna non
+        # esiste con quel nome", che è falso e lo manda a caccia della colonna.
+        log.warning("Sandbox: libreria assente (%s) — %r", e, code[:200])
+        return ExecutionFailure("dependency", f"Errore: libreria non disponibile ({e}).", code)
     except Exception as e:
         return ExecutionFailure("runtime", f"Errore di esecuzione sul codice generato: {e}", code)
 # --- Canale di ritorno dal worker: SOLO dati, mai oggetti ----------------------
