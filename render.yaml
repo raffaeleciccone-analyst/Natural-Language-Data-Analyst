@@ -82,6 +82,23 @@ services:
       - key: MAX_STORE_RAM_MB
         value: "96"
 
+      # Il tetto qui sopra dice quanto possono occupare i dataset TENUTI in
+      # memoria; questo dice quanto può occuparne UNO, e serve a un'altra cosa:
+      # sopravvivere alla lettura. Misurato il 5 agosto 2026 sul servizio vero —
+      # un CSV da 20 MB su disco (50.000 righe × 200 colonne di interi: dentro
+      # MAX_ROWS e dentro MAX_COLUMNS) diventa 80 MB di tabella e ne chiede 207
+      # al processo mentre la costruisce. Su questo container il caricamento
+      # veniva ucciso dal sistema, e con lui sparivano i dataset di TUTTI i
+      # visitatori.
+      #
+      # 32 MB di tabella significano ~85 MB di picco: ci stanno accanto ai ~130
+      # dell'immagine, ~100 della riserva calda e ai dataset già in magazzino,
+      # da cui il caricatore si fa fare spazio prima di leggere. Un file più
+      # grande riceve un messaggio che dice quanto pesa e cosa fare — che è il
+      # comportamento giusto anche quando la memoria abbonda.
+      - key: MAX_DATASET_RAM_MB
+        value: "32"
+
       # Il piano gratuito da' 0,1 vCPU condivisa: l'avvio del worker della
       # sandbox — un interprete che importa pandas e plotly — richiede li' molto
       # piu' dei 2 secondi misurati in locale, e quel tempo rientra nel budget di
