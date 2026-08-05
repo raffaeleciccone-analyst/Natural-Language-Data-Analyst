@@ -78,20 +78,46 @@ _FOGLIE_PERICOLOSE = st.sampled_from([
 ])
 
 
-def _combinatore(foglie, chiavi):
-    """Costruisce espressioni Python PARSABILI (somme, subscript, chiamate, metodi)
+@st.composite
+def _combinatore(draw, foglie, chiavi):
+    """
+    Costruisce espressioni Python PARSABILI (somme, subscript, chiamate, metodi)
     a partire dalle foglie: così il ramo 'accettato' del validatore viene davvero
-    esercitato, invece di finire quasi sempre in errore di sintassi."""
-    return st.recursive(
-        foglie,
-        lambda e: st.one_of(
-            st.builds("({} + {})".format, e, e),
-            st.builds("{}.sum()".format, e),
-            st.builds("{}[{!r}]".format, e, chiavi),
-            st.builds("sum({})".format, e),
-        ),
-        max_leaves=5,
-    )
+    esercitato, invece di finire quasi sempre in errore di sintassi.
+
+    ## Perché a profondità contata e non con `st.recursive`
+
+    Prima queste espressioni nascevano da `st.recursive`, il cui costo di
+    generazione non ha un tetto: hypothesis espande e riprova finché il risultato
+    non rientra in `max_leaves`. Nella suite del 5 agosto 2026 un singolo
+    sorteggio ha impiegato **99 secondi** e il test è fallito con
+    `FailedHealthCheck: input generation is slow` — la terza occorrenza di un
+    rosso intermittente che sembrava accusare il validatore e invece non aveva
+    nemmeno finito di generare gli esempi. Il tempo si consumava in `st.recursive`
+    (misurato: 400 esempi in 1,1 s nel caso normale, quindi ~2,7 ms l'uno).
+
+    Qui il numero di avvolgimenti è un intero sorteggiato una volta sola: il
+    costo per esempio ha un limite superiore, e la patologia non ha dove
+    annidarsi. Le forme generate restano le stesse, annidamento su entrambi i
+    lati della somma compreso.
+    """
+    espr = draw(foglie)
+    for _ in range(draw(st.integers(min_value=0, max_value=4))):
+        forma = draw(st.sampled_from(["somma", "metodo", "indice", "chiamata"]))
+        if forma == "somma":
+            # Il lato destro può a sua volta essere composto (una volta): serve a
+            # generare fughe annidate a destra, non solo a sinistra.
+            destra = draw(foglie)
+            if draw(st.booleans()):
+                destra = f"{destra}[{draw(chiavi)!r}]"
+            espr = f"({espr} + {destra})"
+        elif forma == "metodo":
+            espr = f"{espr}.sum()"
+        elif forma == "indice":
+            espr = f"{espr}[{draw(chiavi)!r}]"
+        else:
+            espr = f"sum({espr})"
+    return espr
 
 
 _ESPR_SICURE = _combinatore(_FOGLIE_SICURE, st.sampled_from(["a", "b", "0"]))
