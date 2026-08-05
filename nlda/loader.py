@@ -179,6 +179,41 @@ def _detect_sep(header: str) -> str:
     return max(presenti, key=header.count) if presenti else ","
 
 
+# Firme di formati BINARI che arrivano travestiti da CSV, quasi sempre per una
+# rinomina o un'esportazione sbagliata. Si riconoscono dai primi byte.
+_FIRME_BINARIE: tuple[tuple[bytes, str], ...] = (
+    (b"%PDF", "un PDF"),
+    (b"PK\x03\x04", "un archivio ZIP (o un .xlsx: prova a caricarlo con la sua estensione)"),
+    (b"\xd0\xcf\x11\xe0", "un vecchio file Office (.xls/.doc)"),
+    (b"\x89PNG", "un'immagine PNG"),
+    (b"\xff\xd8\xff", "un'immagine JPEG"),
+    (b"SQLite format 3", "un database SQLite"),
+)
+
+
+def _rifiuta_se_binario(raw: bytes) -> None:
+    """
+    Ferma un file binario prima che venga letto come testo.
+
+    Senza, un PDF rinominato `.csv` non dà errore: `read_csv` legge i suoi byte e
+    produce una tabella con una colonna chiamata '%PDF-1.4'. L'app finge di aver
+    capito, e l'utente si ritrova un report su spazzatura invece di una frase che
+    gli dice di aver caricato il file sbagliato.
+
+    Si riconoscono le firme note (che permettono di NOMINARE il formato) e, come
+    rete di sicurezza, i byte NUL: un file di testo non ne contiene.
+    """
+    if not isinstance(raw, bytes):
+        return
+    for firma, descrizione in _FIRME_BINARIE:
+        if raw.startswith(firma):
+            raise ValueError(f"Questo non è un file di dati leggibile: sembra {descrizione}.")
+    if b"\x00" in raw[:8192]:
+        raise ValueError(
+            "Questo non è un file di testo: contiene byte binari. "
+            "Esporta i dati in CSV, Excel o JSON prima di caricarli.")
+
+
 def _read_csv_resilient(f) -> pd.DataFrame:
     """Legge un CSV rilevando il separatore tra delimitatori reali, togliendo il BOM
     e gestendo gli encoding non-UTF8."""
@@ -186,12 +221,21 @@ def _read_csv_resilient(f) -> pd.DataFrame:
     if isinstance(raw, str):
         text = raw
     else:
+        _rifiuta_se_binario(raw)
         try:
             text = raw.decode("utf-8-sig")   # '-sig' rimuove il BOM in testa, se c'è
         except UnicodeDecodeError:
             text = raw.decode("latin-1")
+    if not text.strip():
+        raise ValueError("Il file è vuoto: non contiene né intestazione né dati.")
     header = text.split("\n", 1)[0]
-    return pd.read_csv(io.StringIO(text), sep=_detect_sep(header), engine="python")
+    try:
+        return pd.read_csv(io.StringIO(text), sep=_detect_sep(header), engine="python")
+    except pd.errors.EmptyDataError as e:
+        # Il messaggio di pandas ("No columns to parse from file") è in inglese e
+        # parla di parsing: chi carica un file vuole sapere cosa manca al FILE.
+        raise ValueError("Il file non contiene colonne leggibili: "
+                         "controlla che la prima riga sia l'intestazione.") from e
 
 
 def _check_dimensioni(df: pd.DataFrame) -> None:
@@ -207,6 +251,14 @@ def _check_dimensioni(df: pd.DataFrame) -> None:
     formati compressi: un .xlsx da 25 MB può contenere milioni di righe.
     """
     righe, colonne = df.shape
+    if colonne == 0:
+        raise ValueError("Il file non contiene colonne leggibili: "
+                         "controlla che la prima riga sia l'intestazione.")
+    if righe == 0:
+        # Accettarlo significherebbe mostrare un report di sole caselle vuote e
+        # lasciare all'utente il compito di capire perché. La causa è nel file, e
+        # dirla subito costa una frase.
+        raise ValueError("Il file contiene solo l'intestazione, nessuna riga di dati.")
     if righe > settings.max_rows:
         raise ValueError(
             f"Il file ha {righe:,} righe, oltre il limite di {settings.max_rows:,}. "
@@ -241,8 +293,18 @@ def read_any(uploaded_file) -> pd.DataFrame:
     name = uploaded_file.name.lower()
 
     if name.endswith((".xlsx", ".xls")):
-        # sheet_name=0: viene letto il primo foglio (comportamento documentato)
-        df = pd.read_excel(uploaded_file, sheet_name=0)  # richiede openpyxl per .xlsx
+        try:
+            # sheet_name=0: viene letto il primo foglio (comportamento documentato)
+            df = pd.read_excel(uploaded_file, sheet_name=0)  # richiede openpyxl per .xlsx
+        except ValueError as e:
+            # "Excel file format cannot be determined, you must specify an engine
+            # manually": è in inglese e parla di ENGINE, cioè di un dettaglio della
+            # libreria. Chi carica ha bisogno di sapere che il file non è un Excel.
+            if "format cannot be determined" not in str(e):
+                raise
+            raise ValueError(
+                "Questo file non è un Excel leggibile, nonostante l'estensione. "
+                "Se è un CSV, caricalo con estensione .csv.") from e
     elif name.endswith(".json"):
         data = json.loads(uploaded_file.read())
         if isinstance(data, (list, dict)):
