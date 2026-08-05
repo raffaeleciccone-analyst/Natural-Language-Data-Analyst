@@ -627,7 +627,13 @@ def profile(df: pd.DataFrame) -> pd.DataFrame:
         miss = int(s.isna().sum())
         kind = column_kind(s)
         if kind == "numerica" and s.notna().any():
-            detail = f"min {s.min():.2f} · media {s.mean():.2f} · max {s.max():.2f}"
+            # I numeri passano da `fmt_num` come ovunque nell'app. Con `:.2f` la
+            # riga era in formato americano — l'unico posto in cui i decimali si
+            # leggevano col punto mentre i KPI accanto usavano la virgola — e su
+            # un valore fuori scala diventava lunga 339 caratteri, sfondando la
+            # tabella della struttura.
+            detail = (f"min {fmt_num(s.min())} · media {fmt_num(s.mean())} "
+                      f"· max {fmt_num(s.max())}")
         else:
             values = s.dropna().astype(str)
             detail = f"più frequente: {values.mode().iat[0]}" if not values.empty else "—"

@@ -17,6 +17,7 @@ from nlda.loader import (
     measure_columns,
     monthly_trend,
     ordered_measures,
+    profile,
     read_any,
 )
 
@@ -652,3 +653,28 @@ def test_un_file_oltre_il_tetto_di_upload_viene_rifiutato_dal_CARICATORE(monkeyp
 def test_un_file_sotto_il_tetto_passa(monkeypatch):
     monkeypatch.setattr("nlda.loader.settings", Settings(max_upload_mb=1))
     assert len(read_any(_upload(b"a,b\n1,2\n3,4\n", "piccolo.csv"))) == 2
+
+
+def test_il_profilo_non_produce_righe_da_trecento_caratteri():
+    """
+    Con `inf` e `1e308` fra i valori, il dettaglio della colonna diventava lungo
+    339 caratteri e sfondava la tabella della struttura. I numeri del profilo
+    passano ora da `fmt_num`, come ovunque nell'app — cosa che sistema anche
+    un'incoerenza: erano l'unico posto in cui i decimali si leggevano col punto
+    americano mentre i KPI accanto usavano la virgola.
+    """
+    df = pd.DataFrame({"Vendite": [1e308, -1e308, float("inf"), 1.0]})
+    dettaglio = profile(df)["Dettaglio"].iat[0]
+    assert len(dettaglio) < 60, dettaglio
+    assert "e+308" in dettaglio and "∞" in dettaglio
+
+
+def test_il_profilo_scrive_i_numeri_all_italiana():
+    """
+    Virgola sui decimali e punto sulle migliaia, come i KPI accanto. Sopra i
+    mille i decimali cadono: e' la convenzione di `fmt_num` in tutta l'app, e un
+    profilo che facesse eccezione sarebbe la seconda convenzione da ricordare.
+    """
+    dettaglio = profile(pd.DataFrame({"Vendite": [230.77, 1500.0]}))["Dettaglio"].iat[0]
+    assert "230,77" in dettaglio          # decimali con la virgola
+    assert "1.500" in dettaglio           # migliaia con il punto
