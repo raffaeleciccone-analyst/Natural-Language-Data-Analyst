@@ -811,6 +811,29 @@ def test_explain_false_non_paga_la_narrazione(client, csv_bytes, monkeypatch):
     servizio.stream_explanation.assert_not_called()
 
 
+def test_lo_streaming_non_narra_cio_che_e_gia_scritto(client, csv_bytes, monkeypatch):
+    """
+    Terza strada che puo' narrare, e la piu' facile da dimenticare: qui la
+    spiegazione non passa dal servizio, se la genera lo stream. Se il giudizio
+    vivesse solo in `AnalysisService`, la demo React continuerebbe a pagare la
+    narrazione mentre Streamlit non la paga piu'.
+    """
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    servizio = _servizio_streaming(monkeypatch, Turn(
+        question="qual e' il profitto?",
+        code="# mappa: profitto -> NESSUNA\nresult = 'Non c'e' una colonna del profitto.'",
+        result=ExecutionSuccess(fig=None, value="Non c'e' una colonna del profitto.",
+                                summary="")))
+
+    ev = _eventi(client.post("/api/ask/stream",
+                             json={"dataset_id": d["dataset_id"],
+                                   "question": "qual e' il profitto?"}).text)
+    nomi = [n for n, _ in ev]
+    assert "token" not in nomi
+    assert dict(ev)["result"]["warnings"], "l'avviso deterministico resta: e' lui a informare"
+    servizio.stream_explanation.assert_not_called()
+
+
 def test_explain_resta_vero_per_difetto(client, csv_bytes, monkeypatch):
     """Il difetto opposto sarebbe peggiore: una chat muta senza che nessuno
     l'abbia chiesto. Chi non dice nulla continua a ricevere la spiegazione."""
