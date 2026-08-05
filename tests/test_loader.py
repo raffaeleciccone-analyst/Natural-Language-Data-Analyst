@@ -634,3 +634,21 @@ def test_l_avviso_sulle_omonime_riconosce_il_separatore():
     """Un CSV europeo usa `;`: cercare le virgole troverebbe una colonna sola."""
     avviso = duplicate_columns_warning(b"Vendite;Vendite;Regione\n10;20;Nord\n", "x.csv")
     assert avviso and "«Vendite»" in avviso
+
+
+def test_un_file_oltre_il_tetto_di_upload_viene_rifiutato_dal_CARICATORE(monkeypatch):
+    """
+    Il tetto lo imponeva solo la rotta dell'API; l'app Streamlit si affidava a
+    `maxUploadSize` del suo config.toml, e `MAX_UPLOAD_MB` non la raggiungeva.
+    Con i default coincidenti non si vedeva: bastava abbassare la variabile
+    perche' l'interfaccia promettesse un limite che nessuno imponeva.
+    """
+    monkeypatch.setattr("nlda.loader.settings", Settings(max_upload_mb=1))
+    grande = b"a,b\n" + b"1,2\n" * 400_000      # ~1,6 MB
+    with pytest.raises(ValueError, match="oltre il limite"):
+        read_any(_upload(grande, "grande.csv"))
+
+
+def test_un_file_sotto_il_tetto_passa(monkeypatch):
+    monkeypatch.setattr("nlda.loader.settings", Settings(max_upload_mb=1))
+    assert len(read_any(_upload(b"a,b\n1,2\n3,4\n", "piccolo.csv"))) == 2

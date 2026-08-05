@@ -546,11 +546,43 @@ class NamedBytesIO(io.BytesIO):
         self.name = nome
 
 
+def _rifiuta_se_troppo_pesante(uploaded_file) -> None:
+    """
+    Il file supera il tetto di upload di questa installazione?
+
+    Il controllo sta QUI e non in una sola interfaccia perché era proprio quello
+    il difetto: l'API contava i byte nella sua rotta, l'app Streamlit si affidava
+    a `maxUploadSize` di `.streamlit/config.toml`, e `MAX_UPLOAD_MB` — che da
+    oggi si può cambiare in deploy — non arrivava affatto alla seconda. Con i
+    default coincidenti non si vedeva; bastava abbassare la variabile perché
+    l'interfaccia promettesse un limite che nessuno imponeva.
+
+    `config.toml` resta la PRIMA linea per Streamlit: blocca il trasferimento
+    prima che i byte arrivino. Questo è la seconda, e vale per chiunque chiami il
+    caricatore.
+    """
+    dimensione = getattr(uploaded_file, "size", None)   # UploadedFile di Streamlit
+    if not isinstance(dimensione, int):
+        try:
+            posizione = uploaded_file.tell()
+            uploaded_file.seek(0, io.SEEK_END)
+            dimensione = uploaded_file.tell()
+            uploaded_file.seek(posizione)
+        except Exception:  # noqa: BLE001 — un file-like senza seek: si legge e basta
+            return
+    if dimensione > settings.max_upload_mb * _MB:
+        raise ValueError(
+            f"Il file pesa {fmt_num(dimensione / _MB)} MB, oltre il limite di "
+            f"{settings.max_upload_mb} MB di questa installazione. Caricane una parte, "
+            f"oppure alza MAX_UPLOAD_MB.")
+
+
 def read_any(uploaded_file) -> pd.DataFrame:
     """
     Legge un file caricato dall'utente in un DataFrame, riconoscendo il formato
     dall'estensione: CSV, Excel (.xlsx/.xls) o JSON.
     """
+    _rifiuta_se_troppo_pesante(uploaded_file)
     name = uploaded_file.name.lower()
 
     if name.endswith((".xlsx", ".xls")):

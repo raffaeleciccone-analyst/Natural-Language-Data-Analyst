@@ -31,11 +31,23 @@ def clean_code(text: str) -> str:
     return cleaned.strip()
 
 
+# Oltre 2^53 un float non rappresenta più esattamente gli interi: le cifre in
+# fondo non sono un dato, sono la codifica binaria che affiora.
+_OLTRE_LA_PRECISIONE = 2 ** 53
+# Sotto questa soglia "0,00" nasconderebbe un valore che c'è: servono più decimali.
+_SOTTO_LA_SOGLIA = 0.005
+# Sotto QUESTA nemmeno quattro decimali bastano, e si passa alla potenza di dieci.
+_MINUSCOLO = 0.0001
+
+
 def fmt_num(x) -> str:
     """
     Formatta un numero in modo leggibile all'italiana: separatore delle migliaia '.'
     e decimale ','. Interi e valori grandi senza decimali (2.261.537), valori piccoli
     con due decimali (230,77). Non-numeri restituiti invariati.
+
+    Ai due estremi si passa alla notazione scientifica (`1,00e+308`, `1,00e-10`):
+    là le cifre della forma italiana o non sono un dato o non ci sono affatto.
     """
     try:
         x = float(x)
@@ -51,6 +63,19 @@ def fmt_num(x) -> str:
     # mancante, e confonderli nasconderebbe un dato anomalo da correggere.
     if x in (float("inf"), float("-inf")):
         return "∞" if x > 0 else "−∞"
+    # Fuori scala si passa alla notazione scientifica. Il confine non è estetico:
+    # oltre 2^53 un float non rappresenta più gli interi esatti, quindi le cifre
+    # che si stamperebbero sono un artefatto della codifica binaria e non un dato
+    # — `1e308` diventava una riga da 309 cifre, che nella struttura delle
+    # colonne sfondava la tabella e in una card KPI il riquadro. Sotto lo zero
+    # virgola qualcosa vale il difetto opposto: `1e-10` si stampava "0,00", cioè
+    # zero, che è un numero diverso.
+    if abs(x) >= _OLTRE_LA_PRECISIONE or 0 < abs(x) < _MINUSCOLO:
+        return f"{x:.2e}".replace(".", ",")
+    # Piccolo ma non minuscolo: bastano più decimali, e si leggono meglio di una
+    # potenza di dieci in un'app che parla di sconti e percentuali.
+    if 0 < abs(x) < _SOTTO_LA_SOGLIA:
+        return f"{x:,.4f}".replace(",", "§").replace(".", ",").replace("§", ".")
     if x == int(x) or abs(x) >= 1000:
         s = f"{x:,.0f}"
     else:
