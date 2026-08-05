@@ -61,6 +61,17 @@ class Settings:
     max_rows: int = 2_000_000
     max_columns: int = 500
 
+    # --- Quanta memoria può occupare UN dataset letto ---
+    # Righe e colonne non dicono quanto costa un file: 50.000 righe per 200
+    # colonne di interi stanno in 20 MB su disco e diventano 80 MB in memoria,
+    # dentro entrambi i limiti qui sopra. E il costo vero è il PICCO per
+    # costruire la tabella, misurato ~2,6 volte la tabella stessa: 20 MB di CSV
+    # ne chiedevano 207 al processo. Su un container da 512 MB questo tetto è
+    # ciò che sta fra un file grande e l'applicazione uccisa dal sistema —
+    # perciò la demo lo abbassa in `render.yaml`. Il default è tarato sul
+    # `docker-compose` da 2 GB e sullo sviluppo in locale.
+    max_dataset_ram_mb: int = 256
+
     # --- Quanta RAM può tenere occupata il magazzino dell'API ---
     # I dataset caricati restano in memoria fra una richiesta e l'altra
     # (`nlda/api/store.py`). Questo è il tetto sulla loro somma: superato, si
@@ -98,6 +109,7 @@ class Settings:
                 "ALLOW_INPROCESS_FALLBACK", cls.allow_inprocess_fallback),
             max_rows=_env_int("MAX_ROWS", cls.max_rows),
             max_columns=_env_int("MAX_COLUMNS", cls.max_columns),
+            max_dataset_ram_mb=_env_int("MAX_DATASET_RAM_MB", cls.max_dataset_ram_mb),
             store_ram_mb=_env_int("MAX_STORE_RAM_MB", cls.store_ram_mb),
             request_timeout=_env_float("LLM_REQUEST_TIMEOUT", cls.request_timeout),
             max_retries=_env_int("LLM_MAX_RETRIES", cls.max_retries),

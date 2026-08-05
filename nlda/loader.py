@@ -215,24 +215,126 @@ def _rifiuta_se_binario(raw: bytes) -> None:
             "Esporta i dati in CSV, Excel o JSON prima di caricarli.")
 
 
+_MB = 1024 * 1024
+
+# Quanto file basta per stimare il costo del resto. Il rapporto fra byte su disco
+# e byte in memoria si stabilizza dopo poche migliaia di righe, e leggere un MB
+# costa millisecondi: la stima è un investimento, non una tassa.
+_CAMPIONE_BYTE = _MB
+
+
+def _stima_byte_csv(raw: bytes) -> int | None:
+    """
+    Quanta memoria occuperà la tabella, misurata sul primo MB ed estrapolata.
+
+    Serve a rifiutare PRIMA di allocare. Il controllo dopo la lettura non basta:
+    quando lo si esegue, la memoria è già stata presa — e il costo vero non è la
+    tabella finale ma il picco per costruirla, misurato ~2,6 volte più grande.
+    Su un container piccolo il processo muore prima di poter dire di no, e con
+    lui se ne vanno i dataset di tutti gli altri.
+
+    Restituisce `None` quando non c'è nulla di utile da stimare (file più corto
+    del campione, o campione illeggibile): in quel caso decide il controllo dopo
+    la lettura, che sui file piccoli è sicuro e più preciso.
+
+    Limite dichiarato: i tipi si deducono dal campione, quindi una colonna che
+    diventa testo solo a metà file viene stimata per difetto. Il controllo dopo
+    la lettura la coglie comunque — ma a memoria già presa, che è esattamente
+    ciò che questa stima serve a evitare. Costa 41 ms su un file da 20 MB, contro
+    i 522 della lettura intera.
+    """
+    if len(raw) <= _CAMPIONE_BYTE:
+        return None
+    fine = raw.rfind(b"\n", 0, _CAMPIONE_BYTE)   # non si taglia a metà di una riga
+    if fine <= 0:
+        return None
+    campione = raw[:fine]
+    try:
+        df = pd.read_csv(io.BytesIO(campione), sep=_detect_sep(_testo(raw.split(b"\n", 1)[0])),
+                         encoding="utf-8-sig")
+    except Exception:  # noqa: BLE001 — se il campione non si legge, lo dirà la lettura vera
+        return None
+    if df.empty:
+        return None
+    return int(df.memory_usage(deep=True).sum() * len(raw) / len(campione))
+
+
+def _rifiuta_se_troppo_grande(byte: "int | None", *, stimato: bool) -> None:
+    """
+    Un dataset più grande di quanto questa installazione conceda non si legge.
+
+    Il tetto è sulla MEMORIA, non sulle righe: due file dello stesso peso su
+    disco possono costare dieci volte l'uno dell'altro, e le soglie di
+    `_check_dimensioni` (righe e colonne) non lo vedono.
+    """
+    tetto = settings.max_dataset_ram_mb * _MB
+    if byte is None or byte <= tetto:
+        return
+    raise ValueError(
+        f"Il file {'occuperebbe' if stimato else 'occupa'} circa "
+        f"{fmt_num(byte / _MB)} MB di memoria, oltre i {settings.max_dataset_ram_mb} MB "
+        f"che questa installazione concede a un dataset. Carica un estratto (meno "
+        f"righe o meno colonne), oppure alza MAX_DATASET_RAM_MB su una macchina "
+        f"con più memoria.")
+
+
+def stima_ram(dati: bytes, nome: str) -> "int | None":
+    """
+    Quanta memoria chiederà questo file, per chi deve fargli posto prima di leggerlo.
+
+    `None` significa "non stimabile", non "piccolo": un .xlsx è compresso e un
+    JSON va letto tutto prima di sapere cosa contiene. Chi la usa per prenotare
+    spazio tratti il `None` come "il massimo che un dataset può occupare".
+    """
+    return _stima_byte_csv(dati) if nome.lower().endswith(".csv") else None
+
+
+def _testo(raw: bytes) -> str:
+    """
+    Il file come stringa. Costa una copia intera: si chiama solo dove serve davvero.
+
+    L'UTF-8 si tenta per primo ('-sig' toglie il BOM in testa, se c'è); latin-1
+    non fallisce mai e fa da rete per i CSV esportati da Excel in Europa.
+    """
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode("latin-1")
+
+
 def _read_csv_resilient(f) -> pd.DataFrame:
-    """Legge un CSV rilevando il separatore tra delimitatori reali, togliendo il BOM
-    e gestendo gli encoding non-UTF8."""
+    """
+    Legge un CSV rilevando il separatore tra delimitatori reali, togliendo il BOM
+    e gestendo gli encoding non-UTF8.
+
+    ## Perché i byte si passano al parser così come sono
+
+    Prima il file veniva decodificato in una stringa, la stringa avvolta in uno
+    `StringIO` e il tutto dato a `engine="python"`. Tre copie e il parser lento:
+    misurato su un CSV da 20 MB che diventa un DataFrame da 80 MB, il PICCO del
+    processo era **459 MB** — su un container da 512 il caricamento uccideva
+    l'applicazione, e con essa i dataset di tutti gli altri visitatori.
+
+    Ora i byte vanno al parser predefinito (quello in C), che decodifica lui:
+    stesso risultato, **207 MB** di picco sullo stesso file. Il parser python non
+    serviva: il separatore lo sceglie `_detect_sep` ed è sempre un carattere solo,
+    l'unico caso che avrebbe richiesto quel motore.
+    """
     raw = f.read()
     if isinstance(raw, str):
-        text = raw
-    else:
-        _rifiuta_se_binario(raw)
-        try:
-            text = raw.decode("utf-8-sig")   # '-sig' rimuove il BOM in testa, se c'è
-        except UnicodeDecodeError:
-            text = raw.decode("latin-1")
-    if not text.strip():
+        # Comodità per chi passa uno `StringIO`: invece di tenere due percorsi si
+        # riporta all'unico vero, quello a byte.
+        raw = raw.encode("utf-8")
+    _rifiuta_se_binario(raw)
+    if not raw.strip():
         raise ValueError("Il file è vuoto: non contiene né intestazione né dati.")
-    header = text.split("\n", 1)[0]
-    sep = _detect_sep(header)
+    _rifiuta_se_troppo_grande(_stima_byte_csv(raw), stimato=True)
+    sep = _detect_sep(_testo(raw.split(b"\n", 1)[0]))
     try:
-        df = pd.read_csv(io.StringIO(text), sep=sep, engine="python")
+        df = pd.read_csv(io.BytesIO(raw), sep=sep, encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        # Non è UTF-8: si rilegge in latin-1, che accetta qualunque byte.
+        df = pd.read_csv(io.BytesIO(raw), sep=sep, encoding="latin-1")
     except pd.errors.EmptyDataError as e:
         # Il messaggio di pandas ("No columns to parse from file") è in inglese e
         # parla di parsing: chi carica un file vuole sapere cosa manca al FILE.
@@ -245,7 +347,7 @@ def _read_csv_resilient(f) -> pd.DataFrame:
         # per l'utente è lo stesso difetto, anche se pandas lo tratta in due modi.
         trovato = re.search(r"line (\d+)", str(e))
         raise _errore_righe_irregolari(int(trovato.group(1)) if trovato else None) from e
-    _rifiuta_se_disallineato(df, text, sep)
+    _rifiuta_se_disallineato(df, raw, sep)
     return df
 
 
@@ -280,7 +382,7 @@ def _prima_riga_irregolare(text: str, sep: str) -> int | None:
     return None
 
 
-def _rifiuta_se_disallineato(df: pd.DataFrame, text: str, sep: str) -> None:
+def _rifiuta_se_disallineato(df: pd.DataFrame, raw: bytes, sep: str) -> None:
     """
     Ferma il caso in cui una riga ha PIÙ campi dell'intestazione.
 
@@ -294,10 +396,14 @@ def _rifiuta_se_disallineato(df: pd.DataFrame, text: str, sep: str) -> None:
 
     Si rifiuta invece di avvisare: con le colonne disallineate non esiste una
     lettura onesta del file da mostrare accanto all'avviso.
+
+    Il file si decodifica QUI e non prima: serve solo per contare le righe fino
+    alla prima sbagliata, cioè su un file che stiamo comunque per rifiutare. Sul
+    caso normale quella copia non si paga.
     """
     if isinstance(df.index, pd.RangeIndex):
         return
-    raise _errore_righe_irregolari(_prima_riga_irregolare(text, sep))
+    raise _errore_righe_irregolari(_prima_riga_irregolare(_testo(raw), sep))
 
 
 def _check_dimensioni(df: pd.DataFrame) -> None:
@@ -322,10 +428,13 @@ def _check_dimensioni(df: pd.DataFrame) -> None:
         # dirla subito costa una frase.
         raise ValueError("Il file contiene solo l'intestazione, nessuna riga di dati.")
     if righe > settings.max_rows:
+        # I numeri si formattano con `fmt_num`, non con un `.replace(',', '.')` in
+        # coda al messaggio: quello si applicava all'INTERA frase e trasformava le
+        # virgole della prosa in punti ("...righe. oltre il limite di...").
         raise ValueError(
-            f"Il file ha {righe:,} righe, oltre il limite di {settings.max_rows:,}. "
-            "Filtra o aggrega i dati prima di caricarli, oppure alza MAX_ROWS."
-            .replace(",", "."))
+            f"Il file ha {fmt_num(righe)} righe, oltre il limite di "
+            f"{fmt_num(settings.max_rows)}. Filtra o aggrega i dati prima di "
+            f"caricarli, oppure alza MAX_ROWS.")
     if colonne > settings.max_columns:
         raise ValueError(
             f"Il file ha {colonne} colonne, oltre il limite di {settings.max_columns}. "
@@ -377,9 +486,13 @@ def read_any(uploaded_file) -> pd.DataFrame:
     else:
         df = _read_csv_resilient(uploaded_file)
 
-    # Il controllo va DOPO la lettura: la dimensione reale si conosce solo a file
-    # aperto, perché i formati compressi non la lasciano dedurre dai byte.
+    # I controlli vanno DOPO la lettura: la dimensione reale si conosce solo a
+    # file aperto, perché i formati compressi non la lasciano dedurre dai byte.
+    # Per il CSV il tetto di memoria è già stato applicato PRIMA di allocare
+    # (`_stima_byte_csv`); qui si chiude il caso degli altri formati, dove la
+    # memoria è comunque già stata presa ma almeno non la si tiene occupata.
     _check_dimensioni(df)
+    _rifiuta_se_troppo_grande(int(df.memory_usage(deep=True).sum()), stimato=False)
     return _clean_columns(df)
 
 
