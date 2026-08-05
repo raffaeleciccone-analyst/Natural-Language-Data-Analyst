@@ -82,6 +82,7 @@ domanda con la risposta e la tabella che l'ha prodotta.*
 | **Filtro globale** | Restringi l'intera analisi a un sottoinsieme: vale per report, KPI, confronto e domande. Cliccare una barra della classifica lo imposta, e la classifica resta intera con quella barra in evidenza. |
 | **Confronto tra periodi** | Una misura per mese, trimestre o anno con la variazione sul periodo precedente — dalla sezione dedicata o chiedendolo a parole. |
 | **Unione di due file** | Carica un secondo dataset e uniscilo al primo su una coppia di chiavi; da lì in poi report e domande valgono sui dati uniti. |
+| **Dice quando NON può rispondere** | Se chiedi il «profitto» e il dataset non ce l'ha, non ti dà le vendite fingendo siano quelle: il modello è tenuto a dichiarare su quale colonna sta rispondendo (`# mappa: profitto -> NESSUNA`), la dichiarazione viene verificata contro le colonne vere e l'avviso arriva in entrambe le interfacce. |
 | **Esporta la conversazione** | Ogni turno in Markdown, **codice Pandas generato compreso**. |
 | **Multi-provider LLM** | Ollama (locale, senza chiave), Groq, Anthropic, OpenAI, Gemini. Gli SDK sono opzionali: si installa solo quello che serve. |
 | **Chiedi al progetto** | Una modalità che risponde sul progetto stesso citando le fonti, con recupero TF-IDF sui documenti del repo. |
@@ -387,6 +388,7 @@ I parametri di runtime sono centralizzati in `nlda/config.py`:
 | `ALLOW_INPROCESS_FALLBACK` | `false` = fallisci chiuso invece di degradare la sandbox |
 | `LLM_REQUEST_TIMEOUT`, `LLM_MAX_RETRIES` | timeout e ritentativi verso il provider |
 | `MAX_ROWS`, `MAX_COLUMNS` | limiti sul file caricato: soglie di *usabilità*, non di memoria |
+| `MAX_STORE_RAM_MB` | quanta RAM possono occupare insieme i dataset tenuti in memoria dall'API; oltre, si sfratta il meno usato di recente. Si tara sul **container**, non sulla macchina |
 | `LOG_LEVEL`, `LOG_FORMAT` | `json` emette una riga strutturata per evento, con `turn_id`, latenza, token e costo stimato |
 | `PROVIDER`, `MODEL` | quale modello usare quando il client non lo specifica |
 | `DEMO_MODE`, `DEMO_MAX_QUESTIONS`, `DEMO_MAX_DAILY` | quota della demo pubblica (vedi [DEPLOY.md](DEPLOY.md)) |

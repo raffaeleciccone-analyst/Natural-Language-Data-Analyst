@@ -29,6 +29,16 @@ def test_settings_from_env(monkeypatch):
     assert s.max_retries == 3
 
 
+def test_il_tetto_di_ram_del_magazzino_si_tara_dall_ambiente(monkeypatch):
+    """
+    Va tarato sul container, non sulla macchina: il piano gratuito su cui gira la
+    demo ne da' 512 MB in tutto, contro i 2 GB del docker-compose. Senza questa
+    variabile il default sarebbe giusto in un posto e sbagliato nell'altro.
+    """
+    monkeypatch.setenv("MAX_STORE_RAM_MB", "96")
+    assert Settings.from_env().store_ram_mb == 96
+
+
 def test_settings_env_malformata_usa_default(monkeypatch):
     monkeypatch.setenv("EXEC_TIMEOUT", "non-un-numero")
     assert Settings.from_env().exec_timeout == 12

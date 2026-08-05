@@ -1,3 +1,4 @@
+import csv
 import io
 import json
 import os
@@ -179,6 +180,41 @@ def _detect_sep(header: str) -> str:
     return max(presenti, key=header.count) if presenti else ","
 
 
+# Firme di formati BINARI che arrivano travestiti da CSV, quasi sempre per una
+# rinomina o un'esportazione sbagliata. Si riconoscono dai primi byte.
+_FIRME_BINARIE: tuple[tuple[bytes, str], ...] = (
+    (b"%PDF", "un PDF"),
+    (b"PK\x03\x04", "un archivio ZIP (o un .xlsx: prova a caricarlo con la sua estensione)"),
+    (b"\xd0\xcf\x11\xe0", "un vecchio file Office (.xls/.doc)"),
+    (b"\x89PNG", "un'immagine PNG"),
+    (b"\xff\xd8\xff", "un'immagine JPEG"),
+    (b"SQLite format 3", "un database SQLite"),
+)
+
+
+def _rifiuta_se_binario(raw: bytes) -> None:
+    """
+    Ferma un file binario prima che venga letto come testo.
+
+    Senza, un PDF rinominato `.csv` non dà errore: `read_csv` legge i suoi byte e
+    produce una tabella con una colonna chiamata '%PDF-1.4'. L'app finge di aver
+    capito, e l'utente si ritrova un report su spazzatura invece di una frase che
+    gli dice di aver caricato il file sbagliato.
+
+    Si riconoscono le firme note (che permettono di NOMINARE il formato) e, come
+    rete di sicurezza, i byte NUL: un file di testo non ne contiene.
+    """
+    if not isinstance(raw, bytes):
+        return
+    for firma, descrizione in _FIRME_BINARIE:
+        if raw.startswith(firma):
+            raise ValueError(f"Questo non è un file di dati leggibile: sembra {descrizione}.")
+    if b"\x00" in raw[:8192]:
+        raise ValueError(
+            "Questo non è un file di testo: contiene byte binari. "
+            "Esporta i dati in CSV, Excel o JSON prima di caricarli.")
+
+
 def _read_csv_resilient(f) -> pd.DataFrame:
     """Legge un CSV rilevando il separatore tra delimitatori reali, togliendo il BOM
     e gestendo gli encoding non-UTF8."""
@@ -186,12 +222,82 @@ def _read_csv_resilient(f) -> pd.DataFrame:
     if isinstance(raw, str):
         text = raw
     else:
+        _rifiuta_se_binario(raw)
         try:
             text = raw.decode("utf-8-sig")   # '-sig' rimuove il BOM in testa, se c'è
         except UnicodeDecodeError:
             text = raw.decode("latin-1")
+    if not text.strip():
+        raise ValueError("Il file è vuoto: non contiene né intestazione né dati.")
     header = text.split("\n", 1)[0]
-    return pd.read_csv(io.StringIO(text), sep=_detect_sep(header), engine="python")
+    sep = _detect_sep(header)
+    try:
+        df = pd.read_csv(io.StringIO(text), sep=sep, engine="python")
+    except pd.errors.EmptyDataError as e:
+        # Il messaggio di pandas ("No columns to parse from file") è in inglese e
+        # parla di parsing: chi carica un file vuole sapere cosa manca al FILE.
+        raise ValueError("Il file non contiene colonne leggibili: "
+                         "controlla che la prima riga sia l'intestazione.") from e
+    except pd.errors.ParserError as e:
+        # "Expected 2 fields in line 3, saw 4": la cosa giusta nella lingua
+        # sbagliata. Si tiene solo il numero di riga, che è l'unica parte utile a
+        # chi deve correggere il file, e si riusa il MESSAGGIO dell'altro caso:
+        # per l'utente è lo stesso difetto, anche se pandas lo tratta in due modi.
+        trovato = re.search(r"line (\d+)", str(e))
+        raise _errore_righe_irregolari(int(trovato.group(1)) if trovato else None) from e
+    _rifiuta_se_disallineato(df, text, sep)
+    return df
+
+
+def _errore_righe_irregolari(riga: "int | None") -> ValueError:
+    """Un solo testo per un solo difetto: righe con più campi dell'intestazione."""
+    dove = f" (la prima è la riga {riga})" if riga else ""
+    return ValueError(
+        f"Il file ha righe con più campi dell'intestazione{dove}: letto così, i "
+        "valori finirebbero nelle colonne sbagliate. Controlla i separatori o le "
+        "virgolette mancanti, poi ricaricalo.")
+
+
+def _prima_riga_irregolare(text: str, sep: str) -> int | None:
+    """
+    Numero (1-based) della prima riga con PIÙ campi dell'intestazione.
+
+    Il metro è l'intestazione stessa, non la forma del DataFrame letto: quello ha
+    già subito il disallineamento che si vuole descrivere, e contarne le colonne
+    faceva additare la riga 1 — cioè l'intestazione, l'unica sicuramente giusta.
+
+    Le righe con MENO campi non si segnalano: è il caso normale di un valore
+    mancante in coda, che pandas riempie con NaN senza spostare nulla.
+    """
+    righe = csv.reader(io.StringIO(text), delimiter=sep)
+    try:
+        attesi = len(next(righe))
+    except StopIteration:
+        return None
+    for n, riga in enumerate(righe, start=2):
+        if len(riga) > attesi:
+            return n
+    return None
+
+
+def _rifiuta_se_disallineato(df: pd.DataFrame, text: str, sep: str) -> None:
+    """
+    Ferma il caso in cui una riga ha PIÙ campi dell'intestazione.
+
+    Pandas non la scarta e non solleva: usa i campi in eccesso come INDICE, e da
+    lì in poi ogni colonna contiene i valori di quella accanto. Il file si legge
+    senza errori e ogni numero che ne esce è sbagliato — il difetto che questo
+    progetto rifiuta per principio, perché non ha l'aria di un difetto.
+
+    Il segnale è deterministico: `read_csv` qui non riceve mai `index_col`, quindi
+    un indice che non sia il progressivo può venire solo da quell'inferenza.
+
+    Si rifiuta invece di avvisare: con le colonne disallineate non esiste una
+    lettura onesta del file da mostrare accanto all'avviso.
+    """
+    if isinstance(df.index, pd.RangeIndex):
+        return
+    raise _errore_righe_irregolari(_prima_riga_irregolare(text, sep))
 
 
 def _check_dimensioni(df: pd.DataFrame) -> None:
@@ -207,6 +313,14 @@ def _check_dimensioni(df: pd.DataFrame) -> None:
     formati compressi: un .xlsx da 25 MB può contenere milioni di righe.
     """
     righe, colonne = df.shape
+    if colonne == 0:
+        raise ValueError("Il file non contiene colonne leggibili: "
+                         "controlla che la prima riga sia l'intestazione.")
+    if righe == 0:
+        # Accettarlo significherebbe mostrare un report di sole caselle vuote e
+        # lasciare all'utente il compito di capire perché. La causa è nel file, e
+        # dirla subito costa una frase.
+        raise ValueError("Il file contiene solo l'intestazione, nessuna riga di dati.")
     if righe > settings.max_rows:
         raise ValueError(
             f"Il file ha {righe:,} righe, oltre il limite di {settings.max_rows:,}. "
@@ -241,8 +355,18 @@ def read_any(uploaded_file) -> pd.DataFrame:
     name = uploaded_file.name.lower()
 
     if name.endswith((".xlsx", ".xls")):
-        # sheet_name=0: viene letto il primo foglio (comportamento documentato)
-        df = pd.read_excel(uploaded_file, sheet_name=0)  # richiede openpyxl per .xlsx
+        try:
+            # sheet_name=0: viene letto il primo foglio (comportamento documentato)
+            df = pd.read_excel(uploaded_file, sheet_name=0)  # richiede openpyxl per .xlsx
+        except ValueError as e:
+            # "Excel file format cannot be determined, you must specify an engine
+            # manually": è in inglese e parla di ENGINE, cioè di un dettaglio della
+            # libreria. Chi carica ha bisogno di sapere che il file non è un Excel.
+            if "format cannot be determined" not in str(e):
+                raise
+            raise ValueError(
+                "Questo file non è un Excel leggibile, nonostante l'estensione. "
+                "Se è un CSV, caricalo con estensione .csv.") from e
     elif name.endswith(".json"):
         data = json.loads(uploaded_file.read())
         if isinstance(data, (list, dict)):

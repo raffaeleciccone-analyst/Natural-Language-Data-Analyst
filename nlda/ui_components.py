@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 
 from nlda.charts import to_chart
-from nlda.checks import columns_referenced, hallucination_warning, sanity_warnings
+from nlda.checks import columns_referenced, question_warnings, sanity_warnings
 from nlda.loader import monthly_trend
 from nlda.results import EXECUTED_OK, ExecutionFailure, ExecutionResult
 from nlda.utils import IT_NUM_FORMAT, fmt_num
@@ -198,15 +198,14 @@ def render_result(code: str, result: ExecutionResult,
     cosa poggia la risposta, così l'utente può fidarsi o verificare. `question`
     abilita l'avviso quando la domanda nomina una colonna che non esiste.
     """
-    # 0. Avviso anti-allucinazione, PRIMA della risposta: se la domanda nomina
-    # esplicitamente una colonna inesistente, il modello tende a sostituirla in
-    # silenzio con una reale e a spacciarla per quella chiesta. Lo si dice qui, in
-    # chiaro, non lo si nasconde nel pannello del codice. Il messaggio lo compone
-    # `checks.hallucination_warning`, lo stesso che usa l'API: una sola voce per le
-    # due interfacce.
+    # 0. Avvisi sulla domanda, PRIMA della risposta: la colonna inesistente nominata
+    # dall'utente e la grandezza che il modello dichiara di non aver trovato. In
+    # entrambi i casi la risposta rischia di riguardare un dato diverso da quello
+    # chiesto, e lo si dice in chiaro invece di nasconderlo nel pannello del codice.
+    # Li compone `checks.question_warnings`, la stessa porta da cui passa l'API: una
+    # sola voce per le due interfacce.
     if columns is not None and question:
-        avviso = hallucination_warning(question, code, columns)
-        if avviso:
+        for avviso in question_warnings(question, code, columns):
             st.warning(f"⚠️ {avviso}")
 
     # 1. Risposta testuale (in un riquadro dedicato)

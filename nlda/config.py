@@ -61,6 +61,16 @@ class Settings:
     max_rows: int = 2_000_000
     max_columns: int = 500
 
+    # --- Quanta RAM può tenere occupata il magazzino dell'API ---
+    # I dataset caricati restano in memoria fra una richiesta e l'altra
+    # (`nlda/api/store.py`). Questo è il tetto sulla loro somma: superato, si
+    # sfratta il meno usato di recente. Va tarato sul CONTAINER, non sulla
+    # macchina: il piano su cui gira la demo ne dà 512 in tutto, di cui ~130
+    # se li prende l'immagine e ~100 la riserva calda della sandbox — perciò lì
+    # `MAX_STORE_RAM_MB` è abbassato in `render.yaml`. Il default vale per il
+    # `docker-compose` da 2 GB e per lo sviluppo in locale.
+    store_ram_mb: int = 256
+
     # --- Provider LLM ---
     request_timeout: float = 30.0         # timeout per singola chiamata all'API del modello
     max_retries: int = 1                  # tentativi extra oltre al primo, su errori transitori
@@ -88,6 +98,7 @@ class Settings:
                 "ALLOW_INPROCESS_FALLBACK", cls.allow_inprocess_fallback),
             max_rows=_env_int("MAX_ROWS", cls.max_rows),
             max_columns=_env_int("MAX_COLUMNS", cls.max_columns),
+            store_ram_mb=_env_int("MAX_STORE_RAM_MB", cls.store_ram_mb),
             request_timeout=_env_float("LLM_REQUEST_TIMEOUT", cls.request_timeout),
             max_retries=_env_int("LLM_MAX_RETRIES", cls.max_retries),
             retry_backoff=_env_float("LLM_RETRY_BACKOFF", cls.retry_backoff),

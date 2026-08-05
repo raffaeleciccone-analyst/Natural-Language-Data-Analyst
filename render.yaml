@@ -72,6 +72,16 @@ services:
       - key: MEMORY_LIMIT_MB
         value: "1500"
 
+      # I dataset caricati restano in memoria fra una richiesta e l'altra. Il
+      # default del progetto (256 MB) e' tarato sul container da 2 GB del
+      # docker-compose; qui il container e' da 512 MB IN TUTTO, di cui ~130 li
+      # occupa l'immagine e ~100 la riserva calda della sandbox. 96 MB lascia
+      # spazio alle copie di lavoro che pandas fa durante una domanda: oltre
+      # quella soglia il magazzino sfratta il dataset meno usato di recente,
+      # che e' molto meglio del container ucciso per OOM.
+      - key: MAX_STORE_RAM_MB
+        value: "96"
+
       # Il piano gratuito da' 0,1 vCPU condivisa: l'avvio del worker della
       # sandbox — un interprete che importa pandas e plotly — richiede li' molto
       # piu' dei 2 secondi misurati in locale, e quel tempo rientra nel budget di
