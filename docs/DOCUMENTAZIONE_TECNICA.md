@@ -232,6 +232,7 @@ alti dipendono dai bassi, mai il contrario.
 │  nlda/api/app.py      le rotte: traduzione da e verso JSON             │
 │  nlda/api/models.py   le forme dei dati → schema OpenAPI → tipi TS     │
 │  nlda/api/store.py    dove vive un dataset fra due richieste HTTP      │
+│  nlda/api/cache.py    i report gia' calcolati, per non rifarli         │
 │  nlda/api/quota.py    il tetto di spesa della demo pubblica            │
 │  nlda/api/streaming.py  un turno trasmesso a pezzi (SSE)               │
 └──────────────────────────────────────────────────────────────────────┘
@@ -482,6 +483,7 @@ Natural-Lenguage-Data-Analyst/
 │   │   ├── app.py               Le rotte FastAPI (traduzione da e verso JSON)
 │   │   ├── models.py            Le forme dei dati → OpenAPI → tipi TypeScript
 │   │   ├── store.py             Dove vive un dataset fra due richieste
+│   │   ├── cache.py             I report gia' calcolati (tetto in byte, sfratto LRU)
 │   │   ├── quota.py             Il tetto di spesa della demo pubblica
 │   │   └── streaming.py         Un turno trasmesso a pezzi (Server-Sent Events)
 │   ├── ui/
@@ -966,6 +968,20 @@ prima ha appena scritto. **Perché non il modulo `locale`:** dipende dalle local
 installate sul sistema, fragile nei container; la formattazione manuale è
 deterministica ovunque.
 
+**I due estremi, e perché non sono un dettaglio.** Il NaN diventa «—» da sempre;
+l'**infinito** no, e `int(x)` su di esso solleva `OverflowError`: un CSV con `inf`
+fra i valori faceva rispondere **500 all'intero report**, perché da questa funzione
+passa ogni numero mostrato dall'app. Ora `∞` e `−∞` si scrivono come tali — un
+valore infinito non è un valore *mancante*, e confonderli nasconderebbe un dato
+anomalo dietro il trattino dei buchi. Oltre **2^53** si passa alla notazione
+scientifica: là un float non rappresenta più esattamente gli interi, quindi le cifre
+che si stamperebbero sono la codifica binaria che affiora, non un dato — e `1e308`
+produceva una riga da 309 caratteri che sfondava la tabella della struttura. Sotto
+`0,005` il difetto era opposto e più insidioso: `1e-10` si stampava «0,00», cioè
+**un numero diverso**. Fra i due estremi c'è una fascia dove bastano quattro
+decimali (`0,0040`), che in un'app che parla di sconti si leggono meglio di una
+potenza di dieci.
+
 **`to_datetime_quiet`** è `pd.to_datetime(errors="coerce")` senza il rumore di
 *"Could not infer format"*. Il loader prova a interpretare come data **ogni**
 colonna testuale, quindi il fallback per-elemento di pandas è **voluto** e l'avviso
@@ -1059,6 +1075,16 @@ riprovando in `latin-1`. **`_detect_sep`** è nato da un bug vero: un CSV a **co
 singola** veniva spezzato dallo sniffer di pandas, che trovava un separatore
 plausibile dove non c'era.
 
+**`_intestazione` / `_separatore`** sono l'unico posto in cui si decide che
+l'intestazione è ciò che precede il primo a-capo e che lì si cerca il delimitatore.
+La regola era scritta in tre punti — la stima della memoria, l'avviso sulle colonne
+omonime e la lettura vera — e tre copie della stessa regola divergono alla prima
+correzione: il punto dimenticato leggerebbe il file con un separatore diverso da
+quello con cui poi lo si legge davvero. `_intestazione` **affetta** fino al primo
+a-capo invece di usare `split(b"\n", 1)[0]`, che costruisce anche la coda: su un
+file da 22,7 MB sono 3,8 ms e 22,7 MB transitori contro 0,004 ms, e capita quattro
+volte per caricamento.
+
 **I byte vanno al parser così come sono.** Prima il file veniva decodificato in una
 stringa, la stringa avvolta in uno `StringIO` e il tutto dato a `engine="python"`:
 tre copie e il motore lento, per un picco di **459 MB** su un CSV da 20 MB. Ora
@@ -1116,8 +1142,42 @@ codici numerici vengano scambiati per date.
 
 **`_maybe_parse_numbers` / `_numero_da_valuta`** riconoscono **valuta formattata**
 (`"1.234,56 €"`, `"$ 1,234.56"`) e misure con mancanti indicati **a testo**
-(`"n.d."`, `"-"`). È l'aggiunta più recente al loader: senza, una colonna di
-fatturato letta come testo non era una misura e il report la ignorava.
+(`"n.d."`, `"-"`). Senza, una colonna di fatturato letta come testo non era una
+misura e il report la ignorava.
+
+**`_e_una_colonna_europea` — la terza strada, e perché chiede una prova.** Un CSV
+europeo (`;` e virgola decimale) senza simbolo di valuta restava TESTO: il report
+arrivava **senza una sola misura**, mentre la chat il totale lo calcolava lo stesso
+perché lì a leggere è il modello. Due verità nella stessa pagina, ed è il difetto
+peggiore fra i due. La prudenza era però giusta: `1.234` da solo può essere
+milleduecentotrentaquattro, uno-virgola-duecentotrentaquattro o un codice. Serviva
+quindi una **prova**, non un sospetto — la **virgola decimale**. E non una virgola
+qualsiasi: `1,234` non prova niente, perché può separare le migliaia all'americana.
+Vale come prova un gruppo di cifre che **non sia lungo tre** (`,56`, `,5`, `,1234`):
+le migliaia si scrivono a gruppi di tre esatti, sempre. Trovata la prova, i punti
+della colonna sono migliaia per costruzione. C'era già un test che pretendeva
+`1,234 → testo`, ed è diventato rosso al primo tentativo troppo largo.
+
+**`duplicate_columns_warning` — pandas rinomina in silenzio.** Due colonne con lo
+stesso nome non fanno fallire la lettura: la seconda diventa `Vendite.1`. Chi ha
+caricato il file vede due misure dove ne aveva una, e «il totale delle vendite» ha
+due risposte diverse senza che nessuno lo dica. Si legge la sola **intestazione**
+— costa il primo rigo — con `csv.reader` e non con uno `split`, perché
+`"Vendite, nette",Vendite` porta il separatore dentro un nome e spezzarla a mano
+darebbe colonne inesistenti, magari con un avviso su un doppione inventato. Limite
+dichiarato: vale per i CSV; per un `.xlsx` servirebbe aprire l'archivio, e il caso
+è molto più raro perché un foglio di calcolo le colonne le mostra mentre le si
+scrive.
+
+**Il tetto di upload lo impone il caricatore.** `_rifiuta_se_troppo_pesante` sta in
+`read_any`, cioè nel punto che entrambe le interfacce attraversano: prima il
+confronto viveva nella sola rotta dell'API, mentre l'app Streamlit si affidava a
+`maxUploadSize` del suo `config.toml` — e `MAX_UPLOAD_MB` non la raggiungeva
+affatto. Con i default coincidenti non si vedeva nulla; bastava abbassare la
+variabile perché l'interfaccia promettesse un limite che nessuno imponeva. Il
+messaggio lo compone `errore_troppo_grande` (una frase sola per due interfacce) e
+il tipo `FileTroppoGrande` esiste perché la rotta possa rispondere **413** invece
+di 400: è l'unico rifiuto a cui HTTP dedica un codice.
 
 #### Misure, identificatori, categorie
 
@@ -1979,6 +2039,48 @@ e la risoluzione non conta.
 orizzontale (due repliche, due magazzini). Vanno bene finché il deploy è un container
 solo, ed è il caso.
 
+#### `nlda/api/cache.py` — il secondo ricordo, accanto al magazzino
+
+Il magazzino tiene i **dati**; `cache.py` tiene i **report già calcolati**. Nasce da
+una domanda dell'utente: «perché se clicco su una barra ricalcola tutto?». Cliccare
+filtra la pagina, ricliccare toglie il filtro — e a quel punto serve esattamente il
+report di un istante prima, che c'era e si buttava. Misurato: `/report` costa
+**177 ms in locale e 1.530 sul deploy** (0,1 vCPU), e dentro quei millisecondi
+`analyze` sono 19, `profile` 24, i KPI 2, il filtro 4: **il grosso non sono i dati**,
+sono le figure Plotly e la serializzazione. La strada non era rendere il calcolo più
+svelto, era non rifarlo.
+
+**Perché ricordare qui è sicuro.** Il dataset è indirizzato dall'impronta del suo
+**contenuto**: a parità di identificativo i dati sono gli stessi per definizione, e
+il report è una funzione pura dei parametri. È memoizzazione, non una scommessa
+sulla freschezza — per questo non c'è TTL.
+
+**Tre scelte che vale la pena difendere.** La **chiave si scrive per esteso** invece
+di derivarla dagli argomenti: con `lru_cache` un parametro nuovo dimenticato lì
+servirebbe a due richieste diverse la stessa risposta, che è il difetto peggiore di
+una cache perché ha l'aria di un dato giusto. Il **calcolo gira fuori dal lock**:
+dura più di un secondo sul piano gratuito, e tenerlo dentro metterebbe tutti gli
+altri visitatori in fila dietro a uno. Gli **errori non si ricordano**, o un guasto
+momentaneo resterebbe per tutti finché la voce non esce.
+
+**Il tetto è in BYTE, ed è una correzione al giorno dopo.** La prima stesura contava
+le voci: «trenta risposte da ~130 KB fanno 4 MB» misurava però il solo dataset
+dimostrativo. Su 300.000 righe una voce ne pesa **3,3**, perché la figura della
+distribuzione si porta dentro ogni valore della colonna misura — trenta voci
+sarebbero **96 MB**, più di quanto il magazzino accanto conceda a *tutti* i dataset
+insieme, sullo stesso container da 512. È lo stesso errore che `store.py` aveva già
+fatto e già pagato: contare le tabelle invece della memoria.
+
+**Il controllo del dataset resta PRIMA del ricordo:** un dataset scaduto dà 404 anche
+se il suo report è in memoria, altrimenti la pagina resterebbe consultabile mentre le
+domande falliscono. Una seconda cache, indipendente, sta nel **client**
+(`frontend/src/api/client.ts`): lì togliere il filtro non manda nemmeno la richiesta.
+Sul deploy: da ~1.400 ms a ~130, che è la sola andata e ritorno di rete.
+
+**Cosa NON si fa: precaricare.** Con quattro categorie sarebbero ~6 secondi di CPU in
+sottofondo su un container che ne ha un decimo: rallenterebbe proprio il click che si
+sta per fare.
+
 ---
 
 ### 7.33 `nlda/api/quota.py` — il tetto di spesa della demo
@@ -2026,6 +2128,26 @@ servizio, la sandbox e i provider — tutti sincroni per ottime ragioni.
 **Perché SSE e non WebSocket.** Il flusso è a senso unico: il server parla, il client
 ascolta. Un WebSocket darebbe un canale bidirezionale che nessuno usa, in cambio di
 riconnessioni da gestire e proxy che a volte lo bloccano.
+
+**`explain: false` va rispettato anche qui.** Il campo esisteva nella richiesta e
+`/ask` lo onorava; questa rotta lo accettava e non lo guardava, quindi chi chiedeva i
+soli numeri riceveva — e pagava — una **seconda chiamata al modello**. Sulla demo
+quella chiamata la paga il budget condiviso di tutti. Il default resta `true`: il
+difetto opposto, una chat muta senza che nessuno l'abbia chiesto, sarebbe peggiore.
+
+**Il DataFrame si lascia andare prima della narrazione, e nominarlo non basta.** Gli
+eventi `token` durano decine di secondi: tenere il df per tutto quel tempo,
+moltiplicato per gli stream simultanei, è RAM vera — fino al tetto per dataset, per
+ogni stream aperto. C'era già un `del thread, lavora` scritto apposta, e **non
+funzionava**: `df` è un argomento del generatore, quindi vive nel suo frame anche
+dopo che thread e closure sono spariti. Verificato con `weakref` che restava vivo
+durante tutti i `token`. Ora il df arriva al thread come **argomento** (niente
+cattura) e si cancella davvero; ciò che serve dopo — i nomi delle colonne — è già
+stato copiato prima.
+
+⚠️ **Il test di quel rilascio non può usare `MagicMock`**: registra gli argomenti
+delle chiamate e terrebbe vivo il df da solo, facendo passare o fallire la prova per
+merito dello strumento invece che del codice. Il finto è scritto a mano.
 
 ---
 
@@ -2189,7 +2311,8 @@ La sicurezza è **verificata in CI ad ogni push**, su tre versioni di Python.
 
 ## 9. I test
 
-**Numeri.** 34 file, **679 test** Python (più 12 dell'interfaccia React, con vitest),
+**Numeri.** 32 file, **725 test** Python, più **17** dell'interfaccia React (vitest) e
+**6 di impaginazione** in un browser vero (Playwright),
 soglia di copertura **78%** applicata in CI (`--cov-fail-under=78`): non un numero
 decorativo, un *gate*.
 
@@ -2200,25 +2323,25 @@ zero.
 
 | File | Test | Cosa verifica |
 |------|-----:|---------------|
+| `test_api.py` | 89 | il **contratto HTTP**: forme, codici di stato, avvisi, magazzino, ricordi |
+| `test_loader.py` | 78 | date, valuta, numeri europei, misure vs ID, `read_any`, file storti, tetti |
 | `test_executor_sandbox.py` | 75 | **regression di sicurezza**: payload rifiutati/ammessi |
-| `test_api.py` | 75 | il **contratto HTTP**: forme, codici di stato, avvisi, magazzino |
-| `test_loader.py` | 61 | date, valuta, misure vs ID, `read_any`, file storti |
-| `test_checks.py` | 39 | colonne toccate, mappa dichiarata, avvisi |
+| `test_checks.py` | 45 | colonne toccate, mappa dichiarata, avvisi, spiegazione ridondante |
 | `test_main.py` | 36 | il flusso della pagina, filtro e unione |
 | `test_executor_ipc.py` | 35 | il trasporto tra processi (serializzazione, guasti) |
 | `test_project_qa.py` | 33 | recupero TF-IDF, fonti citate, trappole note |
 | `test_config_and_providers.py` | 33 | config da env, retry/backoff, factory |
-| `test_ui_components.py` | 31 | KPI, click-to-filter, dimensione dei valori |
+| `test_ui_components.py` | 32 | KPI, click-to-filter, dimensione dei valori |
 | `test_agent.py` | 28 | intento grafico, wrapping, prompt |
 | `test_providers_contract.py` | 24 | **contratto** rispettato da tutti i provider |
 | `test_api_quota.py` | 24 | il tetto di spesa, su **entrambe** le rotte |
 | `test_sanitize.py` | 23 | invisibili, bidi, troncamento, injection |
 | `test_genera_tipi_ts.py` | 18 | i tipi TS committati descrivono l'API di adesso |
 | `test_errors.py` | 15 | classificazione dei guasti del provider |
-| `test_service.py` | 14 | il turno: retry solo se `retryable` |
+| `test_service.py` | 16 | il turno: retry solo se `retryable` |
 | `test_export.py` | 11 | Markdown della conversazione |
 | `test_log.py` | 11 | idempotenza, contesto, formato JSON |
-| `test_streaming.py` | 9 | la spiegazione a blocchi |
+| `test_streaming.py` | 10 | la spiegazione a blocchi, e il DataFrame lasciato andare |
 | `test_sandbox_pool.py` | 8 | la riserva calda |
 | `test_pricing.py` / `test_prompt_contract.py` | 7 + 7 | costo; **golden dei prompt** |
 | `test_periods.py` / `test_log_analysis.py` | 6 + 6 | confronto periodi; riepilogo log |
@@ -2256,10 +2379,39 @@ zero.
   Streamlit — quale widget, con quali dati, con quale `key` (due widget con la stessa
   chiave fanno esplodere Streamlit a runtime).
 
+**L'impaginazione si MISURA, e richiede un browser vero.** I test dell'interfaccia
+girano su jsdom, che il DOM lo costruisce ma non lo **impagina**: non calcola
+larghezze, non applica media query, non sa dire se un elemento sborda. Tutto ciò che
+riguarda «come sta in pagina» gli è invisibile per costruzione — ed è il motivo per
+cui il telefono è rimasto a lungo l'unica area del progetto senza verifica.
+`frontend/e2e/layout.spec.ts` (Playwright, solo Chromium) prova a **390×844** e
+**820×1180** le tre cose che rompono una pagina su un telefono: lo **sfondamento
+orizzontale** (che non riporta come booleano ma **nominando i colpevoli**, perché
+«sborda di 40 px» manda a cercare a mano fra centinaia di nodi), il **cassetto dei
+controlli** che si apre e si richiude, e la **bolla del progetto** che non si siede
+sopra il campo della domanda. Il backend non serve: le rotte sono intercettate, e
+legare una prova di impaginazione a un servizio da tenere in piedi la renderebbe
+lenta e intermittente per motivi che col layout non c'entrano.
+
+⚠️ **Due volte la prova ha fallito mentre l'interfaccia era giusta**, e sono trappole
+che si ripresentano: con il cassetto aperto la maniglia sta **sotto il velo**, quindi
+il tocco lo prende il velo — che chiude comunque, e l'utente non vede differenza; e
+la maniglia **scivola per 180 ms**, quindi leggerne la posizione subito dopo
+l'apertura dà il punto di partenza e il tocco finisce dentro il rail. Si aspetta che
+si fermi, e si tocca il **punto** dove va il dito invece di un elemento scelto per
+nome.
+
+Accanto, per l'ispezione a occhio, `scripts/anteprima_dispositivi.html`: due
+**iframe** larghi 390 e 820. Le media query rispondono al viewport dell'iframe,
+quindi il CSS esercitato è quello vero — mentre ridimensionare la finestra da uno
+strumento di automazione può rispondere «fatto» senza che il viewport cambi di un
+pixel, ed è esattamente com'è andata provando.
+
 **Cosa NON è testato, e perché:** le chiamate reali agli LLM (lente, non
-deterministiche, a pagamento — coperte dal corpus replay) e il rendering visuale
-effettivo. Il valore starebbe nell'integrazione, non nell'unità. La scelta è
-consapevole e dichiarata.
+deterministiche, a pagamento — coperte dal corpus replay) e i **gesti veri su un
+telefono vero** — il pollice su un bersaglio piccolo, la tastiera che sale
+sull'input. Il layout ora è misurato; l'ergonomia no. La scelta è consapevole e
+dichiarata.
 
 ---
 
@@ -2271,16 +2423,33 @@ Fonte di verità unica (PEP 621): metadata, dipendenze, extra dei provider, extr
 `dev`/`tools`, e la configurazione di **ruff** (line-length 110, target py312),
 **mypy** (`python_version=3.12`, bersagli di default dichiarati) e **pytest**.
 
-### 10.2 CI (`.github/workflows/ci.yml`) — quattro job
+### 10.2 CI (`.github/workflows/ci.yml`) — cinque job
 
 | Job | Cosa fa |
 |-----|---------|
 | **Test** | matrice **Python 3.12, 3.13, 3.14**; `pytest --cov=nlda --cov-fail-under=78` |
 | **Lint e type-check** | `ruff check .` + `mypy nlda main.py` |
+| **Frontend (TypeScript)** | `tsc -b`, `oxlint`, i test dei componenti (vitest), la build, e le **prove di impaginazione** a 390 e 820 px con Playwright |
 | **Immagine Docker** | costruisce l'immagine, avvia il container, verifica che **l'app si dichiari sana** e che **la sandbox funzioni dentro il container**; se qualcosa fallisce, stampa i log |
 | **Sicurezza** | `pip-audit` (vulnerabilità nelle dipendenze) + `bandit` (analisi statica del codice) |
 
-C'è anche `smoke.yml` per lo smoke test (`scripts/smoke.py`).
+Ci sono poi due workflow separati: `smoke.yml` per lo smoke test con un modello vero,
+e **`demo.yml`, che ogni giorno interroga la demo pubblica**
+(`scripts/verifica_deploy.py --difese`). Sta fuori dalla CI di proposito: parla con un
+servizio esterno, quindi un suo fallimento dice «la demo è giù», non «il codice è
+sbagliato» — e non deve bloccare una pull request. Prova dieci difese senza chiamare
+il modello, quindi non consuma quota.
+
+**Perché un controllo sul servizio, oltre a quello sul codice.** Ognuna di quelle
+difese ha un test verde in CI, e ognuna può essere assente in produzione lo stesso:
+dipende da una variabile che l'host non ha applicato, o gira su un container con un
+decimo della memoria. È successo tre volte — `EXEC_TIMEOUT` mai arrivato al processo,
+`MEMORY_LIMIT_MB` che uccideva il worker, `MAX_STORE_RAM_MB` dichiarato dal blueprint
+e assente nel servizio. **La CI prova il codice; questo prova il servizio.**
+
+⚠️ **Nota operativa:** il collaudo e altri client non vanno lanciati insieme. Su 0,1
+vCPU due richieste concorrenti, mentre parte il worker della sandbox, bastano a
+produrre un 502 — un rosso che sembra vero e non lo è.
 
 **Perché la matrice su tre versioni.** `requires-python = ">=3.12"`: se dichiari di
 supportare 3.12+, devi verificarlo. Testare solo la versione di sviluppo significa
@@ -2375,6 +2544,23 @@ non si libera immediatamente.
 - **Il DataFrame viene picklato a ogni domanda** (~38 MB per milione di righe):
   eliminarlo richiederebbe un worker persistente, cioè il compromesso di sicurezza
   che il progetto rifiuta.
+- **I gesti su un telefono vero non sono coperti.** L'impaginazione a 390 e 820 px è
+  misurata in CI, ma il pollice su un bersaglio piccolo e la tastiera che sale
+  sull'input li dice solo un dispositivo reale.
+- **L'avviso sulle colonne omonime vale solo per i CSV**: per un `.xlsx` servirebbe
+  aprire l'archivio, e il caso è più raro perché un foglio di calcolo le colonne le
+  mostra mentre le si scrive.
+- **La stima della memoria di un CSV deduce i tipi da un campione**, quindi una
+  colonna che diventa testo solo a metà file viene stimata per difetto. Il controllo
+  dopo la lettura la coglie comunque, ma a memoria già presa — cioè proprio ciò che
+  la stima serve a evitare.
+- **`profile()` produce stringhe già formattate** (`min … · media … · max …`), che
+  l'API espone verbatim: un'API dovrebbe dare numeri e lasciare la presentazione a
+  chi consuma. Cambiarlo tocca il contratto e le due interfacce, quindi resta
+  dichiarato invece che nascosto.
+- **«Somma di niente = niente» vale sulla card, non ovunque:** il KPI di una colonna
+  interamente vuota dice «—», ma la stessa somma compare come `0` nelle statistiche
+  numeriche e nella classifica. L'altitudine giusta sarebbe l'aggregazione.
 - **I selettori CSS di Streamlit non sono API pubbliche:** a un aggiornamento il tema
   può perdere pezzi in silenzio.
 
