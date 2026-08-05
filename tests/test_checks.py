@@ -10,6 +10,7 @@ from nlda.checks import (
     claimed_missing_columns,
     columns_referenced,
     declared_mapping,
+    explanation_is_redundant,
     hallucination_warning,
     mapping_warnings,
     question_warnings,
@@ -254,3 +255,35 @@ def test_nan_e_infinito_avvisano():
 def test_scalare_e_dataframe_normali_non_avvisano():
     assert sanity_warnings(840.0) == []
     assert sanity_warnings(pd.DataFrame({"a": [1, 2]})) == []
+
+
+# --- Quando la spiegazione ripeterebbe e basta ---------------------------------
+_CODICE_ONESTO = ("# mappa: profitto -> NESSUNA\n"
+                  "result = 'Il dataset non contiene una colonna del profitto.'")
+
+
+def test_la_spiegazione_e_ridondante_se_il_risultato_e_gia_una_frase_avvisata():
+    """
+    Il caso misurato sulla demo: la stessa informazione tre volte — la frase in
+    `result`, il nostro avviso, e una spiegazione dell'AI che li riformula.
+    """
+    assert explanation_is_redundant(
+        "qual è il profitto per regione?", _CODICE_ONESTO, _COLS,
+        "Il dataset non contiene una colonna del profitto.")
+
+
+def test_un_numero_va_sempre_spiegato_anche_con_un_avviso():
+    """
+    La condizione è congiunta: con un valore da commentare la narrazione ha
+    qualcosa da dire, e toglierla per prudenza sarebbe il difetto opposto.
+    """
+    assert not explanation_is_redundant(
+        "qual è il profitto per regione?", "result = df['Sales'].sum()", _COLS, 2261537.0)
+
+
+def test_una_frase_senza_avvisi_si_spiega():
+    """Senza avvisi il turno non è stato giudicato problematico: nessun motivo
+    per sopprimere nulla."""
+    assert not explanation_is_redundant(
+        "descrivi il dataset", "result = 'Contiene ordini di vendita.'", _COLS,
+        "Contiene ordini di vendita.")
