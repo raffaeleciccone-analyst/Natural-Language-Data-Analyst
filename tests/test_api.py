@@ -160,6 +160,23 @@ def test_il_report_e_serializzabile_in_json(client):
     json.loads(testo)   # deve rileggersi
 
 
+def test_un_dataset_con_valori_infiniti_non_fa_500(client):
+    """
+    Trovato provando a rompere la demo il 5 agosto 2026: un CSV con `inf` fra i
+    valori faceva rispondere 500 all'intero report. Il 500 dice "il servizio e'
+    guasto" — e qui lo era davvero: `fmt_num` chiamava `int()` su un infinito.
+
+    Il test sta al livello dell'API e non su `fmt_num` (dove c'e' il suo) perche'
+    e' qui che il difetto si e' manifestato: la catena analyze -> insight -> KPI
+    passa da tre moduli, e uno solo di essi basta a riportare l'errore.
+    """
+    dati = b"Regione,Vendite\nNord,1e308\nSud,-1e308\nOvest,inf\nEst,NaN\n"
+    d = client.post("/api/dataset", files={"file": ("estremi.csv", dati, "text/csv")}).json()
+    r = client.get(f"/api/dataset/{d['dataset_id']}/report")
+    assert r.status_code == 200
+    json.loads(r.text)   # e il JSON deve rileggersi: `Infinity` non e' JSON valido
+
+
 def test_report_di_un_dataset_inesistente_da_404(client):
     r = client.get("/api/dataset/inventato/report")
     assert r.status_code == 404

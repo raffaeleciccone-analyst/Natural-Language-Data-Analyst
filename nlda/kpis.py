@@ -63,7 +63,12 @@ def build_kpis(df, sel_measure, sel_category, unit):
     kpis = []
     if sel_measure:
         s = df[sel_measure]
-        kpis.append((f"Totale {sel_measure}", wu(s.sum()), "", _TICK_MAIN, False))
+        # `sum()` di una colonna tutta vuota vale 0, e "Totale = 0 $" è un NUMERO
+        # dove non c'è nessun dato: chi legge conclude che le vendite sono state
+        # zero, non che la colonna è vuota. Media e massimo dicevano già "—" da
+        # sole (pandas su tutto-NaN restituisce NaN); il totale mentiva.
+        totale = s.sum() if s.notna().any() else float("nan")
+        kpis.append((f"Totale {sel_measure}", wu(totale), "", _TICK_MAIN, False))
         kpis.append((f"Media {sel_measure}", wu(s.mean()), "", _TICK, False))
         kpis.append((f"Massimo {sel_measure}", wu(s.max()), "", _TICK, False))
         leader = None
