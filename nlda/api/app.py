@@ -595,6 +595,10 @@ def ask_stream(req: AskRequest, request: Request,
     La quota si scala QUI, nel corpo della rotta, non dentro il generatore: un
     429 deve essere una risposta HTTP con il suo messaggio, non un evento
     `error` dentro un flusso gia' aperto con stato 200.
+
+    `explain=false` chiude il flusso dopo il risultato. La rotta accettava il
+    campo e lo ignorava: chi chiedeva i soli numeri pagava lo stesso la seconda
+    chiamata al modello — e sulla demo la paga il budget di tutti.
     """
     voce = _dataset(req.dataset_id)
     _consuma_quota(request, x_api_key)
@@ -606,7 +610,7 @@ def ask_stream(req: AskRequest, request: Request,
     # stream — che e' la parte lunga del turno.
     colonne = df.columns
     eventi = trasmetti(
-        service, req.question, df, unit=req.unit,
+        service, req.question, df, unit=req.unit, explain=req.explain,
         verso_json=lambda turn, includi_spiegazione: _risposta(
             turn, colonne, includi_spiegazione=includi_spiegazione),
     )

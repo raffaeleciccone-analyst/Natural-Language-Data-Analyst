@@ -743,6 +743,40 @@ def test_un_fallimento_chiude_lo_stream_senza_chiedere_una_narrazione(
     servizio.stream_explanation.assert_not_called()
 
 
+def test_explain_false_non_paga_la_narrazione(client, csv_bytes, monkeypatch):
+    """
+    La rotta accettava `explain` e lo ignorava: chi chiedeva i soli numeri
+    riceveva — e pagava — anche la seconda chiamata al modello. Sulla demo
+    pubblica quella chiamata la paga il budget condiviso di tutti.
+    """
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    servizio = _servizio_streaming(monkeypatch, Turn(
+        question="totale?", code="x",
+        result=ExecutionSuccess(fig=None, value=700, summary="700")))
+
+    ev = _eventi(client.post("/api/ask/stream",
+                             json={"dataset_id": d["dataset_id"], "question": "totale?",
+                                   "explain": False}).text)
+    nomi = [n for n, _ in ev]
+    assert "result" in nomi, "i numeri si vogliono comunque"
+    assert "token" not in nomi
+    assert dict(ev)["done"]["answer"] is None
+    servizio.stream_explanation.assert_not_called()
+
+
+def test_explain_resta_vero_per_difetto(client, csv_bytes, monkeypatch):
+    """Il difetto opposto sarebbe peggiore: una chat muta senza che nessuno
+    l'abbia chiesto. Chi non dice nulla continua a ricevere la spiegazione."""
+    d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
+    _servizio_streaming(monkeypatch, Turn(
+        question="totale?", code="x",
+        result=ExecutionSuccess(fig=None, value=700, summary="700")))
+
+    ev = _eventi(client.post("/api/ask/stream",
+                             json={"dataset_id": d["dataset_id"], "question": "totale?"}).text)
+    assert "token" in [n for n, _ in ev]
+
+
 def test_un_guasto_nel_servizio_diventa_un_evento_di_errore(client, csv_bytes, monkeypatch):
     d = client.post("/api/dataset", files={"file": ("v.csv", csv_bytes, "text/csv")}).json()
     servizio = MagicMock()
