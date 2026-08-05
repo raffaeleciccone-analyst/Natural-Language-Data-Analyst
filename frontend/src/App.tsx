@@ -255,7 +255,18 @@ export default function App() {
           >
             Carica un file
           </button>
-          <p className="nota-campo">CSV, Excel o JSON · max 25 MB</p>
+          {/* I limiti si leggono da `/config`, non si riscrivono qui: erano
+              scritti a mano ("max 25 MB") e sarebbero rimasti fermi al cambio di
+              una variabile d'ambiente, promettendo un limite che il servizio non
+              aveva più. Sono DUE perché rispondono a domande diverse — quanto
+              pesa il file, e quanto occupa una volta letto: un CSV di numeri da
+              9 MB ne chiede 36 di memoria. */}
+          <p className="nota-campo">
+            CSV, Excel o JSON · max {config?.max_upload_mb ?? 25} MB
+            {config?.max_dataset_ram_mb
+              ? ` · fino a ${config.max_dataset_ram_mb} MB una volta letto`
+              : ""}
+          </p>
 
           {/* L'elenco arriva da `/config` e riflette i file DAVVERO presenti,
               quindi non promette un esempio che manca. */}

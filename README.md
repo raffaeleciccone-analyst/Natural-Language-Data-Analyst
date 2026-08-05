@@ -388,6 +388,7 @@ I parametri di runtime sono centralizzati in `nlda/config.py`:
 | `ALLOW_INPROCESS_FALLBACK` | `false` = fallisci chiuso invece di degradare la sandbox |
 | `LLM_REQUEST_TIMEOUT`, `LLM_MAX_RETRIES` | timeout e ritentativi verso il provider |
 | `MAX_ROWS`, `MAX_COLUMNS` | limiti sul file caricato: soglie di *usabilità*, non di memoria |
+| `MAX_UPLOAD_MB` | quanto può **pesare** il file caricato. Limite di trasferimento, non di memoria: dice quanto si è disposti a ricevere, non quanto si riesce ad analizzare |
 | `MAX_DATASET_RAM_MB` | quanta memoria può occupare **un** dataset. Righe e colonne non lo dicono: 50.000 righe × 200 colonne di interi stanno in 20 MB su disco e ne chiedono 207 al processo mentre si leggono. Un file oltre il tetto viene rifiutato **prima** di essere allocato, con un messaggio che dice quanto pesa |
 | `MAX_STORE_RAM_MB` | quanta RAM possono occupare insieme i dataset tenuti in memoria dall'API; oltre, si sfratta il meno usato di recente. Si tara sul **container**, non sulla macchina |
 | `LOG_LEVEL`, `LOG_FORMAT` | `json` emette una riga strutturata per evento, con `turn_id`, latenza, token e costo stimato |

@@ -124,7 +124,10 @@ _ERRORI = {
 }
 router = APIRouter(prefix="/api", responses=_ERRORI)  # type: ignore[arg-type]
 
-MAX_UPLOAD_MB = 25   # lo stesso tetto della UI: un limite per interfaccia sarebbe una bugia
+# Lo stesso tetto della UI: un limite per interfaccia sarebbe una bugia. Vive in
+# `settings` perché un deploy deve poterlo cambiare senza toccare il codice —
+# `.streamlit/config.toml` lo fa da sempre, l'API lo teneva scritto qui dentro.
+MAX_UPLOAD_MB = settings.max_upload_mb
 
 # Il tetto di spesa della demo pubblica. Fuori dalla demo (`DEMO_MODE` assente)
 # non conta nulla e non costa nulla: `Quota.consuma` esce alla prima riga.

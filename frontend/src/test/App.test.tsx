@@ -179,6 +179,18 @@ describe("apertura", () => {
     expect(screen.queryByText(/Carica un file per iniziare/)).not.toBeInTheDocument();
   });
 
+  it("dichiara ENTRAMBI i limiti sul file, letti da /config", async () => {
+    // Erano scritti a mano nel JSX ("max 25 MB"): sarebbero rimasti fermi al
+    // cambio di una variabile d'ambiente, promettendo un limite che il servizio
+    // non ha piu'. E il secondo — quanto occupa il file una volta letto — non
+    // c'era affatto, benche' sia quello che rifiuta un CSV di soli numeri.
+    await conDatasetPronto();
+
+    const nota = screen.getByText(/CSV, Excel o JSON/);
+    expect(nota).toHaveTextContent(`max ${CONFIG.max_upload_mb} MB`);
+    expect(nota).toHaveTextContent(`${CONFIG.max_dataset_ram_mb} MB una volta letto`);
+  });
+
   it("non ricarica l'esempio a ogni render", async () => {
     await conDatasetPronto();
     await new Promise((r) => setTimeout(r, 50));
