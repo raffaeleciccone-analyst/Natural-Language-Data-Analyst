@@ -1,3 +1,4 @@
+import csv
 import io
 import json
 import os
@@ -229,13 +230,74 @@ def _read_csv_resilient(f) -> pd.DataFrame:
     if not text.strip():
         raise ValueError("Il file è vuoto: non contiene né intestazione né dati.")
     header = text.split("\n", 1)[0]
+    sep = _detect_sep(header)
     try:
-        return pd.read_csv(io.StringIO(text), sep=_detect_sep(header), engine="python")
+        df = pd.read_csv(io.StringIO(text), sep=sep, engine="python")
     except pd.errors.EmptyDataError as e:
         # Il messaggio di pandas ("No columns to parse from file") è in inglese e
         # parla di parsing: chi carica un file vuole sapere cosa manca al FILE.
         raise ValueError("Il file non contiene colonne leggibili: "
                          "controlla che la prima riga sia l'intestazione.") from e
+    except pd.errors.ParserError as e:
+        # "Expected 2 fields in line 3, saw 4": la cosa giusta nella lingua
+        # sbagliata. Si tiene solo il numero di riga, che è l'unica parte utile a
+        # chi deve correggere il file, e si riusa il MESSAGGIO dell'altro caso:
+        # per l'utente è lo stesso difetto, anche se pandas lo tratta in due modi.
+        trovato = re.search(r"line (\d+)", str(e))
+        raise _errore_righe_irregolari(int(trovato.group(1)) if trovato else None) from e
+    _rifiuta_se_disallineato(df, text, sep)
+    return df
+
+
+def _errore_righe_irregolari(riga: "int | None") -> ValueError:
+    """Un solo testo per un solo difetto: righe con più campi dell'intestazione."""
+    dove = f" (la prima è la riga {riga})" if riga else ""
+    return ValueError(
+        f"Il file ha righe con più campi dell'intestazione{dove}: letto così, i "
+        "valori finirebbero nelle colonne sbagliate. Controlla i separatori o le "
+        "virgolette mancanti, poi ricaricalo.")
+
+
+def _prima_riga_irregolare(text: str, sep: str) -> int | None:
+    """
+    Numero (1-based) della prima riga con PIÙ campi dell'intestazione.
+
+    Il metro è l'intestazione stessa, non la forma del DataFrame letto: quello ha
+    già subito il disallineamento che si vuole descrivere, e contarne le colonne
+    faceva additare la riga 1 — cioè l'intestazione, l'unica sicuramente giusta.
+
+    Le righe con MENO campi non si segnalano: è il caso normale di un valore
+    mancante in coda, che pandas riempie con NaN senza spostare nulla.
+    """
+    righe = csv.reader(io.StringIO(text), delimiter=sep)
+    try:
+        attesi = len(next(righe))
+    except StopIteration:
+        return None
+    for n, riga in enumerate(righe, start=2):
+        if len(riga) > attesi:
+            return n
+    return None
+
+
+def _rifiuta_se_disallineato(df: pd.DataFrame, text: str, sep: str) -> None:
+    """
+    Ferma il caso in cui una riga ha PIÙ campi dell'intestazione.
+
+    Pandas non la scarta e non solleva: usa i campi in eccesso come INDICE, e da
+    lì in poi ogni colonna contiene i valori di quella accanto. Il file si legge
+    senza errori e ogni numero che ne esce è sbagliato — il difetto che questo
+    progetto rifiuta per principio, perché non ha l'aria di un difetto.
+
+    Il segnale è deterministico: `read_csv` qui non riceve mai `index_col`, quindi
+    un indice che non sia il progressivo può venire solo da quell'inferenza.
+
+    Si rifiuta invece di avvisare: con le colonne disallineate non esiste una
+    lettura onesta del file da mostrare accanto all'avviso.
+    """
+    if isinstance(df.index, pd.RangeIndex):
+        return
+    raise _errore_righe_irregolari(_prima_riga_irregolare(text, sep))
 
 
 def _check_dimensioni(df: pd.DataFrame) -> None:
