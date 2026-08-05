@@ -12,4 +12,4 @@ poi divergono. Non si legge dai metadati del pacchetto installato
 (`importlib.metadata`) perché nel container l'app gira dal SORGENTE con il
 pacchetto disinstallato: lì quella lettura fallirebbe.
 """
-__version__ = "2.1.0"
+__version__ = "2.2.0"
