@@ -83,6 +83,10 @@ class DatasetResponse(BaseModel):
     example_questions: list[str] = Field(
         default_factory=list,
         description="Domande d'esempio costruite sulle colonne di QUESTO dataset")
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Avvisi sul dataset appena prodotto (es. un'unione che ha "
+                    "duplicato le righe). Vuoto nel caso normale.")
 
 
 class FiltroSpec(BaseModel):

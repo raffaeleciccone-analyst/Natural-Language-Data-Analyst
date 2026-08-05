@@ -289,6 +289,50 @@ def test_join_left_tiene_tutte_le_righe_di_sinistra():
     assert pd.isna(out.loc[out["ClienteID"] == 3, "Regione"]).all()
 
 
+def test_un_join_che_duplica_le_righe_avvisa():
+    """
+    Il difetto piu' insidioso del join: non fallisce. La chiave si ripete, ogni
+    riga si moltiplica, e i totali risultano gonfiati senza che nulla lo dica.
+    """
+    import pandas as pd
+    ordini = pd.DataFrame({"ClienteID": [1, 2], "Importo": [100, 200]})
+    # Due contatti per lo stesso cliente: ogni ordine si duplichera'.
+    contatti = pd.DataFrame({"ClienteID": [1, 1, 2], "Email": ["a@x", "b@x", "c@x"]})
+    unito = views.join_datasets(ordini, contatti, "ClienteID", "ClienteID")
+
+    # 2 ordini -> 3 righe: l'ordine del cliente 1 e' stato contato DUE volte. Il
+    # totale sarebbe 400 invece di 300. Nota: le righe non superano il piu' grande
+    # dei due file (3), ed e' il motivo per cui il metro e' il PRIMO file.
+    assert len(unito) == 3 and unito["Importo"].sum() == 400
+    avviso = views.join_warning(ordini, contatti, unito, "ClienteID", "ClienteID")
+    assert avviso is not None
+    assert "'ClienteID' si ripete nel secondo" in avviso
+    assert "gonfiati" in avviso
+
+
+def test_un_join_pulito_non_avvisa():
+    """Un avviso su ogni unione riuscita insegnerebbe a ignorarli tutti."""
+    import pandas as pd
+    ordini = pd.DataFrame({"ClienteID": [1, 2, 1], "Importo": [100, 200, 50]})
+    clienti = pd.DataFrame({"ClienteID": [1, 2], "Regione": ["Nord", "Sud"]})
+    unito = views.join_datasets(ordini, clienti, "ClienteID", "ClienteID")
+    assert views.join_warning(ordini, clienti, unito, "ClienteID", "ClienteID") is None
+
+
+def test_le_chiavi_ripetute_nel_PRIMO_file_non_sono_un_problema():
+    """
+    Due righe con la stessa chiave a sinistra trovano le stesse corrispondenze:
+    nessuna moltiplicazione, nessun totale gonfiato, nessun avviso. La causa sta
+    sempre a destra, e avvisare qui sarebbe un falso positivo su un join corretto.
+    """
+    import pandas as pd
+    ordini = pd.DataFrame({"k": [1, 1], "v": [10, 20]})     # due ordini, stesso cliente
+    clienti = pd.DataFrame({"k": [1], "regione": ["Nord"]})
+    unito = views.join_datasets(ordini, clienti, "k", "k")
+    assert len(unito) == 2
+    assert views.join_warning(ordini, clienti, unito, "k", "k") is None
+
+
 def test_join_colonne_omonime_prendono_il_suffisso():
     import pandas as pd
     a = pd.DataFrame({"k": [1], "val": [10]})
