@@ -96,6 +96,7 @@ from nlda.loader import (
     ordered_measures,
     profile,
     read_any,
+    stima_ram,
 )
 from nlda.log import get_logger
 from nlda.periods import compare_periods
@@ -376,6 +377,18 @@ async def carica(file: Annotated[UploadFile, File()]) -> DatasetResponse:
         # Stesso contenuto, stessa voce: ricaricare due volte non raddoppia la RAM.
         return _descrivi(gia_presente.df, chiave, gia_presente.etichetta)
 
+    # Si fa posto PRIMA di leggere. Durante la lettura i dataset già in memoria
+    # occupano ancora tutto il loro spazio, e il picco del parser si somma al
+    # loro: sulla demo, con 40 MB in magazzino, caricarne altri 40 uccideva il
+    # container. Quando la stima non è possibile (Excel, JSON) si prenota il
+    # massimo che un dataset può occupare: si sfratta di troppo, non di meno.
+    #
+    # La stima si paga due volte, qui e dentro il caricatore: 41 ms su un file da
+    # 20 MB, contro i 522 della lettura. Si è preferito il costo alla scorciatoia
+    # di prenotare sempre il massimo, che sfratterebbe dataset ancora utili a
+    # ogni caricamento — anche per un file da 100 KB.
+    store.magazzino.fai_spazio(stima_ram(dati, nome)
+                               or settings.max_dataset_ram_mb * 1024 * 1024)
     try:
         df = read_any(NamedBytesIO(dati, nome))
     except ValueError as e:

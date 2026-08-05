@@ -163,6 +163,33 @@ class MagazzinoDataset:
                             "byte_totali": self._byte_totali()})
             return chiave
 
+    def fai_spazio(self, byte: int) -> int:
+        """
+        Sfratta finché `byte` in più ci starebbero sotto il tetto. Restituisce
+        quante voci sono uscite.
+
+        Serve a chi sta per LEGGERE un file, non a chi lo sta aggiungendo. Lo
+        sfratto di `aggiungi` arriva quando la nuova tabella esiste già: durante
+        la lettura i dataset vecchi occupano ancora la loro memoria, e i due
+        costi si sommano proprio nel momento peggiore. Misurato sulla demo: con
+        un dataset da 40 MB in magazzino, caricarne un altro da 40 uccideva il
+        container — nessuno dei due sforava il tetto, la loro somma sì.
+
+        Non si sfratta mai l'ultima voce rimasta: se un solo dataset non ci sta,
+        buttarlo non aiuterebbe chi sta caricando e toglierebbe il dataset a chi
+        lo sta usando. Quel caso lo ferma il tetto per dataset del caricatore.
+        """
+        usciti = 0
+        with self._lock:
+            while (self._byte_totali() + byte > self.ram_massima) and len(self._voci) > 1:
+                vecchio = min(self._voci, key=lambda k: self._voci[k].uso)
+                sfrattato = self._voci.pop(vecchio)
+                usciti += 1
+                log.info("magazzino_sfratto",
+                         extra={"chiave": vecchio, "ragione": "spazio_in_arrivo",
+                                "byte": sfrattato.byte})
+        return usciti
+
     def prendi(self, chiave: str) -> "Voce | None":
         """La voce richiesta, rinfrescandone l'ultimo uso. `None` se assente o scaduta."""
         with self._lock:
