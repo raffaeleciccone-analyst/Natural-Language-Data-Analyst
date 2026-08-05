@@ -49,7 +49,7 @@ from fastapi.staticfiles import StaticFiles
 
 from nlda import __version__, charts, checks
 from nlda.agent import DataAgent
-from nlda.api import quota, store
+from nlda.api import cache, quota, store
 from nlda.api.models import (
     AskRequest,
     AskResponse,
@@ -488,6 +488,24 @@ def report(dataset_id: str, measure: str | None = None,
     voce = _dataset(dataset_id)
     filtro = (FiltroSpec(column=filter_column, values=filter_values)
               if filter_column and filter_values else None)
+    # Il dataset esiste (`_dataset` sopra ha già dato 404 se no) e i suoi dati non
+    # cambiano: l'identificativo è l'impronta del contenuto. Il report è quindi
+    # una funzione pura di questi parametri, e si ricorda invece di rifarlo —
+    # 1,5 secondi risparmiati a ogni ritorno su un filtro già visto.
+    #
+    # La chiave si scrive per esteso apposta: costruirla dagli argomenti
+    # significherebbe che un parametro nuovo, dimenticato qui, farebbe servire a
+    # due richieste diverse la stessa risposta.
+    chiave = "|".join(["report", dataset_id, measure or "", category or "", unit,
+                       filter_column or "", ",".join(sorted(filter_values or []))])
+    return cache.ricordi.ottieni(chiave, lambda: _calcola_report(
+        voce, filtro, measure, category, unit))
+
+
+def _calcola_report(voce: store.Voce, filtro: "FiltroSpec | None",
+                    measure: str | None, category: str | None,
+                    unit: str) -> ReportResponse:
+    """Il report vero e proprio: è ciò che si ricorda, quindi vive per conto suo."""
     df, etichetta_filtro = _filtrato(voce.df, filtro)
     # I parametri si validano PRIMA di calcolare: `analyze` tollera una misura
     # sbagliata, `build_kpis` no — e senza questo controllo il 500 arrivava da
