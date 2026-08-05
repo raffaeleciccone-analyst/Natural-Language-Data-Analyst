@@ -12,6 +12,7 @@ import streamlit as st
 
 from nlda.agent import DataAgent
 from nlda.charts import apply_theme, corr_heatmap, histogram, px, to_chart, try_fig
+from nlda.config import settings
 from nlda.demo import DemoLimits
 from nlda.demo_data import disponibili as demo_disponibili
 from nlda.export import conversation_to_markdown
@@ -89,7 +90,14 @@ def render_sidebar_config(limits: DemoLimits) -> SidebarConfig:
         st.subheader("Dataset")
         uploaded_file = st.file_uploader(
             "Carica un file", type=SUPPORTED_EXTENSIONS,
-            help="Formati supportati: CSV, Excel (.xlsx/.xls), JSON.",
+            # I due limiti sono diversi e nessuno dei due si deduce dall'altro:
+            # Streamlit mostra da solo quello sul PESO del file, ma non ha modo di
+            # sapere quanta memoria l'analisi concede. Un CSV di numeri da 9 MB
+            # ne occupa 36 una volta letto, e senza questa riga il rifiuto
+            # arriverebbe come una sorpresa dopo il caricamento.
+            help=f"Formati supportati: CSV, Excel (.xlsx/.xls), JSON. "
+                 f"Il file può pesare fino a {settings.max_upload_mb} MB e occupare "
+                 f"fino a {settings.max_dataset_ram_mb} MB una volta letto.",
         )
 
         # L'elenco riflette i file presenti, non un catalogo: un esempio che non
