@@ -83,6 +83,7 @@ domanda con la risposta e la tabella che l'ha prodotta.*
 | **Confronto tra periodi** | Una misura per mese, trimestre o anno con la variazione sul periodo precedente — dalla sezione dedicata o chiedendolo a parole. |
 | **Unione di due file** | Carica un secondo dataset e uniscilo al primo su una coppia di chiavi; da lì in poi report e domande valgono sui dati uniti. |
 | **Dice quando NON può rispondere** | Se chiedi il «profitto» e il dataset non ce l'ha, non ti dà le vendite fingendo siano quelle: il modello è tenuto a dichiarare su quale colonna sta rispondendo (`# mappa: profitto -> NESSUNA`), la dichiarazione viene verificata contro le colonne vere e l'avviso arriva in entrambe le interfacce. |
+| **Tornare indietro non costa** | Cliccare una barra filtra la pagina, ricliccarla toglie il filtro: il report che serve è quello di un istante prima, e lo si ricorda invece di rifarlo. Sul deploy da 0,1 vCPU: da ~1.400 ms a ~130. |
 | **Esporta la conversazione** | Ogni turno in Markdown, **codice Pandas generato compreso**. |
 | **Multi-provider LLM** | Ollama (locale, senza chiave), Groq, Anthropic, OpenAI, Gemini. Gli SDK sono opzionali: si installa solo quello che serve. |
 | **Chiedi al progetto** | Una modalità che risponde sul progetto stesso citando le fonti, con recupero TF-IDF sui documenti del repo. |
@@ -314,6 +315,7 @@ nlda/api/                  interfaccia HTTP — traduzione da e verso JSON, ness
 ├─ models.py               i modelli Pydantic da cui nascono i tipi TypeScript
 ├─ streaming.py            Server-Sent Events: avanzamento, risultato, testo a pezzi
 ├─ store.py                magazzino in memoria dei dataset (impronta del contenuto, LRU + TTL)
+├─ cache.py                i report già calcolati, con un tetto in byte e sfratto del meno usato
 └─ quota.py                tetto di spesa della demo pubblica
 
 frontend/src/              interfaccia React — nessuna decisione sui dati, solo resa
@@ -323,8 +325,10 @@ frontend/src/              interfaccia React — nessuna decisione sui dati, sol
 └─ components/             KPI, grafici, tabelle, filtro, chat, pannelli
 
 main.py + nlda/ui/         interfaccia Streamlit
-scripts/                   generazione dei tipi, dataset di esempio, corpus, smoke, eval, analisi log
+scripts/                   tipi TypeScript, dataset, corpus, smoke, eval, analisi log,
+                           verifica del deploy vero e anteprima su telefono/tablet
 tests/                     suite pytest (con focus sulla sandbox di sicurezza)
+frontend/e2e/              impaginazione misurata in un browser vero (Playwright)
 ```
 
 ## Sviluppo e qualità
@@ -334,7 +338,12 @@ pip install -e ".[all,api,dev]"
 pytest                          # test, inclusi quelli di sicurezza sul validatore
 ruff check .                    # lint
 mypy nlda main.py               # type-check
-cd frontend && npm run typecheck && npx oxlint src
+
+cd frontend
+npm run typecheck && npx oxlint src
+npm test                        # i componenti, su jsdom
+npm run test:e2e                # l'impaginazione a 390 e 820 px, in un browser vero
+                                # (la prima volta: npx playwright install chromium)
 ```
 
 <details>
@@ -372,9 +381,17 @@ Ogni push esegue in CI (`.github/workflows/ci.yml`):
 
 - **test** sulle tre versioni supportate (3.12, 3.13, 3.14);
 - **lint e type-check** su Python (ruff, mypy) e TypeScript (tsc, oxlint);
+- **interfaccia React**: i test dei componenti (vitest su jsdom) e le prove di
+  **impaginazione a 390 e 820 px** in un browser vero (Playwright). Servono
+  entrambe: jsdom costruisce il DOM ma non lo impagina, quindi lo sfondamento
+  orizzontale — il difetto tipico del telefono — gli è invisibile per costruzione;
 - **immagine Docker**: build, avvio e verifica che l'HEALTHCHECK diventi sano e
   che la sandbox funzioni dentro il container;
 - **sicurezza**: `pip-audit` sulle dipendenze e `bandit` sul codice.
+
+Ogni giorno, separatamente, un workflow interroga la **demo pubblica vera**
+(`scripts/verifica_deploy.py --difese`): non basta che il codice sia verde se poi
+l'host non applica una variabile d'ambiente, ed è successo tre volte.
 
 <details>
 <summary><b>Configurazione da variabili d'ambiente</b></summary>
