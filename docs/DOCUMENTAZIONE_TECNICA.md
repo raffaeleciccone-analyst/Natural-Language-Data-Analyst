@@ -844,6 +844,7 @@ L'immutabilità la rende un valore prevedibile e sicuro da leggere.
 | `ALLOW_INPROCESS_FALLBACK` | true | fallback in-process se il subprocess non parte |
 | `MAX_ROWS` | 2.000.000 | tetto di **usabilità** sul file caricato |
 | `MAX_COLUMNS` | 500 | idem |
+| `MAX_DATASET_RAM_MB` | 256 | quanta memoria può occupare **un** dataset letto |
 | `MAX_STORE_RAM_MB` | 256 | tetto di RAM sui dataset che l'API tiene in memoria |
 | `LLM_REQUEST_TIMEOUT` | 30.0 | timeout singola chiamata LLM |
 | `LLM_MAX_RETRIES` | 1 | tentativi extra oltre al primo |
@@ -861,6 +862,20 @@ usato di recente. Un singolo dataset più grande del tetto **si tiene** — butt
 lascerebbe l'utente senza il file appena caricato, e la RAM sarebbe occupata comunque
 — ma emette un `magazzino_oltre_il_tetto` nei log: un tetto tarato male si deve poter
 vedere.
+
+**`MAX_DATASET_RAM_MB` è il tetto che tiene in vita il processo.** Gli altri due
+governano quanto si *tiene*; questo governa quanto si può *leggere*, ed è nato da un
+guasto riprodotto in produzione il 5 agosto 2026: un CSV da 20 MB su disco — 50.000
+righe per 200 colonne di interi, dentro `MAX_ROWS` e dentro `MAX_COLUMNS` — diventa
+una tabella da 80 MB e ne chiede **207 al processo** mentre la costruisce. Sul
+container da 512 MB della demo il caricamento veniva ucciso dal sistema operativo, e
+con il processo sparivano i dataset di **tutti** i visitatori. Nessuno dei tetti
+esistenti poteva vederlo: righe e colonne non misurano i byte, e il tetto del
+magazzino si applica quando la tabella esiste già, cioè dopo che la memoria è stata
+presa. Ora il costo si **stima sul primo megabyte** ed estrapola (misurato: 76 MB
+stimati contro 80 reali), e il file si rifiuta prima di allocarlo. Per i formati che
+non si stimano — `.xlsx` è compresso, il JSON va letto tutto — il controllo resta
+dopo la lettura: non evita il picco, evita di tenere occupata la memoria.
 
 **`MAX_ROWS` non è un limite di memoria, ed è dichiarato.** Il commento nel codice
 lo dice: 3 milioni di righe costano ~340 MB di picco, dentro i 2 GB del container.
@@ -1043,6 +1058,20 @@ formattati, JSON annidati); (3) profilare; (4) distinguere *misure* da
 riprovando in `latin-1`. **`_detect_sep`** è nato da un bug vero: un CSV a **colonna
 singola** veniva spezzato dallo sniffer di pandas, che trovava un separatore
 plausibile dove non c'era.
+
+**I byte vanno al parser così come sono.** Prima il file veniva decodificato in una
+stringa, la stringa avvolta in uno `StringIO` e il tutto dato a `engine="python"`:
+tre copie e il motore lento, per un picco di **459 MB** su un CSV da 20 MB. Ora
+legge il parser predefinito, quello in C, direttamente dai byte: stesso risultato,
+**207 MB**. Il motore python non serviva — il separatore lo sceglie `_detect_sep` ed
+è sempre un carattere solo, l'unico caso che l'avrebbe richiesto. La decodifica
+completa sopravvive solo dove serve davvero: contare le righe fino alla prima
+irregolare, cioè su un file che stiamo comunque per rifiutare.
+
+**`_stima_byte_csv`** legge il primo megabyte, ne misura il costo in memoria e lo
+estrapola al resto del file: è ciò che permette a `MAX_DATASET_RAM_MB` di dire di no
+**prima** di allocare. Restituisce `None` sui file più corti del campione, dove non
+c'è nulla da estrapolare e il controllo dopo la lettura è sicuro e più preciso.
 
 **`_check_dimensioni`** applica `MAX_ROWS`/`MAX_COLUMNS` con un messaggio chiaro,
 e rifiuta anche i due casi degeneri: **zero colonne** e **zero righe** (un file con
@@ -1916,6 +1945,16 @@ usato di recente finché la somma non rientra in `MAX_STORE_RAM_MB`. Un dataset 
 grande del tetto **si tiene** — buttarlo lascerebbe l'utente senza il file appena
 caricato — ma emette `magazzino_oltre_il_tetto`: un tetto tarato male si deve poter
 vedere.
+
+**`fai_spazio` sfratta per un dataset che deve ancora arrivare.** Lo sfratto di
+`aggiungi` arriva troppo tardi per chi sta *leggendo*: mentre il parser lavora, i
+dataset vecchi occupano ancora la loro memoria e i due costi si sommano. Sulla demo,
+con 40 MB in magazzino, caricarne altri 40 uccideva il container — e nessuno dei due
+sforava il tetto: la loro somma sì. La rotta di caricamento chiama `fai_spazio` con
+la *stima* del file in arrivo prima di aprirlo (e con il massimo consentito, quando
+il formato non si stima). L'ultima voce non si sfratta mai: se un solo dataset non ci
+sta, buttarlo non aiuterebbe chi carica e toglierebbe i dati a chi li sta usando —
+quel caso lo ferma `MAX_DATASET_RAM_MB` nel caricatore.
 
 **La LRU è contata, non cronometrata.** La vittima si sceglieva col minimo di
 `ultimo_uso`, cioè a orologio: sotto la risoluzione di `time.monotonic` (su Windows

@@ -46,6 +46,20 @@ pannello web non è rivedibile, non è ripristinabile e non si sa chi l'ha cambi
   problema dell'app.
 - **Il disco è effimero.** Va bene: i dataset caricati vivono già solo in memoria
   (`nlda/api/store.py`), con scadenza a un'ora.
+- **512 MB sono anche il tetto di ciò che si può *leggere*.** Un CSV da 20 MB con
+  molte colonne di numeri chiede oltre 200 MB al processo mentre diventa una
+  tabella: senza un limite, un singolo caricamento fa uccidere il container dal
+  sistema e i dataset di *tutti* i visitatori spariscono (successo davvero, il 5
+  agosto 2026). Lo governa `MAX_DATASET_RAM_MB`, abbassato a 32 in `render.yaml`:
+  oltre quella soglia il file viene rifiutato con un messaggio che dice quanto
+  pesa e cosa fare.
+
+> ⚠️ **Render non applica a un servizio già creato le chiavi *nuove* del
+> blueprint.** Quando `render.yaml` ne guadagna una — è successo con
+> `EXEC_TIMEOUT`, `MAX_STORE_RAM_MB` e `MAX_DATASET_RAM_MB` — va aggiunta a mano
+> dalla pagina *Environment* del servizio, altrimenti resta il default del codice
+> e in produzione vale un valore che nessuno ha scelto. Si controlla da fuori solo
+> per i suoi effetti: `scripts/verifica_deploy.py` e `/api/config`.
 
 ### Tenerla sveglia negli orari che contano
 
