@@ -7,10 +7,11 @@ il costo dell'ultima chiamata.
 import pandas as pd
 
 from nlda.agent import DataAgent
+from nlda.api.streaming import trasmetti
 from nlda.pricing import Usage
 from nlda.providers.base import LLMProvider
 from nlda.results import ExecutionSuccess
-from nlda.service import AnalysisService
+from nlda.service import AnalysisService, Turn
 
 
 class _SenzaStream(LLMProvider):
@@ -133,3 +134,41 @@ def test_dataframe_come_summary_non_serve(sales_df: pd.DataFrame):
     service = AnalysisService(DataAgent(provider=_ConStream(["ok"])))
     result = ExecutionSuccess(fig=None, value=sales_df, summary="")
     assert "".join(service.stream_explanation("q", result)) == "ok"
+
+
+# --- Il DataFrame non resta in mano durante la narrazione ----------------------
+def test_il_dataframe_si_libera_prima_dei_token():
+    """
+    Gli eventi `token` durano decine di secondi: tenere il DataFrame per tutto
+    quel tempo, moltiplicato per gli stream simultanei, e' RAM vera — fino al
+    tetto per dataset, per ogni stream aperto.
+
+    ⚠️ Il servizio finto NON e' un `MagicMock`: quello registra gli argomenti
+    delle chiamate, quindi terrebbe vivo il df da solo e il test passerebbe (o
+    fallirebbe) per colpa dello strumento invece che del codice. Provato: con
+    MagicMock il df risulta vivo anche quando il codice lo ha lasciato andare.
+    """
+    import gc
+    import weakref
+
+    turn = Turn(question="q", code="x",
+                result=ExecutionSuccess(fig=None, value=3, summary=""))
+    vivo: list[bool] = []
+
+    class ServizioFinto:
+        def answer(self, question, dati, **k):
+            return turn
+
+        def stream_explanation(self, *a, **k):
+            gc.collect()
+            vivo.append(riferimento() is not None)
+            yield "testo"
+
+    df = pd.DataFrame({"Regione": ["N", "S"], "Vendite": [1, 2]})
+    riferimento = weakref.ref(df)
+    eventi = trasmetti(ServizioFinto(), "q", df, unit="",
+                       verso_json=lambda t, includi_spiegazione: {})
+    del df                       # la rotta lascia la sua presa quando ritorna
+    list(eventi)
+
+    assert vivo == [False], "il DataFrame e' ancora in vita durante la narrazione"

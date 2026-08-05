@@ -139,15 +139,8 @@ class MagazzinoDataset:
             self._voci[chiave] = Voce(df=df, etichetta=etichetta, byte=byte,
                                       uso=self._prossimo_uso())
             # Sfratto il meno usato di recente finché non si rientra nei tetti.
-            # Il minimo lineare basta: le voci sono al più una manciata, e una
-            # struttura ordinata in più si pagherebbe in complessità per
-            # risparmiare microsecondi.
             while (ragione := self._troppo()) and len(self._voci) > 1:
-                vecchio = min(self._voci, key=lambda k: self._voci[k].uso)
-                sfrattato = self._voci.pop(vecchio)
-                log.info("magazzino_sfratto",
-                         extra={"chiave": vecchio, "ragione": ragione,
-                                "byte": sfrattato.byte})
+                self._sfratta(ragione)
             if self._byte_totali() > self.ram_massima:
                 # Rimasta una sola voce e sfora da sola: sfrattarla lascerebbe
                 # l'utente senza il dataset che ha appena caricato, e la memoria
@@ -182,13 +175,28 @@ class MagazzinoDataset:
         usciti = 0
         with self._lock:
             while (self._byte_totali() + byte > self.ram_massima) and len(self._voci) > 1:
-                vecchio = min(self._voci, key=lambda k: self._voci[k].uso)
-                sfrattato = self._voci.pop(vecchio)
+                self._sfratta("spazio_in_arrivo")
                 usciti += 1
-                log.info("magazzino_sfratto",
-                         extra={"chiave": vecchio, "ragione": "spazio_in_arrivo",
-                                "byte": sfrattato.byte})
         return usciti
+
+    def _sfratta(self, ragione: str) -> None:
+        """
+        Butta la voce meno usata di recente, e dice perché. Col lock già in mano.
+
+        Sta in un metodo suo perché la politica di sfratto — CHI esce e cosa se
+        ne scrive nei log — è la regola centrale di questo magazzino, e la
+        chiamano due cicli diversi: chi aggiunge e chi fa posto a un file in
+        arrivo. Scritta due volte, una modifica ne raggiungerebbe una sola: il
+        test che passa da `aggiungi` non copre `fai_spazio`, e viceversa.
+
+        Il minimo lineare basta: le voci sono al più una manciata, e una
+        struttura ordinata in più si pagherebbe in complessità per risparmiare
+        microsecondi.
+        """
+        vecchio = min(self._voci, key=lambda k: self._voci[k].uso)
+        sfrattato = self._voci.pop(vecchio)
+        log.info("magazzino_sfratto",
+                 extra={"chiave": vecchio, "ragione": ragione, "byte": sfrattato.byte})
 
     def prendi(self, chiave: str) -> "Voce | None":
         """La voce richiesta, rinfrescandone l'ultimo uso. `None` se assente o scaduta."""

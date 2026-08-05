@@ -276,6 +276,11 @@ _MB = 1024 * 1024
 # costa millisecondi: la stima è un investimento, non una tassa.
 _CAMPIONE_BYTE = _MB
 
+# Quanto puo' gonfiare un file passando in memoria, nel caso peggiore osservato:
+# interi a una cifra, due byte su disco che diventano otto in RAM. Serve solo a
+# PRENOTARE spazio per i file troppo corti da campionare.
+_RAPPORTO_PEGGIORE = 4
+
 
 def _stima_byte_csv(raw: bytes) -> int | None:
     """
@@ -304,8 +309,7 @@ def _stima_byte_csv(raw: bytes) -> int | None:
         return None
     campione = raw[:fine]
     try:
-        df = pd.read_csv(io.BytesIO(campione), sep=_detect_sep(_testo(raw.split(b"\n", 1)[0])),
-                         encoding="utf-8-sig")
+        df = pd.read_csv(io.BytesIO(campione), sep=_separatore(raw), encoding="utf-8-sig")
     except Exception:  # noqa: BLE001 — se il campione non si legge, lo dirà la lettura vera
         return None
     if df.empty:
@@ -349,10 +353,15 @@ def duplicate_columns_warning(dati: bytes, nome: str) -> "str | None":
     """
     if not nome.lower().endswith(".csv") or not dati:
         return None
-    testa = _testo(dati.split(b"\n", 1)[0])
+    testa = _intestazione(dati)
     if not testa.strip():
         return None
-    nomi = [c.strip().strip('"') for c in testa.rstrip("\r").split(_detect_sep(testa))]
+    # I nomi si estraggono con `csv.reader`, non con uno `split`: un'intestazione
+    # come `"Vendite, nette",Vendite` porta il separatore DENTRO un nome, e
+    # spezzarla a mano darebbe colonne che non esistono — magari con un avviso su
+    # un doppione inventato. È lo stesso lettore che usa `_prima_riga_irregolare`.
+    nomi = [c.strip() for c in next(csv.reader([testa.rstrip("\r")],
+                                               delimiter=_detect_sep(testa)), [])]
     visti, doppi = set(), []
     for c in nomi:
         if c in visti and c not in doppi:
@@ -375,8 +384,47 @@ def stima_ram(dati: bytes, nome: str) -> "int | None":
     `None` significa "non stimabile", non "piccolo": un .xlsx è compresso e un
     JSON va letto tutto prima di sapere cosa contiene. Chi la usa per prenotare
     spazio tratti il `None` come "il massimo che un dataset può occupare".
+
+    Sotto il megabyte di campione `_stima_byte_csv` non ha nulla da estrapolare e
+    tace, ma per una PRENOTAZIONE il silenzio è la risposta peggiore: si finiva a
+    riservare l'intero tetto — 32 MB sulla demo — per un file da 500 KB che ne
+    occupa 0,74, sfrattando dataset che ci sarebbero stati comodamente (misurato:
+    43 volte troppo). Per quei file basta un tetto grossolano: quattro volte i
+    byte del file è il rapporto peggiore osservato (interi a una cifra, dove due
+    byte su disco diventano otto in memoria), e per prenotare serve un limite
+    superiore, non una misura.
     """
-    return _stima_byte_csv(dati) if nome.lower().endswith(".csv") else None
+    if not nome.lower().endswith(".csv"):
+        return None
+    return _stima_byte_csv(dati) or len(dati) * _RAPPORTO_PEGGIORE
+
+
+def _intestazione(raw: bytes) -> str:
+    """
+    La prima riga del file, decodificata: costa quella riga e non il resto.
+
+    Si affetta fino al primo a-capo invece di usare `split(b"\\n", 1)[0]`, che
+    costruisce anche la CODA — cioè una copia dell'intero file per leggerne il
+    primo rigo. Misurato su 22,7 MB: 3,8 ms e 22,7 MB transitori contro 0,004 ms,
+    e capita quattro volte per caricamento (stima, separatore, colonne omonime,
+    lettura vera) proprio mentre il parser sta per allocare la tabella.
+    """
+    fine = raw.find(b"\n")
+    return _testo(raw if fine < 0 else raw[:fine])
+
+
+def _separatore(raw: bytes) -> str:
+    """
+    Con quale carattere è separato questo file.
+
+    Esiste perché "l'intestazione è ciò che precede il primo a-capo, decodificato,
+    e il separatore si cerca lì" era scritto in tre punti — la stima della
+    memoria, l'avviso sulle colonne omonime e la lettura vera. Tre copie della
+    stessa regola: il giorno in cui un file con preambolo o con `\\r\\n` da
+    trattare a parte obbligasse a correggerla, il punto dimenticato leggerebbe il
+    file con un separatore diverso da quello con cui poi lo si legge davvero.
+    """
+    return _detect_sep(_intestazione(raw))
 
 
 def _testo(raw: bytes) -> str:
@@ -419,7 +467,7 @@ def _read_csv_resilient(f) -> pd.DataFrame:
     if not raw.strip():
         raise ValueError("Il file è vuoto: non contiene né intestazione né dati.")
     _rifiuta_se_troppo_grande(_stima_byte_csv(raw), stimato=True)
-    sep = _detect_sep(_testo(raw.split(b"\n", 1)[0]))
+    sep = _separatore(raw)
     try:
         df = pd.read_csv(io.BytesIO(raw), sep=sep, encoding="utf-8-sig")
     except UnicodeDecodeError:
@@ -546,6 +594,44 @@ class NamedBytesIO(io.BytesIO):
         self.name = nome
 
 
+class FileTroppoGrande(ValueError):
+    """
+    Il file supera il tetto di upload. È un `ValueError` come gli altri rifiuti
+    del caricatore — chi non distingue continua a trattarlo come tale — ma ha un
+    tipo suo perché l'API deve rispondere **413** e non 400: è l'unico rifiuto a
+    cui HTTP dedica un codice, e sprecarlo perderebbe informazione per chi
+    integra. Prima quel confronto era riscritto nella rotta, con una soglia e una
+    frase in più da tenere allineate a mano.
+    """
+
+
+def tetto_upload_byte() -> int:
+    """Quanti byte accetta questa installazione. In un posto solo, perché anche
+    l'API lo dichiara a chi carica (`/api/config`)."""
+    return settings.max_upload_mb * _MB
+
+
+def tetto_dataset_byte() -> int:
+    """Quanta memoria può occupare un dataset letto: serve a chi deve fargli
+    posto PRIMA di leggerlo, quando la stima non è possibile."""
+    return settings.max_dataset_ram_mb * _MB
+
+
+def errore_troppo_grande(byte: int) -> FileTroppoGrande:
+    """
+    Il rifiuto per un file oltre il tetto, con la frase giusta.
+
+    Lo compone il caricatore e non chi lo mostra: l'API risponde 413 e l'app
+    Streamlit un messaggio rosso, ma il TESTO — quanto pesa il file, quale
+    variabile alzare — è lo stesso, e scriverlo due volte significa migliorarne
+    uno solo.
+    """
+    return FileTroppoGrande(
+        f"Il file pesa {fmt_num(byte / _MB)} MB, oltre il limite di "
+        f"{settings.max_upload_mb} MB di questa installazione. Caricane una parte, "
+        f"oppure alza MAX_UPLOAD_MB.")
+
+
 def _rifiuta_se_troppo_pesante(uploaded_file) -> None:
     """
     Il file supera il tetto di upload di questa installazione?
@@ -570,11 +656,8 @@ def _rifiuta_se_troppo_pesante(uploaded_file) -> None:
             uploaded_file.seek(posizione)
         except Exception:  # noqa: BLE001 — un file-like senza seek: si legge e basta
             return
-    if dimensione > settings.max_upload_mb * _MB:
-        raise ValueError(
-            f"Il file pesa {fmt_num(dimensione / _MB)} MB, oltre il limite di "
-            f"{settings.max_upload_mb} MB di questa installazione. Caricane una parte, "
-            f"oppure alza MAX_UPLOAD_MB.")
+    if dimensione > tetto_upload_byte():
+        raise errore_troppo_grande(dimensione)
 
 
 def read_any(uploaded_file) -> pd.DataFrame:
