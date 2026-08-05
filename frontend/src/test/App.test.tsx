@@ -68,6 +68,7 @@ const CONFIG: ConfigResponse = {
   demo_mode: false,
   max_questions: 0,
   max_upload_mb: 25,
+  max_dataset_ram_mb: 256,
   supported_extensions: ["csv"],
   project_questions: [],
   frequencies: ["mese"],
