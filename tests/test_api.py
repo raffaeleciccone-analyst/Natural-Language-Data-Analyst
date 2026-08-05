@@ -62,6 +62,17 @@ def test_lo_schema_openapi_si_genera(client):
         assert atteso in percorsi
 
 
+def test_l_API_dichiara_la_versione_del_pacchetto(client):
+    """
+    Una sola fonte: la versione stava scritta a mano qui E in `pyproject`, e due
+    copie di un numero che deve cambiare insieme prima o poi divergono — con
+    l'API che dichiara nello schema una versione diversa da quella distribuita.
+    """
+    import nlda
+
+    assert client.get("/openapi.json").json()["info"]["version"] == nlda.__version__
+
+
 # --- Dataset ------------------------------------------------------------------
 def test_carica_un_csv(client, csv_bytes):
     r = client.post("/api/dataset",
