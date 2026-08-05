@@ -42,19 +42,43 @@ from nlda.log import get_logger
 
 log = get_logger(__name__)
 
-# Una risposta di report pesa fino a ~130 KB: trenta voci sono ~4 MB, cioè meno
-# dell'1% del container su cui gira la demo, e coprono l'andirivieni fra i
-# filtri di più visitatori insieme.
-MAX_VOCI = 30
+# Quanta RAM possono occupare INSIEME i report ricordati.
+#
+# Si contano i BYTE e non le voci, ed è una correzione a questo stesso modulo
+# scritta il giorno dopo averlo scritto: "trenta risposte da ~130 KB fanno 4 MB"
+# misurava il solo dataset dimostrativo. Su un dataset da 300.000 righe una voce
+# ne pesa **3,3**, perché la figura della distribuzione si porta dentro ogni
+# valore della colonna misura — trenta voci sarebbero 96 MB, cioè più di quanto
+# il magazzino accanto conceda a TUTTI i dataset messi insieme, sullo stesso
+# container da 512 MB. Contare le voci è contare le tabelle un'altra volta, ed è
+# l'errore che `store.py` ha già fatto e già pagato.
+MAX_RAM_MB = 8
+
+
+def _byte_occupati(valore: Any) -> int:
+    """
+    Quanto pesa una risposta ricordata.
+
+    Si misura la sua forma JSON perché è quella la cosa grossa: dentro una
+    figura Plotly gli array dei dati viaggiano già serializzati, e `sys.getsizeof`
+    su un modello Pydantic misurerebbe il guscio invece del contenuto.
+    """
+    try:
+        return len(valore.model_dump_json().encode())
+    except AttributeError:
+        # Non è un modello Pydantic: si ricade su una stima grossolana, che è
+        # meglio di zero — una voce non misurabile non deve risultare gratis.
+        return len(str(valore).encode())
 
 
 class Ricordi:
-    """Mappa chiave → risposta, di capienza fissa, con sfratto del meno recente."""
+    """Mappa chiave → risposta, con un tetto di MEMORIA e sfratto del meno recente."""
 
-    def __init__(self, capienza: int = MAX_VOCI) -> None:
+    def __init__(self, ram_mb: int = MAX_RAM_MB) -> None:
         self._voci: dict[str, Any] = {}
+        self._byte: dict[str, int] = {}
         self._lock = threading.Lock()
-        self.capienza = capienza
+        self.ram_massima = ram_mb * 1024 * 1024
 
     def ottieni(self, chiave: str, calcola: Callable[[], Any]) -> Any:
         """
@@ -74,24 +98,41 @@ class Ricordi:
                 return valore
 
         valore = calcola()
+        byte = _byte_occupati(valore)
 
         with self._lock:
             self._voci[chiave] = valore
-            while len(self._voci) > self.capienza:
+            self._byte[chiave] = byte
+            while sum(self._byte.values()) > self.ram_massima and len(self._voci) > 1:
                 # `dict` conserva l'ordine di inserimento: il primo è il più
                 # vecchio per USO, perché ogni lettura riporta la voce in fondo.
                 vecchia = next(iter(self._voci))
                 del self._voci[vecchia]
+                del self._byte[vecchia]
+            if byte > self.ram_massima:
+                # Una risposta più grande dell'intero tetto: si tiene (è appena
+                # stata calcolata e chi l'ha chiesta la sta ricevendo) ma lo si
+                # dice, come fa il magazzino. Se compare nei log, il tetto è
+                # tarato male o un report sta portando dentro troppi dati.
+                log.warning("cache_voce_oltre_il_tetto",
+                            extra={"chiave": chiave, "byte": byte,
+                                   "tetto_byte": self.ram_massima})
         return valore
 
     def __len__(self) -> int:
         with self._lock:
             return len(self._voci)
 
+    def byte_totali(self) -> int:
+        """La RAM occupata dai ricordi, per i test e per chi osserva."""
+        with self._lock:
+            return sum(self._byte.values())
+
     def svuota(self) -> None:
         """Solo per i test: riparte da zero fra un caso e l'altro."""
         with self._lock:
             self._voci.clear()
+            self._byte.clear()
 
 
 # Istanza condivisa dal processo, come il magazzino.

@@ -92,19 +92,24 @@ def trasmetti(service: AnalysisService, question: str, df, *,
     # il rilascio che si fa qui sotto apposta.
     colonne = df.columns
 
-    def lavora() -> None:
+    # Il DataFrame arriva al thread come ARGOMENTO e non per cattura: così il
+    # nome resta un parametro di questa funzione, e più sotto lo si può lasciare
+    # andare davvero. Catturandolo, la closure lo terrebbe in vita per tutta la
+    # narrazione anche dopo il `del`.
+    def lavora(dati) -> None:
         try:
             # explain=False: la spiegazione NON la fa il servizio in un colpo
             # solo, la si streamma dopo. Chiederla qui vanificherebbe l'attesa
             # che stiamo cercando di rendere sopportabile.
-            esito["turn"] = service.answer(question, df, explain=False, unit=unit,
+            esito["turn"] = service.answer(question, dati, explain=False, unit=unit,
                                            on_step=passi.put)
         except Exception as e:  # noqa: BLE001 — qualunque guasto va riferito al client
             esito["errore"] = e
         finally:
             passi.put(_FINE)
 
-    thread = threading.Thread(target=lavora, name="turno-streaming", daemon=True)
+    thread = threading.Thread(target=lavora, args=(df,),
+                              name="turno-streaming", daemon=True)
     thread.start()
 
     # Finché il lavoro procede, si trasmette l'avanzamento appena arriva.
@@ -115,13 +120,19 @@ def trasmetti(service: AnalysisService, question: str, df, *,
         yield evento("step", {"message": passo})
 
     thread.join()
-    # Si lasciano andare thread e closure PRIMA della parte lenta: gli eventi
-    # `token` sono lo streaming della spiegazione, decine di secondi, e in tutto
-    # quel tempo la closure terrebbe in vita il DataFrame (piu' la copia filtrata,
-    # che nel magazzino non c'e'). Non era una perdita illimitata — alla fine del
-    # generatore si liberava — ma "tenuto troppo a lungo" moltiplicato per gli
-    # stream simultanei e' RAM vera.
-    del thread, lavora
+    # Si lascia andare il DATAFRAME prima della parte lenta: gli eventi `token`
+    # sono lo streaming della spiegazione, decine di secondi, e in tutto quel
+    # tempo il df resterebbe vivo (piu' la copia filtrata, che nel magazzino non
+    # c'e'). Non e' una perdita illimitata — alla fine del generatore si libera —
+    # ma "tenuto troppo a lungo" moltiplicato per gli stream simultanei e' RAM
+    # vera: fino al tetto per dataset, per ogni stream aperto.
+    #
+    # `df` va nominato ESPLICITAMENTE: e' un argomento del generatore, quindi
+    # vive nel suo frame anche dopo che thread e closure sono spariti. Lasciarlo
+    # fuori da questa riga rendeva il rilascio un gesto simbolico — misurato con
+    # `weakref`: il df era ancora vivo durante tutti i `token`. Cio' che serve
+    # dopo, i nomi delle colonne, e' gia' stato copiato in `colonne`.
+    del thread, lavora, df
 
     if "errore" in esito:
         log.error("stream_turno_fallito", extra={"errore": str(esito["errore"])})

@@ -92,12 +92,15 @@ from nlda.loader import (
     date_span_years,
     default_unit,
     duplicate_columns_warning,
+    errore_troppo_grande,
     load_dataset,
     measure_columns,
     ordered_measures,
     profile,
     read_any,
     stima_ram,
+    tetto_dataset_byte,
+    tetto_upload_byte,
 )
 from nlda.log import get_logger
 from nlda.periods import compare_periods
@@ -124,11 +127,6 @@ _ERRORI = {
     413: {"model": ErrorResponse, "description": "File troppo grande"},
 }
 router = APIRouter(prefix="/api", responses=_ERRORI)  # type: ignore[arg-type]
-
-# Lo stesso tetto della UI: un limite per interfaccia sarebbe una bugia. Vive in
-# `settings` perché un deploy deve poterlo cambiare senza toccare il codice —
-# `.streamlit/config.toml` lo fa da sempre, l'API lo teneva scritto qui dentro.
-MAX_UPLOAD_MB = settings.max_upload_mb
 
 # Il tetto di spesa della demo pubblica. Fuori dalla demo (`DEMO_MODE` assente)
 # non conta nulla e non costa nulla: `Quota.consuma` esce alla prima riga.
@@ -314,7 +312,7 @@ def config() -> ConfigResponse:
                    for p in available_providers()],
         demo_mode=_quota.limiti.enabled,
         max_questions=_quota.limiti.max_questions if _quota.limiti.enabled else 0,
-        max_upload_mb=MAX_UPLOAD_MB,
+        max_upload_mb=settings.max_upload_mb,
         max_dataset_ram_mb=settings.max_dataset_ram_mb,
         supported_extensions=list(SUPPORTED_EXTENSIONS),
         # Le stesse liste che usa l'app Streamlit: erano ribattute nel client.
@@ -371,9 +369,12 @@ def _descrivi(df: pd.DataFrame, dataset_id: str, etichetta: str,
 @router.post("/dataset", response_model=DatasetResponse, summary="Carica un file da analizzare")
 async def carica(file: Annotated[UploadFile, File()]) -> DatasetResponse:
     dati = await file.read()
-    if len(dati) > MAX_UPLOAD_MB * 1024 * 1024:
-        raise HTTPException(status_code=413,
-                            detail=f"File troppo grande: il limite è {MAX_UPLOAD_MB} MB.")
+    if len(dati) > tetto_upload_byte():
+        # Il messaggio lo scrive il caricatore, che dice quanto pesa il file e
+        # quale variabile alzare: qui si sceglie solo il codice HTTP. Prima la
+        # soglia e la frase erano riscritte anche qui, e migliorare l'una non
+        # cambiava quel che leggeva chi usa l'API.
+        raise HTTPException(status_code=413, detail=str(errore_troppo_grande(len(dati))))
     nome = file.filename or "caricato.csv"
     chiave = store.impronta(dati, nome)
 
@@ -392,8 +393,7 @@ async def carica(file: Annotated[UploadFile, File()]) -> DatasetResponse:
     # 20 MB, contro i 522 della lettura. Si è preferito il costo alla scorciatoia
     # di prenotare sempre il massimo, che sfratterebbe dataset ancora utili a
     # ogni caricamento — anche per un file da 100 KB.
-    store.magazzino.fai_spazio(stima_ram(dati, nome)
-                               or settings.max_dataset_ram_mb * 1024 * 1024)
+    store.magazzino.fai_spazio(stima_ram(dati, nome) or tetto_dataset_byte())
     try:
         df = read_any(NamedBytesIO(dati, nome))
     except ValueError as e:
