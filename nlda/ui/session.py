@@ -20,7 +20,7 @@ import streamlit as st
 from nlda.agent import DataAgent
 from nlda.demo import DemoLimits
 from nlda.demo_data import trova as trova_demo
-from nlda.loader import NamedBytesIO, load_dataset, read_any
+from nlda.loader import NamedBytesIO, duplicate_columns_warning, load_dataset, read_any
 from nlda.log import get_logger
 
 log = get_logger(__name__)
@@ -163,12 +163,20 @@ def load_dataframe(uploaded_file, esempio: str | None = None):
     stesso elenco, non perche' qualcuno si ricorda di aggiornarne due.
     """
     if uploaded_file is not None:
+        dati = uploaded_file.getvalue()
         try:
-            return load_uploaded_cached(uploaded_file.name, uploaded_file.getvalue()), \
-                f"File caricato: {uploaded_file.name}"
+            df = load_uploaded_cached(uploaded_file.name, dati)
         except Exception as e:  # noqa: BLE001 — file dell'utente: qualunque errore va mostrato
             st.error(f"Errore nel caricamento del file: {e}")
             return None, None
+        # Due colonne con lo stesso nome: pandas rinomina la seconda in silenzio.
+        # Lo stesso avviso che l'API mette nella risposta, composto dalla stessa
+        # funzione: la differenza fra le due interfacce dev'essere solo il modo
+        # di mostrarlo.
+        avviso = duplicate_columns_warning(dati, uploaded_file.name)
+        if avviso:
+            st.warning(f"⚠️ {avviso}")
+        return df, f"File caricato: {uploaded_file.name}"
     scelto = trova_demo(esempio)
     if scelto is None:
         return None, None
