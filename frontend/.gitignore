@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Esiti delle prove di impaginazione (Playwright): tracce e report si
+# rigenerano a ogni esecuzione, e una traccia pesa megabyte.
+/test-results/
+/playwright-report/
+/blob-report/
