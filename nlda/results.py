@@ -26,13 +26,21 @@ EXECUTED_OK = "Codice eseguito correttamente."
 
 # Causa del fallimento. È la chiave su cui si prendono decisioni (retry, log,
 # messaggistica): resta stabile anche se il testo mostrato all'utente cambia.
-#   syntax    -> il modello ha prodotto codice non parsificabile (o nessun codice)
-#   security  -> la sandbox statica ha rifiutato una costruzione non consentita
-#   runtime   -> il codice è valido ma è esploso sui dati (colonna assente, ecc.)
-#   timeout   -> esecuzione interrotta perché troppo lenta o troppo pesante
-#   provider  -> la comunicazione con il modello è fallita
-#   internal  -> l'ambiente di esecuzione isolato non è disponibile o ha risposto male
-FailureKind = Literal["syntax", "security", "runtime", "timeout", "provider", "internal"]
+#   syntax     -> il modello ha prodotto codice non parsificabile (o nessun codice)
+#   security   -> la sandbox statica ha rifiutato una costruzione non consentita
+#   runtime    -> il codice è valido ma è esploso sui dati (colonna assente, ecc.)
+#   dependency -> il codice ha chiesto una libreria che qui non c'è (statsmodels…)
+#   timeout    -> esecuzione interrotta perché troppo lenta o troppo pesante
+#   provider   -> la comunicazione con il modello è fallita
+#   internal   -> l'ambiente di esecuzione isolato non è disponibile o ha risposto male
+#
+# `dependency` è separato da `runtime` per una ragione misurata: una libreria
+# assente non c'è nemmeno al secondo tentativo, quindi rigenerare il codice
+# brucia tre chiamate all'LLM — pagate, sulla demo — senza alcuna possibilità di
+# riuscire. È lo stesso errore di classificazione già costato caro sul worker che
+# non parte.
+FailureKind = Literal["syntax", "security", "runtime", "dependency",
+                      "timeout", "provider", "internal"]
 
 # Le stesse cause, ispezionabili a runtime: servono a validare ciò che arriva dal
 # sottoprocesso, senza doverne mantenere una seconda copia a mano.
@@ -85,6 +93,9 @@ ADVICE: dict[str, str] = {
               "Prova a essere più specifico.",
     "runtime": "Il codice è stato eseguito ma è fallito sui dati: "
                "forse una colonna non esiste con quel nome.",
+    "dependency": "Il codice generato ha chiesto una libreria non installata "
+                  "(tipicamente una linea di tendenza, che richiede statsmodels). "
+                  "Rifai la domanda senza chiedere una regressione.",
     "timeout": "L'elaborazione ha superato il tempo massimo. "
                "Prova a restringere la domanda.",
     "provider": "Il modello non è raggiungibile. Controlla la configurazione e riprova.",

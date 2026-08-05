@@ -82,6 +82,24 @@ def test_nessun_retry_sul_rifiuto_di_sicurezza(sales_df: pd.DataFrame):
     assert len(provider.calls) == 1
 
 
+def test_nessun_retry_su_una_libreria_assente(sales_df: pd.DataFrame):
+    """
+    Una libreria che manca manca anche al secondo tentativo: rigenerare il codice
+    e' spesa certa senza possibilita' di successo — tre chiamate al modello, sulla
+    demo pagate col credito del manutentore. E' lo stesso errore di classificazione
+    gia' costato caro sul rifiuto della sandbox e sul worker che non parte.
+    """
+    service, provider = _service(
+        ["fig = px.scatter(df, x='Profit', y='Sales', trendline='ols')\nresult = df"])
+    turn = service.answer("mostrami la correlazione con la linea di tendenza",
+                          sales_df, explain=False)
+
+    assert isinstance(turn.result, ExecutionFailure)
+    assert turn.result.kind == "dependency"
+    assert turn.result.retryable is False
+    assert len(provider.calls) == 1, "nessuna correzione: il modulo mancherebbe ancora"
+
+
 def test_i_tentativi_sono_limitati(sales_df: pd.DataFrame):
     service, provider = _service(["df['ColonnaInesistente'].sum()"], max_retries=2)
     turn = service.answer("totale", sales_df, explain=False)

@@ -10,6 +10,7 @@ REGOLE TASSATIVE:
 3. Scegli le colonne in base al tipo: aggrega/somma solo colonne numeriche; raggruppa per colonne di testo o data.
 4. Se la richiesta contiene parole come "mostrami", "grafico", "andamento", "visualizza", "plot", "barre", "linee", DEVI creare un grafico con Plotly Express: prepara prima i dati aggregati con groupby(..., as_index=False), poi assegna la figura alla variabile 'fig' usando 'px' con gli argomenti x e y. NON usare funzioni di Streamlit (niente st.*). Usa px.line per andamenti/serie temporali, px.bar per confronti tra categorie.
 5. Se l'utente NON chiede un grafico e la risposta è immediata, restituisci una singola espressione Pandas (es: df['<colonna_numerica>'].sum()).
+   Nei grafici NON usare trendline='ols' (né altre opzioni che richiedono statsmodels): quella libreria qui non è installata e il codice fallirebbe. Per mostrare un andamento usa px.line sui dati aggregati.
 6. Per calcoli in PIÙ passaggi, esegui i passaggi e metti il RISULTATO FINALE in una variabile chiamata 'result' (può essere un numero, una stringa formattata o un DataFrame). NON usare MAI print(). Esempio:
    top = df.groupby('<cat>', as_index=False)['<num>'].sum().sort_values('<num>', ascending=False).head(5)
    perc = top['<num>'].sum() / df['<num>'].sum() * 100
