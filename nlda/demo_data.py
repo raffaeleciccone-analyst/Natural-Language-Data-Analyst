@@ -50,7 +50,14 @@ CATALOGO: tuple[DatasetDemo, ...] = (
         nome="sales",
         file="sales.csv",
         etichetta="Vendite (Superstore)",
-        descrizione="9.800 ordini con regione, categoria e data: vendite, sconti e profitto.",
+        # La descrizione elenca SOLO colonne che ci sono davvero. Diceva "vendite,
+        # sconti e profitto": di sconto e profitto in questo file non c'è traccia,
+        # e l'app invitava così a fare proprio le domande a cui non può rispondere
+        # — le stesse su cui un modello è tentato di ripiegare su una colonna
+        # simile. Una descrizione sbagliata non è un dettaglio di vetrina: è la
+        # prima causa delle domande impossibili.
+        descrizione="9.800 ordini dal 2015 al 2018: vendite, regione, città, "
+                    "categoria di prodotto, segmento di cliente e date di spedizione.",
     ),
     DatasetDemo(
         nome="films",

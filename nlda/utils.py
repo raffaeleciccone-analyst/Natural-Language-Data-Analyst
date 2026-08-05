@@ -43,6 +43,14 @@ def fmt_num(x) -> str:
         return str(x)
     if x != x:  # NaN
         return "—"
+    # L'infinito va intercettato PRIMA di `int(x)`, che su di esso solleva
+    # OverflowError. Non è un caso di scuola: un CSV con `inf` fra i valori
+    # faceva rispondere **500** all'intero report della demo — il difetto si
+    # propagava da qui, perché ogni numero mostrato dall'app passa di qua.
+    # Si mostra il simbolo invece di "—": un valore infinito non è un valore
+    # mancante, e confonderli nasconderebbe un dato anomalo da correggere.
+    if x in (float("inf"), float("-inf")):
+        return "∞" if x > 0 else "−∞"
     if x == int(x) or abs(x) >= 1000:
         s = f"{x:,.0f}"
     else:

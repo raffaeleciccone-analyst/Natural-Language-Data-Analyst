@@ -287,3 +287,31 @@ def test_una_frase_senza_avvisi_si_spiega():
     assert not explanation_is_redundant(
         "descrivi il dataset", "result = 'Contiene ordini di vendita.'", _COLS,
         "Contiene ordini di vendita.")
+
+
+# --- La mappa dichiarata: leggerla come l'ha scritta il modello ----------------
+def test_nessuna_con_un_commento_a_fianco_resta_una_dichiarazione_di_assenza():
+    """
+    Regressione dalla sessione del 5 agosto 2026. Interrogato su un file di
+    sistema, il modello ha scritto `# mappa: utenti -> NESSUNA (il file
+    /etc/passwd non è un dataframe)`: l'uguaglianza esatta con "nessuna" non
+    scattava, la riga finiva fra le colonne INVENTATE, e l'utente leggeva un
+    avviso che citava come nome di colonna un'intera frase.
+    """
+    code = "# mappa: utenti -> NESSUNA (il file /etc/passwd non è un dataframe)\nresult = 1"
+    avvisi = mapping_warnings(code, _COLS)
+    assert len(avvisi) == 1
+    assert "non ha una colonna corrispondente" in avvisi[0]
+    assert "/etc/passwd" not in avvisi[0], "la parentesi è un commento del modello, non un nome"
+
+
+def test_la_mappa_verso_df_non_e_una_colonna_inventata():
+    """`df` è il DataFrame, che il prompt insegna per nome: segnalarlo come
+    colonna inesistente è vero alla lettera e inutile a chi legge."""
+    assert mapping_warnings("# mappa: dataset -> df\nresult = len(df)", _COLS) == []
+
+
+def test_una_colonna_davvero_inventata_si_segnala_ancora():
+    """Il controllo che conta non deve essersi ammorbidito."""
+    avvisi = mapping_warnings("# mappa: profitto -> Profit\nresult = 1", _COLS)
+    assert avvisi and "'Profit'" in avvisi[0]

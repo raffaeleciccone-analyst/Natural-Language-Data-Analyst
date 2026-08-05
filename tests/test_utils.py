@@ -41,3 +41,21 @@ def test_with_unit_senza_unita_lascia_il_testo_intatto():
     # Senza unità NON si deve aggiungere una frase: il modello la userebbe come
     # informazione e inventerebbe un'unità che i dati non hanno.
     assert with_unit("Totale: 1000", "") == "Totale: 1000"
+
+
+def test_fmt_num_non_esplode_sull_infinito():
+    """
+    Regressione da una sessione di test sulla demo (5 agosto 2026): un CSV con
+    `inf` fra i valori faceva rispondere **500** all'INTERO report. La causa era
+    qui — `int(x)` su un infinito solleva `OverflowError` — e da qui si
+    propagava a ogni numero mostrato dall'app.
+    """
+    assert fmt_num(float("inf")) == "∞"
+    assert fmt_num(float("-inf")) == "−∞"
+
+
+def test_fmt_num_distingue_infinito_da_mancante():
+    """Un valore infinito NON è un valore mancante: confonderli nasconderebbe un
+    dato anomalo dietro il trattino dei buchi."""
+    assert fmt_num(float("nan")) == "—"
+    assert fmt_num(float("inf")) != fmt_num(float("nan"))
