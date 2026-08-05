@@ -1262,6 +1262,19 @@ avvisi sulla domanda. Non è un dettaglio di stile: l'avviso anti-allucinazione 
 nato dentro la UI di Streamlit, e l'API — quindi la demo React — non lo emetteva
 affatto. La stessa domanda giudicata in due modi a seconda dell'interfaccia.
 
+**`explanation_is_redundant`** decide quando *non* chiedere la narrazione al modello.
+Provando la demo il 5 agosto 2026, alla domanda «qual è il profitto per regione?» su
+un dataset che il profitto non ce l'ha, la stessa informazione compariva **tre volte**:
+la frase onesta che il modello mette in `result`, l'avviso deterministico, e una
+spiegazione dell'AI che riformulava entrambi — la sola delle tre a costare una chiamata
+e un'attesa. Si tace solo quando ricorrono **insieme** un avviso su domanda↔codice e un
+risultato **testuale**, cioè già una frase compiuta: davanti a un numero o a una tabella
+la spiegazione è il valore che l'utente viene a cercare, e sopprimerla sarebbe il
+difetto opposto. Le tre strade che possono narrare — Streamlit, `/ask` e lo streaming,
+che la spiegazione se la genera da sé — chiamano tutte questa funzione: se il giudizio
+vivesse nel servizio, la demo React continuerebbe a pagare ciò che Streamlit non paga
+più. Un test per strada, tutti e tre rossi se si annulla la condizione.
+
 **Funzioni pure, nessuno Streamlit:** la UI le chiama, ma si testano da sole. 39 test.
 
 **Principi:** onestà sui limiti dello strumento, alta precisione preferita all'alta

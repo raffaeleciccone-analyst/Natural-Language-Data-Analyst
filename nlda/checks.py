@@ -220,6 +220,31 @@ def question_warnings(question: str, code: str, columns) -> list[str]:
     return ([avviso] if avviso else []) + mapping_warnings(code, columns)
 
 
+def explanation_is_redundant(question: str, code: str, columns, value) -> bool:
+    """
+    La narrazione del modello aggiungerebbe qualcosa, o ripeterebbe?
+
+    Nasce da una prova sulla demo pubblica (5 agosto 2026): alla domanda «qual è
+    il profitto per regione?» su un dataset che il profitto non ce l'ha, la stessa
+    informazione compariva **tre volte** — la frase onesta che il modello mette in
+    `result`, il nostro avviso deterministico, e una spiegazione dell'AI che
+    riformulava entrambi. Tre modi di dire "quella colonna non c'è", di cui uno
+    costa una chiamata al modello e l'attesa che la accompagna.
+
+    Si tace quando ricorrono INSIEME due condizioni:
+
+    * c'è almeno un avviso sul rapporto domanda↔codice (grandezza assente o
+      colonna inventata): il turno è già stato giudicato problematico;
+    * il risultato è **testo**, cioè già una frase compiuta e non un numero o una
+      tabella da commentare.
+
+    Fuori da questo caso non si tocca nulla: la spiegazione di un numero o di una
+    tabella è il valore che l'utente viene a cercare, e sopprimerla per prudenza
+    sarebbe il difetto opposto — un'app muta che fa risparmiare qualche centesimo.
+    """
+    return bool(isinstance(value, str) and question_warnings(question, code, columns))
+
+
 def hallucination_warning(question: str, code: str, columns) -> str | None:
     """
     L'avviso da mostrare quando la DOMANDA nomina una colonna che non esiste.

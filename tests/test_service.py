@@ -214,3 +214,30 @@ def test_on_step_e_opzionale(sales_df: pd.DataFrame):
     service, _ = _service(["df['Sales'].sum()"])
     turn = service.answer("totale", sales_df, explain=False)
     assert isinstance(turn.result, ExecutionSuccess)
+
+
+# --- La spiegazione che ripeterebbe non si paga --------------------------------
+_RISPOSTA_ONESTA = ("# mappa: profitto -> NESSUNA\n"
+                    "result = 'Il dataset non contiene una colonna del profitto.'")
+
+
+def test_non_si_paga_una_spiegazione_che_ripete(sales_df: pd.DataFrame):
+    """
+    Misurato sulla demo: con la grandezza assente la stessa informazione compariva
+    tre volte, e una delle tre costava una chiamata al modello. L'asserzione e' sul
+    NUMERO di chiamate, non sull'assenza del testo: e' il costo il difetto.
+    """
+    service, provider = _service([_RISPOSTA_ONESTA])
+    turn = service.answer("qual e' il profitto per regione?", sales_df, explain=True)
+
+    assert turn.explanation is None
+    assert len(provider.calls) == 1, "la seconda chiamata sarebbe stata la narrazione"
+
+
+def test_un_numero_si_spiega_come_sempre(sales_df: pd.DataFrame):
+    """Il difetto opposto — un'app che tace per risparmiare — sarebbe peggiore."""
+    service, provider = _service(["df['Sales'].sum()", "Le vendite totali sono 700."])
+    turn = service.answer("qual e' il totale delle vendite?", sales_df, explain=True)
+
+    assert turn.explanation
+    assert len(provider.calls) == 2, "generazione del codice + narrazione"

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from nlda.agent import DataAgent
+from nlda.checks import explanation_is_redundant
 from nlda.errors import ProviderError
 from nlda.log import bind_context, get_logger, new_turn_id
 from nlda.results import ExecutionFailure, ExecutionResult, ExecutionSuccess
@@ -94,7 +95,13 @@ class AnalysisService:
                         result=ExecutionFailure("provider", f"Errore: {e}", code))
 
         explanation = None
-        if explain and isinstance(result, ExecutionSuccess):
+        # Se la narrazione ripeterebbe ciò che l'utente sta già leggendo non la si
+        # chiede: il giudizio sta in `checks`, dove lo trovano identico anche le
+        # altre strade che possono narrare (lo streaming dell'API se la genera per
+        # conto suo). Se ognuna decidesse a modo proprio, la stessa domanda
+        # costerebbe una chiamata al modello in un'interfaccia e non nell'altra.
+        if (explain and isinstance(result, ExecutionSuccess)
+                and not explanation_is_redundant(question, code, df.columns, result.value)):
             step("Scrivo la spiegazione…")
             explanation = self.agent.explain(question, self._explanation_summary(result, unit))
 

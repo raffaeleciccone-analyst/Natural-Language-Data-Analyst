@@ -43,6 +43,7 @@ import threading
 from collections.abc import Iterator
 from typing import Any
 
+from nlda.checks import explanation_is_redundant
 from nlda.log import get_logger
 from nlda.results import ExecutionSuccess
 from nlda.service import AnalysisService, Turn
@@ -86,6 +87,10 @@ def trasmetti(service: AnalysisService, question: str, df, *,
     """
     passi: queue.Queue = queue.Queue()
     esito: dict[str, Any] = {}
+    # Si prendono ORA i soli nomi di colonna: servono dopo, per decidere se la
+    # spiegazione aggiungerebbe qualcosa, e tenere `df` fino a lì vanificherebbe
+    # il rilascio che si fa qui sotto apposta.
+    colonne = df.columns
 
     def lavora() -> None:
         try:
@@ -126,10 +131,12 @@ def trasmetti(service: AnalysisService, question: str, df, *,
     turn: Turn = esito["turn"]
     yield evento("result", turno_a_evento(turn, verso_json))
 
-    if not explain or not isinstance(turn.result, ExecutionSuccess):
-        # Due motivi per chiudere qui, con lo stesso effetto: il client non vuole
-        # la narrazione, oppure non c'è un risultato da raccontare — e a un
-        # fallimento non si chiede un commento al modello.
+    if (not explain or not isinstance(turn.result, ExecutionSuccess)
+            or explanation_is_redundant(question, turn.code, colonne, turn.result.value)):
+        # Tre motivi per chiudere qui, con lo stesso effetto: il client non vuole
+        # la narrazione; non c'è un risultato da raccontare — e a un fallimento non
+        # si chiede un commento al modello; oppure la narrazione ripeterebbe ciò
+        # che l'utente sta già leggendo (`checks.explanation_is_redundant`).
         yield evento("done", {"answer": None})
         return
 
