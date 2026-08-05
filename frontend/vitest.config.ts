@@ -23,5 +23,11 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     css: false,
+    // Solo i test che girano in jsdom. Senza questa riga Vitest raccoglieva
+    // anche `e2e/*.spec.ts` — che sono prove di Playwright — e falliva con
+    // "did not expect test.describe() to be called here": due strumenti che
+    // usano la stessa parola per cose diverse. In locale non si vedeva, in CI
+    // si': l'ordine di scoperta dei file basta a cambiare l'esito.
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
   },
 });
