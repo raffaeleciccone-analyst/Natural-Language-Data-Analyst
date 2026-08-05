@@ -1,5 +1,6 @@
 """Test del loader: rilevamento date, colonne-misura vs identificatori, lettura file, analyze."""
 import io
+import json
 
 import pandas as pd
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from nlda.config import Settings
 from nlda.loader import (
     _maybe_parse_dates,
+    _stima_byte_csv,
     analyze,
     dataset_signature,
     default_unit,
@@ -173,6 +175,17 @@ def test_un_csv_normale_non_e_toccato_dai_nuovi_controlli():
     """Il rischio di un controllo nuovo e' il falso positivo sul caso normale."""
     df = read_any(_upload("Città,Vendite\nRoma,10\nMilano,20\n".encode(), "ok.csv"))
     assert list(df.columns) == ["Città", "Vendite"] and len(df) == 2
+
+
+def test_un_csv_non_utf8_si_legge_lo_stesso():
+    """
+    I CSV esportati da Excel in Europa sono spesso in latin-1. Prima la
+    decodifica avveniva prima del parser e ripiegava su latin-1 in caso di
+    errore; ora decodifica il parser, e il ripiego è un secondo tentativo con
+    l'altro encoding. Il comportamento visibile non deve cambiare.
+    """
+    df = read_any(_upload("Regione,Città\nNord,Perù\n".encode("latin-1"), "eu.csv"))
+    assert df["Città"].iat[0] == "Perù"
 
 
 def test_csv_a_colonna_singola_non_viene_spezzato():
@@ -403,6 +416,101 @@ def test_il_messaggio_dice_cosa_fare(monkeypatch):
 def test_un_file_nei_limiti_passa(monkeypatch):
     monkeypatch.setattr("nlda.loader.settings", Settings(max_rows=100, max_columns=10))
     assert len(read_any(_csv_finto(righe=50))) == 50
+
+
+def test_il_messaggio_delle_troppe_righe_non_storpia_la_prosa(monkeypatch):
+    """
+    Regressione: le migliaia si formattavano con un `.replace(',', '.')` in coda
+    al messaggio, e quella chiamata si applicava all'INTERA frase — le virgole
+    della prosa diventavano punti ("50 righe. oltre il limite di 10. Filtra...").
+    """
+    monkeypatch.setattr("nlda.loader.settings", Settings(max_rows=10))
+    with pytest.raises(ValueError) as errore:
+        read_any(_csv_finto(righe=50))
+    assert "righe, oltre il limite" in str(errore.value)
+    assert "caricarli, oppure" in str(errore.value)
+
+
+# --- Il tetto di MEMORIA: righe e colonne non dicono quanto costa un file -------
+def _csv_pesante(righe: int = 60_000, colonne: int = 20, nome: str = "pesante.csv"):
+    """
+    Un CSV oltre il megabyte di campione, fatto di interi a una cifra.
+
+    È la forma che ha ucciso la demo: leggerissima su disco (due byte per cella)
+    e otto volte tanto in memoria, quindi ben dentro i limiti di righe e colonne.
+    """
+    intestazione = ",".join(f"c{i}" for i in range(colonne))
+    riga = ",".join("7" for _ in range(colonne))
+    buf = io.BytesIO(f"{intestazione}\n".encode() + f"{riga}\n".encode() * righe)
+    buf.name = nome  # type: ignore[attr-defined]
+    return buf
+
+
+def test_un_file_troppo_grande_per_la_memoria_viene_rifiutato(monkeypatch):
+    monkeypatch.setattr("nlda.loader.settings", Settings(max_dataset_ram_mb=1))
+    with pytest.raises(ValueError) as errore:
+        read_any(_csv_pesante())
+    assert "memoria" in str(errore.value)
+    assert "MAX_DATASET_RAM_MB" in str(errore.value)   # come alzarlo
+    assert "estratto" in str(errore.value)             # e cosa fare intanto
+
+
+def test_il_rifiuto_arriva_PRIMA_di_leggere_tutto_il_file(monkeypatch):
+    """
+    Il punto dell'intera difesa: se si rifiutasse dopo la lettura, la memoria
+    sarebbe già stata presa e su un container piccolo il processo sarebbe già
+    morto — portandosi via i dataset di tutti gli altri.
+
+    La prova sta in un file che è insieme troppo grande E malformato in fondo:
+    col tetto basso deve vincere il messaggio sulla memoria (la coda non è mai
+    stata letta), col tetto alto quello sulla riga storta.
+    """
+    def grande_e_storto():
+        # Troppo grande per il tetto basso, e con in coda una riga che ha PIÙ
+        # campi dell'intestazione (una con meno sarebbe il caso legittimo dei
+        # valori mancanti, e non verrebbe rifiutata da nessuno dei due controlli).
+        coda = ",".join("9" for _ in range(25)).encode() + b"\n"
+        return _upload(_csv_pesante(colonne=20).getvalue() + coda, "grande_e_storto.csv")
+
+    monkeypatch.setattr("nlda.loader.settings", Settings(max_dataset_ram_mb=1))
+    with pytest.raises(ValueError, match="memoria"):
+        read_any(grande_e_storto())
+
+    monkeypatch.setattr("nlda.loader.settings", Settings(max_dataset_ram_mb=4096))
+    with pytest.raises(ValueError, match="più campi dell'intestazione"):
+        read_any(grande_e_storto())
+
+
+def test_la_stima_si_avvicina_alla_memoria_vera():
+    """
+    Una stima che sbaglia di molto è peggio di nessuna stima: sotto lascia
+    passare i file che uccidono, sopra rifiuta quelli buoni. Il margine qui è
+    largo (30%) perché a decidere è l'ordine di grandezza, non la precisione.
+    """
+    sorgente = _csv_pesante()
+    raw = sorgente.getvalue()
+    stimato = _stima_byte_csv(raw)
+    vero = int(pd.read_csv(io.BytesIO(raw)).memory_usage(deep=True).sum())
+    assert stimato is not None
+    assert 0.7 * vero <= stimato <= 1.3 * vero, f"stimati {stimato}, veri {vero}"
+
+
+def test_un_file_piccolo_non_si_stima():
+    """Sotto il campione non c'è nulla da estrapolare: decide il controllo dopo
+    la lettura, che su un file piccolo è sicuro e più preciso."""
+    assert _stima_byte_csv(b"a,b\n1,2\n") is None
+
+
+def test_il_tetto_vale_anche_dove_la_stima_non_arriva(monkeypatch):
+    """
+    Un .xlsx è compresso e un JSON va letto tutto: la memoria non si sa prima. Il
+    tetto si applica lo stesso DOPO la lettura — non evita il picco, ma evita di
+    tenere occupata la memoria di un dataset che questa installazione non regge.
+    """
+    monkeypatch.setattr("nlda.loader.settings", Settings(max_dataset_ram_mb=0))
+    payload = json.dumps([{"a": i, "b": "x"} for i in range(100)]).encode()
+    with pytest.raises(ValueError, match="memoria"):
+        read_any(_upload(payload, "dati.json"))
 
 
 # --- La firma è campionata: cosa distingue e cosa no --------------------------
