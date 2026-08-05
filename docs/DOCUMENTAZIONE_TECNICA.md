@@ -1,21 +1,33 @@
 # Documentazione Tecnica Completa
 # Natural Language Data Analyst
 
-> **Versione documento:** 2.0 — 30 luglio 2026  
+> **Versione documento:** 3.0 — 5 agosto 2026  
 > **Progetto documentato:** `natural-language-data-analyst` v2.0.0 (251 commit)  
 > **Scopo:** rendere un nuovo sviluppatore capace non solo di *usare* il codice, ma di
 > *comprenderlo, modificarlo e difenderne ogni scelta* in un colloquio tecnico.  
 > **Livello del lettore atteso:** Python intermedio, prima esposizione a Streamlit/LLM.
 
-> **Cosa è cambiato dalla 1.0 (20 luglio).** Il pacchetto è stato rinominato da
-> `core/` a `nlda/`; `executor.py` è stato spezzato in tre moduli con
-> responsabilità separate (`charts`, `sandbox/validator`, `sandbox/runner`); sono
-> nati dodici moduli nuovi (`service`, `results`, `errors`, `sanitize`, `checks`,
-> `periods`, `pricing`, `export`, `demo`, `log_analysis`, `sandbox/pool`, il
-> package `ui/`); la sandbox è passata da denylist ad **allowlist di nodi AST** e
-> ha chiuso la traversata dei sottomoduli; il progetto è containerizzato e la CI
-> gira su tre versioni di Python con soglia di copertura, `pip-audit` e `bandit`.
-> I test sono passati da ~7 file a **27 file, 476 test**.
+> **Cosa è cambiato dalla 2.0 (30 luglio).** Il progetto ha preso una **seconda
+> interfaccia**: un'API HTTP (`nlda/api/`, §7.31–7.34) e un frontend React
+> (`frontend/`, §7.35) montati sopra lo stesso backend, senza spostare una riga di
+> logica — ed è il collaudo vero della stratificazione descritta in §4. Sono
+> documentati anche i moduli condivisi nati con essa (`views`, `kpis`,
+> `suggestions`, `demo_data`, `project_qa`).
+> **Il tema di questa revisione, però, è un altro:** cosa fa lo strumento quando
+> *non può* rispondere. Il modello ora dichiara su quale colonna sta rispondendo e
+> la dichiarazione viene verificata (§7.14); un'unione che duplica le righe lo dice
+> (§7.28); un file storto viene rifiutato con la ragione invece di diventare una
+> tabella plausibile (§7.12); una libreria assente non innesca tre tentativi
+> destinati a fallire (§7.5). Sono correzioni nate **riproducendo** i difetti, e
+> in cinque casi su nove il comportamento reale si è rivelato peggiore di come era
+> stato descritto.
+> I test sono passati da 27 file/476 test a **34 file, 679 test**, più 12
+> sull'interfaccia React.
+
+> **Nota di lettura.** Le sezioni 1–12 descrivono il progetto come è oggi. Dove una
+> scelta è stata *cambiata* nel tempo, il documento dice anche com'era prima e
+> perché non andava: è la parte che serve davvero in un colloquio, perché una
+> decisione si difende solo conoscendo l'alternativa che è stata scartata.
 
 ---
 
@@ -206,12 +218,22 @@ alti dipendono dai bassi, mai il contrario.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  PRESENTAZIONE                                                        │
+│  PRESENTAZIONE — DUE interfacce, lo stesso backend                     │
+│                                                                        │
+│  A) Streamlit (in-process)                                             │
 │  main.py              il FLUSSO della pagina ("cosa mostrare quando") │
 │  nlda/ui/pages.py     le sezioni: render_sidebar, render_kpis, chat   │
 │  nlda/ui/session.py   plumbing: secret, quota demo, cache, dati       │
 │  nlda/ui_components.py  pezzi riusabili ("come si mostra")            │
 │  nlda/ui_theme.py     CSS del tema "strumento di misura"              │
+│                                                                        │
+│  B) React (via HTTP)                                                   │
+│  frontend/            SPA TypeScript: chat in streaming, report, filtro│
+│  nlda/api/app.py      le rotte: traduzione da e verso JSON             │
+│  nlda/api/models.py   le forme dei dati → schema OpenAPI → tipi TS     │
+│  nlda/api/store.py    dove vive un dataset fra due richieste HTTP      │
+│  nlda/api/quota.py    il tetto di spesa della demo pubblica            │
+│  nlda/api/streaming.py  un turno trasmesso a pezzi (SSE)               │
 └──────────────────────────────────────────────────────────────────────┘
                                    │ usa
                                    ▼
@@ -269,8 +291,25 @@ Un cambiamento non si propaga a cascata: è il cuore della manutenibilità.
 alla 1.0. Prima l'orchestrazione di un turno viveva dentro `main.py`, mescolata
 alle chiamate Streamlit: non era raggiungibile da un test se non avviando l'intera
 app. Estraendola in `AnalysisService` (che non importa Streamlit) il turno è
-diventato testabile in isolamento — e i 13 test di `test_service.py` esistono
+diventato testabile in isolamento — e i 14 test di `test_service.py` esistono
 proprio grazie a questo.
+
+**E la seconda interfaccia è la prova che quella separazione era vera.** Quando
+sopra il servizio è stata montata un'API HTTP e sopra l'API un frontend React,
+**non è stata spostata una riga di logica**: `nlda/api/app.py` chiama esattamente
+le stesse funzioni che chiama Streamlit — `loader` per i numeri, `AnalysisService`
+per un turno, `sandbox` per eseguire. Che quel modulo sia in gran parte traduzione
+da e verso JSON è il vero collaudo della stratificazione: un'architettura "a
+strati" dichiarata ma non rispettata si scopre esattamente qui, quando la seconda
+interfaccia obbliga a duplicare ciò che si credeva condiviso.
+
+Il rischio che questo introduce ha un nome: **due interfacce che rispondono in
+modo diverso alla stessa domanda**. È successo davvero — l'avviso
+anti-allucinazione esisteva solo in Streamlit, e la demo React non lo emetteva —
+ed è il motivo per cui oggi i controlli sulla risposta hanno **una sola porta**
+(`checks.question_warnings`, §7.14) e i consigli d'errore una sola tabella
+(`results.ADVICE`, §7.5): non per eleganza, ma perché la duplicazione qui non
+produce un bug visibile, produce due verità.
 
 ### 4.2 La regola di dipendenza, e le foglie
 
@@ -416,7 +455,12 @@ Natural-Lenguage-Data-Analyst/
 │   ├── pricing.py               Usage + stima del costo in USD
 │   ├── loader.py                Lettura multi-formato, profilo, analisi automatica
 │   ├── periods.py               Confronto tra periodi (motore deterministico)
-│   ├── checks.py                Colonne toccate + avvisi di plausibilità
+│   ├── views.py                 Filtro e unione: viste sul dataset (funzioni pure)
+│   ├── kpis.py                  Le card in cima al report, già formattate
+│   ├── suggestions.py           Domande d'esempio costruite sulle colonne vere
+│   ├── demo_data.py             I dataset di esempio presenti su disco
+│   ├── project_qa.py            "Chiedi al progetto": recupero TF-IDF sui .md
+│   ├── checks.py                Colonne toccate + mappa dichiarata + avvisi
 │   ├── charts.py                Figure Plotly e tema (era in executor.py)
 │   ├── agent.py                 Domanda → codice; le narrazioni
 │   ├── prompts/                 I system prompt come file .md versionati
@@ -434,24 +478,38 @@ Natural-Lenguage-Data-Analyst/
 │   │   ├── base.py              LLMProvider astratto (Template Method: generate)
 │   │   ├── ollama_provider.py   anthropic_provider.py  openai_provider.py
 │   │   └── gemini_provider.py   groq_provider.py (eredita da OpenAIProvider)
+│   ├── api/                     La SECONDA interfaccia: lo stesso backend via HTTP
+│   │   ├── app.py               Le rotte FastAPI (traduzione da e verso JSON)
+│   │   ├── models.py            Le forme dei dati → OpenAPI → tipi TypeScript
+│   │   ├── store.py             Dove vive un dataset fra due richieste
+│   │   ├── quota.py             Il tetto di spesa della demo pubblica
+│   │   └── streaming.py         Un turno trasmesso a pezzi (Server-Sent Events)
 │   ├── ui/
 │   │   ├── pages.py             Le sezioni della pagina (render_*)
 │   │   └── session.py           Plumbing: secret, quota, cache, caricamento dati
 │   ├── ui_components.py         Pezzi riusabili: card KPI, riquadri, tabelle
 │   └── ui_theme.py              CSS del tema (non importa NULLA, di proposito)
-├── tests/                       27 file, 476 test
+├── frontend/                    SPA React + TypeScript (Vite), servita dall'API
+│   └── src/
+│       ├── api/client.ts        Le chiamate; types.ts è GENERATO dallo schema
+│       ├── api/stream.ts        Il lettore SSE (accumulatore, non split ingenuo)
+│       └── components/          Chat, Report, Filtro, Unione, Periodi, Tema…
+├── tests/                       34 file, 679 test
 │   ├── conftest.py              fixture condivise (sales_df)
 │   ├── fixtures/                corpus registrato per il replay
-│   ├── test_executor_sandbox.py 75 test: regression di sicurezza
-│   ├── test_validator_fuzz.py   4 property test (hypothesis) sul validatore
-│   ├── test_loader.py (47)      test_executor_ipc.py (35)
-│   ├── test_config_and_providers.py (32)  test_main.py (31)
-│   ├── test_ui_components.py (31)  test_checks.py (26)
-│   ├── test_providers_contract.py (24)  test_agent.py (23)  test_sanitize.py (23)
-│   └── …e altri 15 file
+│   ├── test_api.py (75)         il contratto HTTP: forme, codici, avvisi
+│   ├── test_loader.py (54)      test_checks.py (39)
+│   ├── test_ui_components.py (31)  test_main.py (31)
+│   ├── test_api_quota.py (24)   il tetto di spesa, su ENTRAMBE le rotte
+│   ├── test_executor_sandbox.py regression di sicurezza
+│   ├── test_validator_fuzz.py   property test (hypothesis) sul validatore
+│   └── …e altri file (provider, agent, sanitize, log, export, periodi…)
+├── frontend/src/test/           12 test dell'interfaccia (vitest)
 ├── scripts/                     Accessori (non necessari all'app)
 │   ├── analyze_logs.py          eval.py         make_favicon.py
-│   ├── record_corpus.py         smoke.py
+│   ├── record_corpus.py         smoke.py        verifica_deploy.py
+│   ├── genera_tipi_ts.py        Schema OpenAPI → tipi TypeScript (committati)
+│   ├── env_da_blueprint.py      prepara_dataset_film.py
 ├── data/sales.csv               Dataset di esempio (Superstore Sales, ~9.800 righe)
 ├── assets/                      Logo e favicon
 ├── docs/                        Anteprime PNG del README (screenshot reali)
@@ -677,7 +735,8 @@ chiamante distingue i due casi **sul tipo**, e sul fallimento legge `kind` — l
 CAUSA, non il testo.
 
 ```python
-FailureKind = Literal["syntax", "security", "runtime", "timeout", "provider", "internal"]
+FailureKind = Literal["syntax", "security", "runtime", "dependency",
+                      "timeout", "provider", "internal"]
 FAILURE_KINDS = get_args(FailureKind)   # le stesse cause, ispezionabili a runtime
 ```
 
@@ -692,6 +751,23 @@ rigenerarlo ha senso. Un rifiuto della sandbox, un timeout, un provider
 irraggiungibile o un ambiente non disponibile **non dipendono dalla formulazione
 del codice**: ritentare brucerebbe solo chiamate all'LLM. Questa property chiude un
 bug reale, e lo chiude in un punto solo.
+
+**`dependency` è l'ultima causa aggiunta, e spiega perché l'elenco vive qui.**
+Chiedendo una linea di tendenza il modello genera `trendline='ols'`, che in Plotly
+richiede `statsmodels` — non installato, perché si porta dietro `scipy` e il
+container della demo ha 512 MB in tutto. Il fallimento era classificato `runtime`,
+quindi **ritentabile**: tre chiamate al modello per rigenerare un codice che al
+secondo tentativo avrebbe trovato la libreria assente esattamente come al primo.
+Spesa certa, successo impossibile. E l'utente leggeva «forse una colonna non esiste
+con quel nome», che è falso e lo manda a cercare un problema che non ha.
+Separare la causa ha sistemato entrambe le cose **senza toccare né il retry né la
+UI**: la property e la tabella dei consigli leggono da qui.
+
+**`ADVICE` — cosa può farci l'utente, per ogni causa.** Il `message` di un
+fallimento descrive il guasto («uso di `open` non consentito»); `ADVICE` dice come
+uscirne. Sta accanto a `FailureKind` e non nel componente che lo mostra perché
+prima viveva **solo nel client React**: la stessa sandbox che rifiutava lo stesso
+codice dava un consiglio in un'interfaccia e il testo grezzo nell'altra.
 
 **Dettaglio da notare:** `FAILURE_KINDS` è derivato dal `Literal` con `get_args`,
 non riscritto a mano. Serve a validare ciò che arriva dal sottoprocesso senza
@@ -968,7 +1044,41 @@ riprovando in `latin-1`. **`_detect_sep`** è nato da un bug vero: un CSV a **co
 singola** veniva spezzato dallo sniffer di pandas, che trovava un separatore
 plausibile dove non c'era.
 
-**`_check_dimensioni`** applica `MAX_ROWS`/`MAX_COLUMNS` con un messaggio chiaro.
+**`_check_dimensioni`** applica `MAX_ROWS`/`MAX_COLUMNS` con un messaggio chiaro,
+e rifiuta anche i due casi degeneri: **zero colonne** e **zero righe** (un file con
+la sola intestazione). Accettare il secondo significherebbe mostrare un report di
+sole caselle vuote e lasciare all'utente il compito di capire perché.
+
+#### Quando il file non è quello che dice di essere
+
+Un caricamento che fallisce con un messaggio è un fastidio; un caricamento che
+**riesce sul file sbagliato** è un difetto grave, perché produce numeri con l'aria
+di essere giusti. Tre difese, tutte nate riproducendo il caso:
+
+**`_rifiuta_se_binario`** ferma i formati binari travestiti da CSV riconoscendone
+la **firma** nei primi byte (PDF, ZIP/`.xlsx`, vecchio Office, PNG, JPEG, SQLite) e,
+come rete di sicurezza, i **byte NUL** — un file di testo non ne contiene. Prima un
+PDF rinominato `.csv` non dava errore: `read_csv` ne leggeva i byte e produceva una
+tabella con una colonna chiamata `%PDF-1.4`. Il messaggio **nomina** il formato
+trovato, così chi ha sbagliato file lo capisce senza indovinare.
+
+**`_rifiuta_se_disallineato`** coglie la riga con **più campi dell'intestazione**.
+Pandas non la scarta e non solleva: usa i campi in eccesso come **indice**, e da lì
+in poi ogni colonna contiene i valori di quella accanto. Il segnale è
+deterministico — `read_csv` qui non riceve mai `index_col`, quindi un indice che non
+sia il progressivo può venire solo da quell'inferenza. Si **rifiuta** invece di
+avvisare: con le colonne disallineate non esiste una lettura onesta da mostrare
+accanto all'avviso. Le righe con *meno* campi restano valide (valore mancante in
+coda: pandas mette `NaN` e nulla si sposta).
+
+**I messaggi di pandas si traducono.** «No columns to parse from file» parla di
+*parsing* a chi vuole sapere cosa manchi al file; «Excel file format cannot be
+determined, you must specify an engine manually» parla di *engine*. E poiché lo
+stesso difetto pandas lo tratta in due modi (indice inferito **oppure**
+`ParserError`), i due percorsi convergono su **un solo** messaggio italiano, che
+nomina la riga da correggere — contata sull'**intestazione**, non sul DataFrame già
+disallineato: contarne le colonne faceva additare la riga 1, l'unica sicuramente
+giusta.
 
 **`_maybe_parse_dates`** converte le colonne testuali che "sembrano" date con logica
 a **doppia soglia**: se il nome contiene un indizio (`date/data/time`) basta che
@@ -1677,6 +1787,217 @@ ripetuti a mano nel CSS.
 
 ---
 
+### 7.28 `nlda/views.py` — filtro e unione come VISTE
+
+**Perché esiste.** Filtro e join sono due modi di dire "guarda questi dati in un
+altro modo". Sono funzioni **pure** su DataFrame, senza Streamlit e senza HTTP,
+proprio perché servono a entrambe le interfacce.
+
+**`apply_filter`** restringe il dataset e restituisce anche l'**etichetta leggibile**
+del filtro (`Region ∈ {Nord, Sud}`). L'etichetta torna insieme ai dati e non viene
+ricostruita da chi mostra: quando lo faceva il client, lo stesso filtro si leggeva in
+due forme diverse a seconda dell'interfaccia.
+
+**`join_datasets`** è un `merge` di pandas con suffisso `_2` sulle colonne omonime —
+nessuna colonna sovrascritta in silenzio. Il risultato è **un solo** DataFrame:
+sandbox, prompt e report non sanno nemmeno che i file erano due. Il join è un
+*preprocessing*, non un secondo canale da gestire ovunque.
+
+**`join_warning` — il difetto più insidioso dell'unione, perché non fallisce.** Se la
+chiave si ripete nel secondo file, ogni riga del primo si moltiplica per ogni
+corrispondenza: il totale cresce e nulla lo segnala. Due dettagli che sembrano
+minori e non lo sono:
+
+* il metro è il **primo file**, non il più grande dei due. Unire serve ad aggiungere
+  colonne alle sue righe, quindi averne di più significa duplicazione. Il criterio
+  «più righe del massimo dei due» sembra equivalente e non lo è: 2 righe unite a 3 ne
+  producono 3 — non supera il massimo — eppure un ordine è stato contato due volte;
+* la causa sta **sempre a destra**: le chiavi ripetute nel primo file non moltiplicano
+  nulla, perché ognuna trova le stesse corrispondenze. Avvisare lì sarebbe un falso
+  positivo su un join corretto.
+
+---
+
+### 7.29 `nlda/kpis.py`, `suggestions.py`, `demo_data.py` — i piccoli condivisi
+
+Tre moduli brevi che esistono per la stessa ragione: erano pezzi di UI, e sono
+diventati funzioni pure quando la seconda interfaccia ha avuto bisogno degli stessi
+risultati.
+
+**`kpis.build_kpis`** produce le card in cima al report **già formattate**
+all'italiana (`2.261.537`), con etichetta, valore, sottotitolo e colore della tacca.
+Formattare nel backend è una scelta: due client che formattano per conto proprio
+mostrano lo stesso numero in due modi. `_leader_kpi` ritorna `None` su classifica
+vuota, e la card ripiega su "Record" — è il fix del crash su dataset senza categorie.
+
+**`suggestions.example_questions`** costruisce le domande d'esempio sulle colonne
+**di questo** dataset (misura, categoria, colonna data, ampiezza temporale),
+proponendo ciò che il report *non* risponde già: il massimo nel tempo, il legame fra
+due misure. Domande fisse su un dataset qualunque sarebbero quasi sempre sbagliate.
+
+**`demo_data`** dichiara i dataset di esempio **presenti su disco** (`esiste()`):
+l'elenco riflette il disco, non un catalogo scritto a mano che può mentire.
+
+---
+
+### 7.30 `nlda/project_qa.py` — "Chiedi al progetto"
+
+**Perché esiste.** Una modalità che risponde su **questo progetto** citando le fonti.
+La base di conoscenza sono i `.md` **già nel repo** (documentazione tecnica,
+`ARCHITECTURE`, `THREAT_MODEL`, `VALUE`, `README`, `DEPLOY`): nessuna copia da tenere
+in sincrono, quindi nessuna copia che invecchia.
+
+**Recupero lessicale TF-IDF, non embedding.** Tre motivi difendibili: nessuna
+dipendenza nuova, un corpus tecnico è fatto di **termini rari** (che è esattamente
+ciò che l'IDF premia), e il risultato è **testabile** — si può affermare che una
+domanda nota trovi la sezione giusta, cosa che con gli embedding sarebbe una
+soglia da tarare.
+
+**Tre trappole del recupero, già risolte — da non reintrodurre:** lo stemming faceva
+collidere «come **funziona**» con la sezione «funzione per funzione» (il verbo va
+escluso *prima* della radice); «qual» è raro ma vuoto, e l'IDF lo premiava (gli
+interrogativi sono fra le stopword); le sezioni corte venivano fuse nella precedente
+**ereditandone il titolo**, cioè venivano citate come fonte sbagliata.
+
+Il prompt è fondato: cita le fonti e dichiara quando non sa. Con un modello piccolo
+può comunque **sovra-affermare** — è stato osservato dire «garantisce l'isolamento
+del sistema operativo» dove la documentazione dichiara l'opposto.
+
+---
+
+### 7.31 `nlda/api/app.py` — la seconda interfaccia
+
+**Perché esiste.** Servire lo stesso backend a un frontend qualunque. La regola che
+lo governa è una sola: **nessuna logica qui dentro**. Le rotte chiamano `loader`,
+`AnalysisService` e `sandbox` esattamente come fa Streamlit; ciò che resta è
+traduzione da e verso JSON. Che il modulo sia in gran parte traduzione è la prova
+che la stratificazione dichiarata in §4 era vera.
+
+**Le scelte che vale la pena difendere:**
+
+* **Nessuna sessione.** Il dataset vive in `store` (§7.32), indirizzato dall'impronta
+  del contenuto. L'API resta senza stato *per richiesta*.
+* **La chiave API non si registra e non si logga.** Arriva nell'header, va al
+  provider, finisce lì: non entra nel magazzino, non compare nei log, non torna in
+  nessuna risposta.
+* **Gli errori attesi non sono eccezioni.** Codice rifiutato dalla sandbox o timeout
+  tornano con **HTTP 200 e `ok: false`**, perché sono *esiti* dell'operazione. Il
+  4xx/5xx resta per ciò che è davvero un errore di chiamata. È la stessa distinzione
+  che il backend fa fra `ExecutionFailure` ed eccezione.
+* **Un errore di chiamata non è un guasto del servizio.** `_colonna` e
+  `_esigi_misura` validano i nomi di colonna che arrivano dalla querystring: prima
+  una misura testuale o inesistente attraversava `analyze` (che la tollera) e faceva
+  esplodere `build_kpis` a report quasi finito — cioè un **500**, per quello che è un
+  errore di chiamata. `_colonna` tollera gli spazi ai bordi come *ripiego*, mai a
+  scapito del dataset: se una colonna si chiama davvero `'Vendite '`, vince quella.
+
+**Ordine delle operazioni, che qui è una scelta di costo.** Prima si cerca il
+dataset, poi si scala la quota: al contrario, chi torna su una scheda lasciata aperta
+e trova la voce scaduta pagava il 404 con una domanda del proprio budget.
+
+---
+
+### 7.32 `nlda/api/store.py` — dove vive un dataset fra due richieste
+
+**Perché esiste.** Streamlit teneva il DataFrame in `st.session_state`. Un'API HTTP
+non ha sessioni: l'utente carica il file una volta e poi fa dieci domande, e il
+DataFrame deve stare da qualche parte in mezzo. È una mappa in memoria con capienza,
+scadenza e un lock (uvicorn serve le richieste su un pool di thread).
+
+**Perché la chiave è il contenuto e non un UUID.** L'identificativo è l'impronta dei
+byte: ricaricare lo stesso file non duplica la memoria, e l'identificativo è
+**riproducibile** — un test può calcolarlo senza chiamare l'API.
+
+**Il tetto conta i BYTE, non le tabelle.** Il limite sul *numero* di dataset (8) non è
+un limite di RAM: otto file entro `MAX_ROWS` fanno 2,7 GB, più del container da 2 GB
+e cinque volte i 512 MB del piano su cui gira la demo. Si misura quindi la memoria
+occupata (`memory_usage(deep=True)`, una volta per caricamento) e si sfratta il meno
+usato di recente finché la somma non rientra in `MAX_STORE_RAM_MB`. Un dataset più
+grande del tetto **si tiene** — buttarlo lascerebbe l'utente senza il file appena
+caricato — ma emette `magazzino_oltre_il_tetto`: un tetto tarato male si deve poter
+vedere.
+
+**La LRU è contata, non cronometrata.** La vittima si sceglieva col minimo di
+`ultimo_uso`, cioè a orologio: sotto la risoluzione di `time.monotonic` (su Windows
+scatti da ~15 ms) due usi nello stesso scatto sono indistinguibili, e si sfrattava la
+voce **appena usata**. Il tempo resta per la scadenza, dove la domanda è «quanto fa?»
+e la risoluzione non conta.
+
+**Limiti dichiarati:** non sopravvive al riavvio del processo; non scala in
+orizzontale (due repliche, due magazzini). Vanno bene finché il deploy è un container
+solo, ed è il caso.
+
+---
+
+### 7.33 `nlda/api/quota.py` — il tetto di spesa della demo
+
+**Perché esiste.** Il deploy pubblico gira con la chiave del manutentore: senza un
+tetto, ogni visitatore ne spende il credito.
+
+**Due differenze rispetto a Streamlit, entrambe volute.** Si conta **prima** della
+chiamata (le richieste HTTP sono concorrenti: contare dopo significa che venti
+richieste simultanee passano tutte il controllo prima che una abbia incrementato il
+contatore), e la "sessione" è un **indirizzo IP** — debole per costruzione, dichiarato
+tale: dietro NAT molte persone lo condividono e chi lo cambia riparte da zero. Il
+tetto che protegge davvero il credito è quello **giornaliero**, che nessuna
+intestazione può spostare.
+
+**La lezione più cara di questo modulo non è nel modulo.** Il tetto si scalava in
+`/ask`, ma la chat React chiama **solo** `/ask/stream`: sulla demo pubblica la
+protezione non copriva il percorso reale delle domande. Verificato con budget
+azzerato — `/ask` rispondeva 429, `/ask/stream` 200 e il contatore restava a zero. Il
+punto cieco stava nei test, che provavano il tetto **solo** su `/ask`. Quando una
+protezione esiste, la domanda giusta non è «c'è?» ma **«copre la strada che il client
+percorre davvero?»**.
+
+---
+
+### 7.34 `nlda/api/models.py` e `streaming.py` — il contratto e il flusso
+
+**`models.py` non è solo validazione.** Da questi modelli FastAPI genera lo schema
+OpenAPI, e da quello `scripts/genera_tipi_ts.py` genera i **tipi TypeScript** del
+frontend, che sono committati. Cambiare un campo qui e dimenticarsene di là smette di
+essere possibile: un test confronta i tipi nel repository con lo schema di adesso.
+
+**`streaming.py` — un turno trasmesso mentre accade.** Gli eventi sono `step`
+(a che punto è), `result` (l'esito **completo tranne la spiegazione**), `token` (la
+prosa a pezzi), `done`, `error`. L'ordine non è casuale: il `result` arriva **prima**
+della spiegazione, quindi tabella e grafico compaiono appena esistono e la prosa li
+raggiunge dopo — il contrario di una risposta unica, dove il dato più utile aspetta
+quello più lento.
+
+**Perché un thread e una coda.** `AnalysisService.answer` è sincrona e comunica
+l'avanzamento con una callback; un generatore non può cedere dall'interno di una
+callback altrui. Venti righe (thread + `queue`) evitano di riscrivere in asincrono il
+servizio, la sandbox e i provider — tutti sincroni per ottime ragioni.
+
+**Perché SSE e non WebSocket.** Il flusso è a senso unico: il server parla, il client
+ascolta. Un WebSocket darebbe un canale bidirezionale che nessuno usa, in cambio di
+riconnessioni da gestire e proxy che a volte lo bloccano.
+
+---
+
+### 7.35 `frontend/` — l'interfaccia React
+
+**Cosa è.** Una SPA TypeScript (Vite) servita dalla stessa applicazione FastAPI che
+espone l'API: un solo processo, un solo container, nessun CORS da configurare.
+
+**I punti che vale la pena conoscere:**
+
+* **`api/types.ts` è generato**, non scritto: viene dallo schema OpenAPI. È il
+  motivo per cui un campo aggiunto al backend non può restare senza tipo nel client.
+* **`api/stream.ts`** legge gli eventi SSE con un **accumulatore**: i pezzi che
+  arrivano dalla rete non coincidono con gli eventi, e uno `split` ingenuo perde
+  eventi in modo intermittente — il tipo di bug che dipende da come la rete ha
+  spezzato i dati, quindi difficilissimo da riprodurre.
+* **Gli errori hanno una forma sola.** `erroreDaRisposta` traduce qualunque risposta
+  non riuscita in `ApiError`, ed è usato **anche** dal lettore SSE: è il motivo per
+  cui un 429 sulla rotta in streaming arriva all'utente col suo messaggio invece di
+  sembrare uno stream vuoto.
+* **12 test (vitest)** sull'interfaccia, che prima non ne aveva nessuno.
+
+---
+
 ## 8. La sandbox di sicurezza in profondità
 
 È il tema di sicurezza centrale del progetto e la fonte più ricca di domande da
@@ -1816,8 +2137,9 @@ La sicurezza è **verificata in CI ad ogni push**, su tre versioni di Python.
 
 ## 9. I test
 
-**Numeri.** 27 file, **476 test**, soglia di copertura **78%** applicata in CI
-(`--cov-fail-under=78`): non un numero decorativo, un *gate*.
+**Numeri.** 34 file, **679 test** Python (più 12 dell'interfaccia React, con vitest),
+soglia di copertura **78%** applicata in CI (`--cov-fail-under=78`): non un numero
+decorativo, un *gate*.
 
 **Filosofia.** I test coprono la **logica pura** (nessuna rete, nessun LLM reale) e
 danno particolare peso alla **sicurezza**. Costruire `DataAgent(provider="ollama")`
@@ -1827,17 +2149,21 @@ zero.
 | File | Test | Cosa verifica |
 |------|-----:|---------------|
 | `test_executor_sandbox.py` | 75 | **regression di sicurezza**: payload rifiutati/ammessi |
-| `test_loader.py` | 47 | date, valuta, misure vs ID, `read_any`, `analyze` |
+| `test_api.py` | 75 | il **contratto HTTP**: forme, codici di stato, avvisi, magazzino |
+| `test_loader.py` | 61 | date, valuta, misure vs ID, `read_any`, file storti |
+| `test_checks.py` | 39 | colonne toccate, mappa dichiarata, avvisi |
+| `test_main.py` | 36 | il flusso della pagina, filtro e unione |
 | `test_executor_ipc.py` | 35 | il trasporto tra processi (serializzazione, guasti) |
-| `test_config_and_providers.py` | 32 | config da env, retry/backoff, factory |
-| `test_main.py` | 31 | il flusso della pagina, importabile senza Streamlit |
+| `test_project_qa.py` | 33 | recupero TF-IDF, fonti citate, trappole note |
+| `test_config_and_providers.py` | 33 | config da env, retry/backoff, factory |
 | `test_ui_components.py` | 31 | KPI, click-to-filter, dimensione dei valori |
-| `test_checks.py` | 26 | colonne toccate, avvisi, colonne inventate |
+| `test_agent.py` | 28 | intento grafico, wrapping, prompt |
 | `test_providers_contract.py` | 24 | **contratto** rispettato da tutti i provider |
-| `test_agent.py` | 23 | intento grafico, wrapping, prompt |
+| `test_api_quota.py` | 24 | il tetto di spesa, su **entrambe** le rotte |
 | `test_sanitize.py` | 23 | invisibili, bidi, troncamento, injection |
+| `test_genera_tipi_ts.py` | 18 | i tipi TS committati descrivono l'API di adesso |
 | `test_errors.py` | 15 | classificazione dei guasti del provider |
-| `test_service.py` | 13 | il turno: retry solo se `retryable` |
+| `test_service.py` | 14 | il turno: retry solo se `retryable` |
 | `test_export.py` | 11 | Markdown della conversazione |
 | `test_log.py` | 11 | idempotenza, contesto, formato JSON |
 | `test_streaming.py` | 9 | la spiegazione a blocchi |
