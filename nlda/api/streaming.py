@@ -70,13 +70,19 @@ def turno_a_evento(turn: Turn, verso_json) -> dict:
 
 
 def trasmetti(service: AnalysisService, question: str, df, *,
-              unit: str, verso_json) -> Iterator[str]:
+              unit: str, verso_json, explain: bool = True) -> Iterator[str]:
     """
     Genera gli eventi di un turno completo.
 
     `verso_json` traduce il `Turn` nella forma che l'API espone: si passa dal
     di fuori per non far conoscere a questo modulo i modelli Pydantic — qui c'è
     solo la meccanica del flusso.
+
+    Con `explain=False` il flusso si ferma al risultato: niente `token`, e
+    soprattutto **nessuna seconda chiamata al modello**. Prima il parametro
+    esisteva nella richiesta ma questa rotta lo ignorava, quindi chi dichiarava
+    di non volere la narrazione la pagava lo stesso — sulla demo pubblica, dal
+    budget condiviso di tutti.
     """
     passi: queue.Queue = queue.Queue()
     esito: dict[str, Any] = {}
@@ -120,9 +126,10 @@ def trasmetti(service: AnalysisService, question: str, df, *,
     turn: Turn = esito["turn"]
     yield evento("result", turno_a_evento(turn, verso_json))
 
-    if not isinstance(turn.result, ExecutionSuccess):
-        # Senza un risultato non c'è nulla da raccontare: si chiude qui invece di
-        # chiedere al modello di commentare un fallimento.
+    if not explain or not isinstance(turn.result, ExecutionSuccess):
+        # Due motivi per chiudere qui, con lo stesso effetto: il client non vuole
+        # la narrazione, oppure non c'è un risultato da raccontare — e a un
+        # fallimento non si chiede un commento al modello.
         yield evento("done", {"answer": None})
         return
 

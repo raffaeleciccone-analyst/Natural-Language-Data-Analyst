@@ -206,7 +206,11 @@ class AskRequest(BaseModel):
     provider: str | None = None
     model: str | None = None
     unit: str = ""
-    explain: bool = True
+    explain: bool = Field(
+        default=True,
+        description="Se falso, si restituiscono solo i numeri: niente narrazione, "
+                    "e nessuna seconda chiamata al modello. Vale su entrambe le "
+                    "rotte, `/ask` e `/ask/stream`")
     filtro: FiltroSpec | None = Field(
         default=None, description="Se presente, la domanda vale sul sottoinsieme filtrato")
 
