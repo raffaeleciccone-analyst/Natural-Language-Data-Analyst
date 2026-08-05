@@ -136,6 +136,39 @@ def test_un_excel_che_non_e_un_excel_lo_dice_in_italiano():
         read_any(_upload(b"questo e' testo, non un excel", "finto.xlsx"))
 
 
+def test_una_riga_con_troppi_campi_viene_rifiutata():
+    """
+    Pandas non la scarta e non solleva: usa i campi in eccesso come INDICE, e da
+    li' in poi ogni colonna contiene i valori di quella accanto. Il file si legge
+    senza errori e ogni numero che ne esce e' sbagliato. Prima passava con 200.
+    """
+    with pytest.raises(ValueError, match="più campi dell'intestazione"):
+        read_any(_upload(b"A,B\n1,2\n3,4,5,6\n", "storto.csv"))
+
+
+def test_il_messaggio_dice_quale_riga_correggere():
+    """
+    La riga 3, non la 1: l'intestazione e' l'unica sicuramente giusta, e additarla
+    manderebbe l'utente a correggere l'unica riga che non ha nulla che non va.
+    Vale per entrambe le strade con cui pandas tratta questo file (indice inferito
+    o ParserError), perche' per chi carica e' lo stesso difetto.
+    """
+    with pytest.raises(ValueError, match="riga 3"):
+        read_any(_upload(b"A,B\n1,2\n3,4,5\n9,9\n", "storto.csv"))
+
+    with pytest.raises(ValueError, match="riga 3"):
+        read_any(_upload(b"A,B\n1,2\n3,4,5,6\n7\n", "storto2.csv"))
+
+
+def test_una_riga_con_MENO_campi_resta_valida():
+    """
+    E' il caso normale di un valore mancante in coda: pandas mette NaN, le colonne
+    restano allineate e il dato e' onesto. Rifiutarlo sarebbe un falso positivo.
+    """
+    df = read_any(_upload(b"A,B\n1,2\n3\n4,5\n", "buchi.csv"))
+    assert len(df) == 3 and list(df.columns) == ["A", "B"]
+
+
 def test_un_csv_normale_non_e_toccato_dai_nuovi_controlli():
     """Il rischio di un controllo nuovo e' il falso positivo sul caso normale."""
     df = read_any(_upload("Città,Vendite\nRoma,10\nMilano,20\n".encode(), "ok.csv"))
