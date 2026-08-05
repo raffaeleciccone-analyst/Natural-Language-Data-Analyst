@@ -1,0 +1,71 @@
+<!doctype html>
+<!--
+  Come sta l'app su un telefono e su un tablet, senza avere né l'uno né l'altro.
+
+  ## Perché un iframe e non il ridimensionamento della finestra
+
+  Le media query rispondono al viewport del DOCUMENTO che le esegue, e quello di
+  un iframe è il suo, non quello della finestra. Un iframe largo 390 px esercita
+  quindi lo stesso CSS che vedrebbe un iPhone — mentre ridimensionare la finestra
+  del browser da uno strumento di automazione, sul desktop, non sempre funziona:
+  si può ottenere un "fatto" senza che il viewport cambi di un pixel, ed è
+  esattamente com'è andata quando questa pagina è nata.
+
+  ## Come si usa
+
+      python -m http.server 8129 --directory scripts
+      # poi apri http://127.0.0.1:8129/anteprima_dispositivi.html
+
+  Serve un server: aprendo il file con `file://` il browser rifiuta di caricare
+  in un frame una pagina https.
+
+  Gli iframe sono ALTI quanto l'intera pagina dell'app apposta: lo scroll del
+  mouse sopra un iframe di un'altra origine non arriva al documento dentro, e
+  così si scorre la finestra esterna e si vede tutto lo stesso.
+
+  Questa è l'ispezione a occhio. Il controllo che NON dipende dall'occhio sta in
+  `frontend/e2e/layout.spec.ts` e gira in CI: misura lo sfondamento orizzontale,
+  l'apertura del cassetto e le sovrapposizioni.
+-->
+<meta charset="utf-8">
+<title>NLDA · anteprima su telefono e tablet</title>
+<style>
+  body { margin: 0; background: #16191c; color: #d8dee4;
+         font: 13px system-ui, -apple-system, sans-serif; }
+  header { padding: 14px 18px; border-bottom: 1px solid #2a2f36; }
+  header h1 { margin: 0 0 4px; font-size: 15px; letter-spacing: .02em; }
+  header p { margin: 0; color: #97a1ac; }
+  header input { background: #21262c; border: 1px solid #333a42; color: inherit;
+                 padding: 4px 8px; border-radius: 6px; width: 22em; }
+  .riga { display: flex; gap: 24px; padding: 18px; align-items: flex-start; }
+  figcaption { padding: 6px 2px; letter-spacing: .06em; text-transform: uppercase;
+               font-size: 11px; color: #97a1ac; }
+  figure { margin: 0; }
+  iframe { border: 8px solid #2a2f36; border-radius: 22px; background: #fff; display: block; }
+</style>
+<header>
+  <h1>Anteprima su telefono e tablet</h1>
+  <p>
+    Indirizzo:
+    <input id="indirizzo" value="https://nlda.onrender.com/">
+    <button onclick="ricarica()">apri</button>
+    — la larghezza è quella del dispositivo, quindi il CSS responsive è quello vero.
+  </p>
+</header>
+<div class="riga">
+  <figure>
+    <figcaption>iPhone 14 · larghezza 390</figcaption>
+    <iframe id="telefono" width="390" height="3000"></iframe>
+  </figure>
+  <figure>
+    <figcaption>iPad verticale · larghezza 820</figcaption>
+    <iframe id="tablet" width="820" height="3000"></iframe>
+  </figure>
+</div>
+<script>
+  function ricarica() {
+    const url = document.getElementById("indirizzo").value;
+    for (const id of ["telefono", "tablet"]) document.getElementById(id).src = url;
+  }
+  ricarica();
+</script>
