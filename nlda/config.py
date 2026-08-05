@@ -61,6 +61,14 @@ class Settings:
     max_rows: int = 2_000_000
     max_columns: int = 500
 
+    # Quanti MB può pesare il file CARICATO. È un limite di trasferimento, non di
+    # memoria: dice quanto si è disposti a ricevere, non quanto si riesce ad
+    # analizzare (quello è `max_dataset_ram_mb`, qui sotto). I due non si deducono
+    # l'uno dall'altro — un CSV di numeri da 9 MB diventa 36 MB in memoria, un CSV
+    # di testo da 20 MB ne occupa altrettanti — e per questo si dichiarano
+    # entrambi a chi carica.
+    max_upload_mb: int = 25
+
     # --- Quanta memoria può occupare UN dataset letto ---
     # Righe e colonne non dicono quanto costa un file: 50.000 righe per 200
     # colonne di interi stanno in 20 MB su disco e diventano 80 MB in memoria,
@@ -109,6 +117,7 @@ class Settings:
                 "ALLOW_INPROCESS_FALLBACK", cls.allow_inprocess_fallback),
             max_rows=_env_int("MAX_ROWS", cls.max_rows),
             max_columns=_env_int("MAX_COLUMNS", cls.max_columns),
+            max_upload_mb=_env_int("MAX_UPLOAD_MB", cls.max_upload_mb),
             max_dataset_ram_mb=_env_int("MAX_DATASET_RAM_MB", cls.max_dataset_ram_mb),
             store_ram_mb=_env_int("MAX_STORE_RAM_MB", cls.store_ram_mb),
             request_timeout=_env_float("LLM_REQUEST_TIMEOUT", cls.request_timeout),

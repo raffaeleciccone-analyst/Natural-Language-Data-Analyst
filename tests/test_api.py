@@ -60,11 +60,16 @@ def test_la_config_dichiara_ENTRAMBI_i_limiti_sul_file(client):
     Chi lo legge da fuori — il frontend, e lo script che verifica il deploy — non
     ha altro modo di sapere cosa questa installazione concede davvero.
     """
+    from nlda.api import app as modulo
     from nlda.config import settings
 
     j = client.get("/api/config").json()
-    assert j["max_upload_mb"] > 0
+    assert j["max_upload_mb"] == settings.max_upload_mb
     assert j["max_dataset_ram_mb"] == settings.max_dataset_ram_mb
+    # Il tetto applicato dalla rotta e quello dichiarato sono lo STESSO valore:
+    # erano due, uno scritto nel codice e uno nella configurazione, e un deploy
+    # che ne cambiasse uno avrebbe annunciato un limite diverso da quello imposto.
+    assert modulo.MAX_UPLOAD_MB == settings.max_upload_mb
 
 
 def test_lo_schema_openapi_si_genera(client):
