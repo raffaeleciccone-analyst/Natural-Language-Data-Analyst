@@ -117,17 +117,67 @@ def _numero_semplice(v):
         return None
 
 
+# Un numero scritto all'europea: punto per le migliaia, virgola per i decimali.
+# `10.500,00`, `1234,56`, `-7,5`. La forma senza decimali (`10.500`) rientra nel
+# modello ma NON basta da sola a qualificare una colonna: vedi sotto.
+_NUMERO_EUROPEO = r"-?(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d+)?"
+# La prova che la virgola è DECIMALE e non un separatore di migliaia all'americana.
+# `1,234` non prova niente: in `1,234` la virgola può separare le migliaia. Un
+# gruppo di cifre che NON sia lungo tre (`,56`, `,5`, `,1234`) invece sì: le
+# migliaia si scrivono a gruppi di tre esatti, sempre.
+_VIRGOLA_DECIMALE = r",\d{1,2}$|,\d{4,}$"
+
+
+def _numero_europeo(v):
+    """`10.500,00` → 10500.0. Il punto è migliaia, la virgola è decimale."""
+    if not isinstance(v, str):
+        return v
+    try:
+        return float(v.strip().replace(".", "").replace(",", "."))
+    except ValueError:
+        return None
+
+
+def _e_una_colonna_europea(campione: pd.Series) -> bool:
+    """
+    La colonna è fatta di numeri scritti all'europea?
+
+    Serve una prova, non un sospetto: il progetto preferisce il testo onesto a un
+    numero sbagliato, e `1.234` da solo può essere milleduecentotrentaquattro,
+    un-virgola-duecentotrentaquattro o un codice. La prova è la **virgola
+    decimale**: `1234,56` non può essere altro — in un CSV separato da virgole
+    quel valore non starebbe nemmeno in un campo solo.
+
+    Quindi due condizioni insieme: quasi tutti i valori hanno la forma europea, e
+    almeno uno porta una virgola decimale. Se c'è, i punti della colonna sono
+    migliaia per costruzione.
+
+    Nasce da un difetto vero: un CSV europeo (`;` e virgola decimale) lasciava il
+    fatturato come TESTO, quindi il report non aveva NESSUNA misura — mentre la
+    chat, dove a leggere è il modello, il totale lo calcolava. Due verità nella
+    stessa pagina.
+    """
+    return bool(campione.str.fullmatch(_NUMERO_EUROPEO).mean() >= 0.9
+                and campione.str.contains(_VIRGOLA_DECIMALE).any())
+
+
 def _maybe_parse_numbers(df: pd.DataFrame) -> pd.DataFrame:
     """
     Converte in numerico le colonne testuali che sono in realtà numeri: valuta
     formattata (`$1,000`) e misure con qualche cella-testo per i mancanti (`n.d.`).
 
-    Due prudenze contro i numeri sbagliati:
-    - il munging dei separatori (ambiguo tra stile US ed EU) si applica SOLO alle
-      colonne con un simbolo di valuta, dove l'intento 'denaro' è chiaro; le altre
-      accettano solo numeri nudi, così una stringa ambigua senza contesto resta testo;
-    - si converte solo se ≥90% dei valori non-nulli diventa numero: pochi 'n.d.'/'N/A'
-      passano a NaN, ma una colonna categoriale (in gran parte non numerica) resta testo.
+    Tre strade, in ordine di prova richiesta:
+    - **valuta** (`$1,000`): il simbolo dichiara l'intento 'denaro', quindi il
+      munging dei separatori — ambiguo fra stile US ed EU — è giustificato;
+    - **europea** (`10.500,00`): la virgola decimale è essa stessa la prova, e i
+      punti diventano migliaia per costruzione (vedi `_e_una_colonna_europea`);
+    - **nuda** (`1234.56`): nessun separatore ambiguo da interpretare.
+
+    Fuori da queste, una stringa ambigua senza contesto resta TESTO: meglio una
+    colonna non aggregabile che un totale sbagliato presentato come giusto.
+
+    In tutti i casi si converte solo se ≥90% dei valori non-nulli diventa numero:
+    pochi 'n.d.'/'N/A' passano a NaN, ma una colonna categoriale resta testo.
     """
     for col in df.columns:
         s = df[col]
@@ -137,9 +187,13 @@ def _maybe_parse_numbers(df: pd.DataFrame) -> pd.DataFrame:
         campione = s.dropna().astype(str)
         if campione.empty:
             continue
-        valuta = bool(campione.str.contains(_SIMBOLO_VALUTA).mean() >= 0.5)
-        num = pd.to_numeric(s.map(_numero_da_valuta if valuta else _numero_semplice),
-                            errors="coerce")
+        if bool(campione.str.contains(_SIMBOLO_VALUTA).mean() >= 0.5):
+            converti = _numero_da_valuta
+        elif _e_una_colonna_europea(campione):
+            converti = _numero_europeo
+        else:
+            converti = _numero_semplice
+        num = pd.to_numeric(s.map(converti), errors="coerce")
         non_nulli = int(s.notna().sum())
         if non_nulli and num.notna().sum() / non_nulli >= 0.9:
             df[col] = num
@@ -276,6 +330,42 @@ def _rifiuta_se_troppo_grande(byte: "int | None", *, stimato: bool) -> None:
         f"che questa installazione concede a un dataset. Carica un estratto (meno "
         f"righe o meno colonne), oppure alza MAX_DATASET_RAM_MB su una macchina "
         f"con più memoria.")
+
+
+def duplicate_columns_warning(dati: bytes, nome: str) -> "str | None":
+    """
+    Il file ha due colonne con lo STESSO nome? Allora dirlo.
+
+    Pandas non fallisce e non avvisa: rinomina la seconda in `Vendite.1` e va
+    avanti. Chi ha caricato il file vede due misure dove ne aveva una, e se
+    chiede "il totale delle vendite" ne ottiene una delle due — quale, dipende
+    dal modello. Il dato non è sbagliato, ma la domanda ha due risposte diverse
+    e nessuno lo dice.
+
+    Si legge la sola INTESTAZIONE, non il file: costa il primo rigo. Vale per i
+    CSV; per un `.xlsx` servirebbe aprire l'archivio con openpyxl e il caso è
+    molto più raro (un foglio di calcolo mostra le colonne mentre le si scrive).
+    Limite dichiarato invece che nascosto.
+    """
+    if not nome.lower().endswith(".csv") or not dati:
+        return None
+    testa = _testo(dati.split(b"\n", 1)[0])
+    if not testa.strip():
+        return None
+    nomi = [c.strip().strip('"') for c in testa.rstrip("\r").split(_detect_sep(testa))]
+    visti, doppi = set(), []
+    for c in nomi:
+        if c in visti and c not in doppi:
+            doppi.append(c)
+        visti.add(c)
+    if not doppi:
+        return None
+    etichetta = ", ".join(f"«{c}»" for c in doppi)
+    verbo = "compare" if len(doppi) == 1 else "compaiono"
+    return (f"{etichetta} {verbo} più di una volta fra le colonne del file: la seconda "
+            f"è stata rinominata aggiungendo un numero (es. '{doppi[0]}.1'), perché due "
+            f"colonne non possono chiamarsi uguale. Controlla di star guardando quella "
+            f"che intendi.")
 
 
 def stima_ram(dati: bytes, nome: str) -> "int | None":

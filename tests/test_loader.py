@@ -7,11 +7,13 @@ import pytest
 
 from nlda.config import Settings
 from nlda.loader import (
+    _e_una_colonna_europea,
     _maybe_parse_dates,
     _stima_byte_csv,
     analyze,
     dataset_signature,
     default_unit,
+    duplicate_columns_warning,
     measure_columns,
     monthly_trend,
     ordered_measures,
@@ -579,3 +581,56 @@ def test_con_piu_categorie_la_quota_del_leader_resta():
                        "Vendite": [30, 10] * 10})
     findings = analyze(df, "Vendite", "Regione").get("findings", [])
     assert any("pesa" in f and "East" in f for f in findings)
+
+
+# --- Numeri all'europea: la virgola decimale è la prova ------------------------
+def test_un_csv_europeo_produce_una_MISURA_non_del_testo():
+    """
+    Il difetto: `1234,56` restava testo, quindi un CSV europeo arrivava al report
+    SENZA misure — nessun KPI, nessuna classifica — mentre la chat, dove a
+    leggere è il modello, il totale lo calcolava. Due verità nella stessa pagina.
+    """
+    dati = (b"Regione;Fatturato\nNord;1234,56\nSud;987,10\nCentro;10.500,00\n")
+    df = read_any(_upload(dati, "eu.csv"))
+    assert "Fatturato" in measure_columns(df)
+    assert df["Fatturato"].sum() == pytest.approx(12721.66)
+
+
+def test_i_punti_da_soli_NON_bastano_a_dichiarare_un_numero_europeo():
+    """
+    `1.234` può essere milleduecentotrentaquattro, uno-virgola-duecento… o un
+    codice: senza una virgola decimale da qualche parte nella colonna non c'è
+    prova, e il progetto preferisce il testo onesto al numero sbagliato. Qui la
+    colonna NON deve essere trattata come europea (la converte semmai pandas,
+    con la convenzione americana, che è un'altra decisione e un altro modulo).
+    """
+    campione = pd.Series(["1.234", "5.678", "9.012"])
+    assert not _e_una_colonna_europea(campione)
+
+
+def test_una_colonna_di_date_non_diventa_un_numero_europeo():
+    """La guardia opposta: `01/02/2024` non ha nulla di numerico da estrarre."""
+    assert not _e_una_colonna_europea(pd.Series(["01/02/2024", "15/03/2024"]))
+
+
+# --- Due colonne con lo stesso nome -------------------------------------------
+def test_due_colonne_omonime_vengono_dichiarate():
+    """
+    Pandas non fallisce e non avvisa: rinomina la seconda in `Vendite.1`. Chi ha
+    caricato il file vede due misure dove ne aveva una, e "il totale delle
+    vendite" ha due risposte diverse senza che nessuno lo dica.
+    """
+    avviso = duplicate_columns_warning(b"Vendite,Vendite,Regione\n10,20,Nord\n", "x.csv")
+    assert avviso and "«Vendite»" in avviso
+    assert "Vendite.1" in avviso, "va detto COME si chiama adesso la seconda"
+
+
+def test_un_file_con_nomi_tutti_diversi_non_avvisa():
+    """Il rischio di un avviso nuovo è il falso positivo sul caso normale."""
+    assert duplicate_columns_warning(b"Regione,Vendite\nNord,10\n", "x.csv") is None
+
+
+def test_l_avviso_sulle_omonime_riconosce_il_separatore():
+    """Un CSV europeo usa `;`: cercare le virgole troverebbe una colonna sola."""
+    avviso = duplicate_columns_warning(b"Vendite;Vendite;Regione\n10;20;Nord\n", "x.csv")
+    assert avviso and "«Vendite»" in avviso

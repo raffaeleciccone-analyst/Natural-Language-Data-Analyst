@@ -91,6 +91,7 @@ from nlda.loader import (
     date_columns,
     date_span_years,
     default_unit,
+    duplicate_columns_warning,
     load_dataset,
     measure_columns,
     ordered_measures,
@@ -404,7 +405,12 @@ async def carica(file: Annotated[UploadFile, File()]) -> DatasetResponse:
         raise HTTPException(status_code=400, detail=f"File illeggibile: {e}") from e
 
     store.magazzino.aggiungi(chiave, df, nome)
-    return _descrivi(df, chiave, nome)
+    # Due colonne con lo stesso nome: pandas rinomina la seconda in silenzio, e
+    # chi ha caricato il file si ritrova due misure dove ne aveva una. Stesso
+    # canale dell'avviso sull'unione — un dataset può arrivare con qualcosa da
+    # dire, e il posto per dirlo esiste già.
+    avviso = duplicate_columns_warning(dati, nome)
+    return _descrivi(df, chiave, nome, [avviso] if avviso else [])
 
 
 def _demo_in_memoria(scelto: DatasetDemo) -> tuple[pd.DataFrame, str, str]:
