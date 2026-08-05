@@ -98,6 +98,50 @@ def test_read_any_csv_da_bytes():
     assert len(df) == 2
 
 
+# --- File storti: dirlo, non fingere di aver capito ----------------------------
+def test_un_pdf_travestito_da_csv_viene_rifiutato():
+    """
+    Prima non dava errore: `read_csv` leggeva i byte del PDF e produceva una
+    tabella con una colonna chiamata '%PDF-1.4'. L'app fingeva di aver capito, e
+    l'utente si ritrovava un report su spazzatura.
+    """
+    finto = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\nrobaccia binaria"
+    with pytest.raises(ValueError, match="sembra un PDF"):
+        read_any(_upload(finto, "finto.csv"))
+
+
+def test_un_binario_senza_firma_nota_viene_comunque_fermato():
+    """Rete di sicurezza: un file di testo non contiene byte NUL."""
+    with pytest.raises(ValueError, match="byte binari"):
+        read_any(_upload(b"\x01\x02\x00\x03 dati", "strano.csv"))
+
+
+def test_un_file_vuoto_lo_dice_in_italiano():
+    with pytest.raises(ValueError, match="Il file è vuoto"):
+        read_any(_upload(b"", "vuoto.csv"))
+
+
+def test_un_file_con_la_sola_intestazione_viene_rifiutato():
+    """
+    Accettarlo significherebbe mostrare un report di sole caselle vuote e lasciare
+    all'utente il compito di capire perche'. La causa e' nel file: si dice subito.
+    """
+    with pytest.raises(ValueError, match="solo l'intestazione"):
+        read_any(_upload(b"Regione,Vendite\n", "solo_header.csv"))
+
+
+def test_un_excel_che_non_e_un_excel_lo_dice_in_italiano():
+    """Il messaggio di pandas parla di 'engine': un dettaglio della libreria."""
+    with pytest.raises(ValueError, match="non è un Excel leggibile"):
+        read_any(_upload(b"questo e' testo, non un excel", "finto.xlsx"))
+
+
+def test_un_csv_normale_non_e_toccato_dai_nuovi_controlli():
+    """Il rischio di un controllo nuovo e' il falso positivo sul caso normale."""
+    df = read_any(_upload("Città,Vendite\nRoma,10\nMilano,20\n".encode(), "ok.csv"))
+    assert list(df.columns) == ["Città", "Vendite"] and len(df) == 2
+
+
 def test_csv_a_colonna_singola_non_viene_spezzato():
     # Regressione: con sep=None il csv.Sniffer sceglieva una LETTERA dell'header
     # come separatore e spezzava 'Fatturato' in ['Fa','ura','o']. Un CSV a colonna

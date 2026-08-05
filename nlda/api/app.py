@@ -378,6 +378,11 @@ async def carica(file: Annotated[UploadFile, File()]) -> DatasetResponse:
 
     try:
         df = read_any(NamedBytesIO(dati, nome))
+    except ValueError as e:
+        # I nostri messaggi sono già scritti per chi carica il file (in italiano, e
+        # dicono cosa manca): ripeterli dietro un "File illeggibile:" li seppellirebbe
+        # sotto un'etichetta generica.
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001 — file dell'utente: si spiega, non si esplode
         raise HTTPException(status_code=400, detail=f"File illeggibile: {e}") from e
 
