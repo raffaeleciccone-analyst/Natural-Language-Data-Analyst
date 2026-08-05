@@ -27,3 +27,14 @@ updates:
       interval: monthly
     commit-message:
       prefix: "chore(docker)"
+    # I major di Node si saltano di proposito: solo quelli PARI diventano LTS, e
+    # l'immagine serve al solo stage di build del frontend, dove una linea con
+    # supporto lungo vale più di una versione recente. La CI compila il frontend
+    # con Node 24 (`ci.yml`): seguire un major dispari qui farebbe compilare lo
+    # stesso artefatto con due versioni diverse. Si salirà al prossimo LTS
+    # cambiando questa riga a mano — una decisione, non un automatismo.
+    # Le patch e le minor del tag `24-slim` continuano ad arrivare: è lì che
+    # stanno le correzioni di sicurezza.
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
