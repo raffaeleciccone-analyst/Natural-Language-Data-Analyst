@@ -41,7 +41,11 @@ jobs:
       # Nessuna dipendenza: lo script usa la sola libreria standard, cosi' questo
       # controllo resta in piedi anche se l'installazione del progetto si rompe —
       # ed e' proprio quando serve di piu'.
+      # `--difese` non chiama il modello e non tocca la quota: prova che il
+      # servizio rifiuta ancora gli input sbagliati, tetto di memoria compreso.
+      # Costa un caricamento da ~10 MB al giorno, che e' il prezzo per accorgersi
+      # di una variabile d'ambiente sparita prima che se ne accorga un visitatore.
       - name: Interroga la demo
         run: |
-          python scripts/verifica_deploy.py \
+          python scripts/verifica_deploy.py --difese \
             ${{ inputs.senza_modello && '--senza-modello' || '' }}

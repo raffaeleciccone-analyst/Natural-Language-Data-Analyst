@@ -119,6 +119,29 @@ rispondere `{"status":"ok"}`, e la **terza** domanda tornare `429`.
 Per provare una porta diversa — è ciò che fa Render — basta `-e PORT=9999` e
 pubblicare quella: il `HEALTHCHECK` la segue.
 
+### Chiedere al servizio se le difese ci sono ancora
+
+```bash
+python scripts/verifica_deploy.py --difese --senza-modello
+```
+
+Interroga il servizio **vero** e verifica che rifiuti ancora gli input sbagliati:
+i formati travestiti da CSV, il file con la sola intestazione, la riga
+disallineata, i parametri di colonna inesistenti, l'unione che duplica le righe,
+e il **tetto di memoria** — spedendo un file costruito apposta per superarlo di
+un quarto.
+
+Serve perché ognuna di queste difese ha già un test verde, e ognuna può essere
+assente in produzione lo stesso: dipende da una variabile che l'host non ha
+applicato, o gira su un container con un decimo della memoria. La CI prova il
+codice, questo prova il servizio. Con `--difese` non chiama mai il modello,
+quindi non consuma quota e si può lanciare a ogni deploy — il workflow *Demo
+pubblica* lo fa una volta al giorno.
+
+Il tetto di memoria si controlla solo dove è raggiungibile: se l'installazione ne
+concede più di quanto un caricamento possa occupare (tipico in sviluppo), il
+controllo lo dichiara saltato invece di inventarsi un esito.
+
 ---
 
 ## 2. Interfaccia Streamlit (Streamlit Cloud)

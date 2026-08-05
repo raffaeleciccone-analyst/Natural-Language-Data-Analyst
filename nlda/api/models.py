@@ -44,6 +44,10 @@ class ConfigResponse(BaseModel):
     demo_mode: bool = Field(description="Se attivo, la quota è limitata e i provider fissi")
     max_questions: int = Field(description="Domande per sessione in modalità demo")
     max_upload_mb: int
+    max_dataset_ram_mb: int = Field(
+        description="Quanta MEMORIA può occupare un dataset letto. È un limite diverso "
+                    "da `max_upload_mb`: un CSV piccolo su disco può diventare enorme "
+                    "in memoria, e oltre questa soglia il file viene rifiutato")
     supported_extensions: list[str]
     project_questions: list[str] = Field(
         default_factory=list,
