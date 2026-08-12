@@ -44,9 +44,18 @@ URL_PREDEFINITO = "https://nlda.onrender.com"
 # container parte Render non tiene la connessione aperta in silenzio: la chiude,
 # o risponde 502/503 dal suo proxy. Un solo tentativo da tre minuti si arrende
 # alla prima di queste — ed è già successo, il 1º agosto 2026.
-BUDGET_RISVEGLIO = 420
+#
+# Il budget era 420 s: il 9 agosto 2026 il controllo giornaliero è fallito
+# esaurendolo, e il giorno dopo — stesso commit, stesso servizio — è tornato
+# verde da solo. Un risveglio lento su 0,1 vCPU condivisa non è una demo giù, e
+# un fallimento che non chiede di fare nulla insegna a ignorare quelli veri. Il
+# tetto del job resta 20 minuti, quindi lo spazio c'era già.
+BUDGET_RISVEGLIO = 600
 ATTESA_TENTATIVO = 60
 PAUSA_TENTATIVI = 5
+# Sotto questa soglia un tentativo non è più un tentativo: il timeout scadrebbe
+# mentre il container sta ancora rispondendo, e conterebbe come un rifiuto.
+ATTESA_MINIMA = 15
 ATTESA_DOMANDA = 240
 
 
@@ -54,7 +63,7 @@ class Fallito(Exception):
     """Un controllo non è passato. Il messaggio è già leggibile da un umano."""
 
 
-def _chiama(url: str, corpo: dict | None = None, timeout: int = 60) -> tuple[dict, float]:
+def _chiama(url: str, corpo: dict | None = None, timeout: float = 60) -> tuple[dict, float]:
     """
     Chiama l'API e restituisce (json, secondi). Solleva `Fallito` con la causa.
 
@@ -84,12 +93,17 @@ def _sveglia(url: str) -> tuple[dict, float, int]:
     """
     inizio = time.perf_counter()
     for tentativo in range(1, 1_000):
+        # L'ultimo tentativo si accorcia per stare nel budget invece di essere
+        # saltato. La guardia era `trascorso + ATTESA_TENTATIVO > BUDGET`, che si
+        # arrendeva con un tentativo intero di anticipo: 385 s spesi sui 420
+        # dichiarati, cioè 35 s di attesa che il servizio non ha mai avuto.
+        resto = BUDGET_RISVEGLIO - (time.perf_counter() - inizio)
         try:
-            salute, _ = _chiama(url, timeout=ATTESA_TENTATIVO)
+            salute, _ = _chiama(url, timeout=min(ATTESA_TENTATIVO, resto))
             return salute, time.perf_counter() - inizio, tentativo
         except Fallito as e:
             trascorso = time.perf_counter() - inizio
-            if trascorso + ATTESA_TENTATIVO > BUDGET_RISVEGLIO:
+            if trascorso + PAUSA_TENTATIVI + ATTESA_MINIMA > BUDGET_RISVEGLIO:
                 raise Fallito(f"{e} — non si è svegliato in {trascorso:.0f}s "
                               f"({tentativo} tentativi)") from None
             _riga("··", f"tentativo {tentativo} a vuoto dopo {trascorso:.0f}s, riprovo")
@@ -98,7 +112,7 @@ def _sveglia(url: str) -> tuple[dict, float, int]:
 
 
 def _prova(url: str, corpo: bytes | None = None,
-           intestazioni: dict | None = None, timeout: int = 120) -> tuple[int, str]:
+           intestazioni: dict | None = None, timeout: float = 120) -> tuple[int, str]:
     """
     Come `_chiama`, ma un 4xx è un ESITO da controllare, non un guasto.
 
