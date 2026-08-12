@@ -28,6 +28,7 @@ Uso:
 """
 import argparse
 import json
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -338,6 +339,16 @@ def _difese_sulla_memoria(base: str) -> list[str]:
 
 
 def main() -> int:
+    # I nomi dei controlli contengono `→` e gli esiti `··`, e la console di
+    # Windows è cp1252: senza questa riga lo script muore con UnicodeEncodeError
+    # sul primo esito stampato, prima di dire alcunché sul servizio. In CI non si
+    # vedrà mai — il runner è UTF-8 — ed è esattamente perché va scritto qui: chi
+    # esegue a mano lo fa dal proprio portatile, di solito quando la demo è giù.
+    # `reconfigure` esiste solo su un TextIOWrapper: sotto cattura (pytest) lo
+    # stream è un altro oggetto e non c'è nulla da riconfigurare.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--url", default=URL_PREDEFINITO, help="base del servizio da verificare")
     p.add_argument("--senza-modello", action="store_true",
