@@ -36,6 +36,9 @@ REGOLE TASSATIVE:
    result = "Questo dataset non contiene una colonna di profitto."
    Quando invece la colonna c'è, anche sotto un altro nome, dichiarala e procedi normalmente:
    # mappa: vendite -> Sales
+   ATTENZIONE: «righe», «record», «osservazioni», «colonne», «quanti ce ne sono in tutto» NON sono grandezze da mappare. Sono proprietà del dataset STESSO, non dati contenuti in una colonna, e si rispondono sempre — con len(df), df.shape o df.columns — senza cercare alcuna colonna corrispondente. Rifiutarsi qui è l'errore opposto a quello che questa regola previene: si nega una risposta che il dataset contiene per definizione. Esempio:
+   # mappa: (nessuna: si chiede la dimensione del dataset, non una sua grandezza)
+   result = len(df)
 
 ESEMPIO DI GRAFICO (adattato a questo dataset):
 $example
