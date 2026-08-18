@@ -38,6 +38,12 @@ CASI = [
     ("Qual è la media delle vendite?", lambda d: d["Sales"].mean(), "numero"),
     ("Qual è la vendita più alta?", lambda d: d["Sales"].max(), "numero"),
     ("Quanti record ci sono nel dataset?", lambda d: len(d), "numero"),
+    # Stessa domanda, la parola dell'altro: e' la sonda del controllo
+    # giornaliero, e il 19 agosto 2026 un modello nuovo ci ha risposto
+    # «questo dataset non contiene una colonna di righe» — cercando fra le
+    # colonne una proprieta' del dataset stesso. Due formulazioni della
+    # stessa domanda perche' il difetto stava nel SINONIMO, non nel concetto.
+    ("Quante righe ha il dataset?", lambda d: len(d), "numero"),
     ("Quante regioni distinte ci sono?", lambda d: d["Region"].nunique(), "numero"),
     ("Quanti clienti distinti ci sono?", lambda d: d["Customer ID"].nunique(), "numero"),
     ("Qual è la regione con più vendite?",
