@@ -12,7 +12,7 @@ test lo rigiocano attraverso l'intera pipeline in modo deterministico e senza
 rete: se una modifica rompe il trattamento di una risposta reale, diventa rosso.
 
     python scripts/record_corpus.py                 # provider di default (ollama)
-    python scripts/record_corpus.py --provider groq --model llama-3.3-70b-versatile
+    python scripts/record_corpus.py --provider groq --model openai/gpt-oss-120b
 
 Il file prodotto (tests/fixtures/model_outputs.json) va committato. Rigenerarlo è
 una scelta consapevole: cambia le risposte su cui i test si basano.

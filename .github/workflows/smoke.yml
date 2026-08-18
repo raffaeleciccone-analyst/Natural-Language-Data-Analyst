@@ -43,7 +43,7 @@ jobs:
         if: steps.chiave.outputs.presente == 'si'
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: python scripts/smoke.py --provider groq --model llama-3.3-70b-versatile
+        run: python scripts/smoke.py --provider groq --model openai/gpt-oss-120b
 
       # L'eval non fa fallire il job: il punteggio dipende dal modello e oscilla.
       # Serve a essere LETTO nel log, non a bloccare.
@@ -52,4 +52,4 @@ jobs:
         continue-on-error: true
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        run: python scripts/eval.py --provider groq --model llama-3.3-70b-versatile
+        run: python scripts/eval.py --provider groq --model openai/gpt-oss-120b

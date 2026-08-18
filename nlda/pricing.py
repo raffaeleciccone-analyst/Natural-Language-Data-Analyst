@@ -42,9 +42,12 @@ PRICES_PER_1M: dict[str, tuple[float, float]] = {
     "claude-opus-4-8": (15.00, 75.00),
     # Google
     "gemini-2.0-flash": (0.10, 0.40),
-    # Groq (Llama) — tier a pagamento; il tier gratuito costa 0 ma qui si stima
+    # Groq — tier a pagamento; il tier gratuito costa 0 ma qui si stima
     # il prezzo di listino, come proxy del costo "a regime".
-    "llama-3.3-70b-versatile": (0.59, 0.79),
+    # `llama-3.3-70b-versatile` è stato spento da Groq il 16 agosto 2026: la voce
+    # è sparita con il modello, perché un prezzo per un modello che risponde 404
+    # non stima nulla — suggerisce solo che il modello esista ancora.
+    "openai/gpt-oss-120b": (0.15, 0.60),
 }
 
 

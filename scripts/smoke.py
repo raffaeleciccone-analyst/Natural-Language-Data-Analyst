@@ -10,7 +10,7 @@ Non va in CI sulle pull request — è lento e dipende da un servizio esterno �
 prima di un deploy o dopo un cambio al prompt vale i suoi due minuti.
 
     python scripts/smoke.py
-    python scripts/smoke.py --provider groq --model llama-3.3-70b-versatile
+    python scripts/smoke.py --provider groq --model openai/gpt-oss-120b
 
 Esce con codice diverso da zero se una domanda fallisce o se un grafico atteso
 non arriva: è pensato per essere usato anche da uno script di rilascio.

@@ -198,12 +198,21 @@ def verifica(base: str, con_modello: bool) -> list[str]:
         _riga("OK", f"domanda eseguita: {risposta.get('code', '')[:60]}", t)
     else:
         causa = risposta.get("failure_kind")
-        _riga("NO", f"domanda fallita ({causa}): {risposta.get('message', '')[:120]}", t)
+        # 400 caratteri e non 120: il 18 agosto 2026 Groq ha risposto 404 perche'
+        # aveva spento il modello configurato, e il taglio a 120 cadeva
+        # esattamente sul suo nome — «The model `llama-». Il log diceva che la
+        # demo era rotta senza dire cosa cambiare, cioe' la meta' inutile
+        # dell'informazione. La causa di un guasto sta in fondo al messaggio del
+        # provider, non in cima.
+        _riga("NO", f"domanda fallita ({causa}): {risposta.get('message', '')[:400]}", t)
         problemi.append(
             f"la chat non funziona sulla demo: {causa}. "
             + {"timeout": "l'esecuzione non rientra nel tempo concesso",
                "runtime": "il worker della sandbox muore (spesso: cap di memoria troppo basso)",
                "security": "il codice generato viene rifiutato dal validatore",
+               "provider": "il modello configurato non risponde: spesso e' stato "
+                           "RITIRATO dal provider (404 model_not_found) e va "
+                           "sostituito in render.yaml, oppure la chiave e' scaduta",
                }.get(str(causa), "vedi il messaggio sopra"))
     return problemi
 

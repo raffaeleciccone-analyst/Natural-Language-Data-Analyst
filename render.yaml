@@ -40,7 +40,7 @@ services:
       - key: PROVIDER
         value: groq
       - key: MODEL
-        value: llama-3.3-70b-versatile
+        value: openai/gpt-oss-120b
       # Da inserire nella console di Render, mai qui: un file versionato è
       # pubblico quanto il repo.
       - key: GROQ_API_KEY

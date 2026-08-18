@@ -21,7 +21,7 @@ DEFAULT_MODELS = {
     "anthropic": "claude-haiku-4-5",   # il modello economico: il compito e generare 5 righe di Pandas
     "openai": "gpt-4o-mini",
     "gemini": "gemini-2.0-flash",
-    "groq": "llama-3.3-70b-versatile",
+    "groq": "openai/gpt-oss-120b",
 }
 
 # Registro nome -> factory. Il tipo è Callable, non type[LLMProvider]: qui i valori

@@ -17,7 +17,7 @@ uno scalare, una tabella o una frase — e cerca il valore atteso nel risultato 
 nel suo riepilogo.
 
     python scripts/eval.py
-    python scripts/eval.py --provider groq --model llama-3.3-70b-versatile
+    python scripts/eval.py --provider groq --model openai/gpt-oss-120b
 
 Non è un test da CI: il punteggio dipende dal modello e oscilla. È una MISURA. Un
 sistema LLM non si dichiara corretto, si valuta — e quello che conta è sapere

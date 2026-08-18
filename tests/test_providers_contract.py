@@ -185,7 +185,7 @@ def test_groq_legge_la_chiave_dalla_propria_variabile(monkeypatch):
 
     monkeypatch.setenv("GROQ_API_KEY", "gsk-di-test")
     monkeypatch.setenv("OPENAI_API_KEY", "non-questa")
-    assert GroqProvider(model_name="llama-3.3-70b-versatile").api_key == "gsk-di-test"
+    assert GroqProvider(model_name="openai/gpt-oss-120b").api_key == "gsk-di-test"
 
 
 # ---------------------------------------------------------------------------
