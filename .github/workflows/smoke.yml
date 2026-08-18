@@ -27,16 +27,41 @@ jobs:
           pip install -r requirements.txt
           pip install -e ".[openai]"
 
-      # Senza chiave non si fallisce: non tutti i fork hanno i secret, e un job
-      # rosso per una chiave assente è rumore, non informazione.
+      # Senza chiave non si fallisce SU UN FORK: i secret non vengono copiati, e
+      # un job rosso per una chiave che il proprietario del fork non puo' avere e'
+      # rumore, non informazione.
+      #
+      # Sul repo ORIGINALE la stessa clemenza e' un difetto. Dal 18 agosto 2026 si
+      # e' visto cosa costa: la chiave non era configurata, i due passi qui sotto
+      # venivano saltati, e il job chiudeva verde in 38 secondi. Ventisei
+      # esecuzioni di fila cosi'. Nessuna aveva mai fatto una domanda a un modello.
+      #
+      # Il prezzo non e' teorico. Questo controllo interroga un modello vero ogni
+      # notte: quando Groq ha spento `llama-3.3-70b-versatile` avrebbe dovuto
+      # sbattere contro quel 404 con giorni di anticipo. Non l'ha fatto — non
+      # stava chiamando nessuno — e il guasto e' emerso dalla demo pubblica rotta,
+      # cioe' nel modo in cui potrebbe scoprirlo un visitatore.
+      #
+      # Un controllo che non puo' eseguirsi non deve dire "tutto ok": deve dire
+      # "non ho controllato". Qui le due cose tornano a essere distinguibili.
       - name: Verifica la presenza della chiave
         id: chiave
+        # Il secret arriva dall'ambiente e non interpolato nel testo dello script:
+        # `${{ secrets.X }}` dentro `run` viene sostituito PRIMA che la shell veda
+        # la riga, quindi una chiave che contenesse una virgoletta romperebbe il
+        # confronto invece di eseguirlo.
+        env:
+          CHIAVE: ${{ secrets.GROQ_API_KEY }}
+          CASA: raffaeleciccone-analyst/Natural-Language-Data-Analyst
         run: |
-          if [ -z "${{ secrets.GROQ_API_KEY }}" ]; then
-            echo "presente=no" >> "$GITHUB_OUTPUT"
-            echo "::notice::GROQ_API_KEY non configurata: smoke ed eval saltati."
-          else
+          if [ -n "$CHIAVE" ]; then
             echo "presente=si" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.repository }}" = "$CASA" ]; then
+            echo "::error::GROQ_API_KEY non configurata: questo controllo non sta provando nulla. Repo → Settings → Secrets and variables → Actions."
+            exit 1
+          else
+            echo "presente=no" >> "$GITHUB_OUTPUT"
+            echo "::notice::GROQ_API_KEY non configurata (fork): smoke ed eval saltati."
           fi
 
       - name: Smoke — la pipeline produce risultati validi?
