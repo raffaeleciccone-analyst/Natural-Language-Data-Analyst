@@ -279,15 +279,15 @@ def test_un_PROVIDER_sconosciuto_non_rompe_il_servizio(monkeypatch):
 def test_MODEL_vale_per_il_provider_predefinito(monkeypatch):
     from nlda.api.app import _scelta_modello
     monkeypatch.setenv("PROVIDER", "groq")
-    monkeypatch.setenv("MODEL", "llama-3.3-70b-versatile")
-    assert _scelta_modello(None, None) == ("groq", "llama-3.3-70b-versatile")
+    monkeypatch.setenv("MODEL", "openai/gpt-oss-120b")
+    assert _scelta_modello(None, None) == ("groq", "openai/gpt-oss-120b")
 
 
 def test_MODEL_non_si_applica_a_un_provider_scelto_dal_client(monkeypatch):
     """Il nome di un modello Groq mandato ad Anthropic e' un 404 che non spiega nulla."""
     from nlda.api.app import _scelta_modello
     monkeypatch.setenv("PROVIDER", "groq")
-    monkeypatch.setenv("MODEL", "llama-3.3-70b-versatile")
+    monkeypatch.setenv("MODEL", "openai/gpt-oss-120b")
     assert _scelta_modello("anthropic", None) == ("anthropic", None)
 
 

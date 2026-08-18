@@ -108,7 +108,7 @@ a distanza.
 docker build -t nlda .
 docker run --rm -p 8000:8000 \
   -e DEMO_MODE=true -e DEMO_MAX_QUESTIONS=2 \
-  -e PROVIDER=groq -e MODEL=llama-3.3-70b-versatile \
+  -e PROVIDER=groq -e MODEL=openai/gpt-oss-120b \
   -e GROQ_API_KEY=gsk_... \
   nlda
 ```
@@ -155,7 +155,7 @@ controllo lo dichiara saltato invece di inventarsi un esito.
    DEMO_MAX_QUESTIONS = "15"
    DEMO_MAX_DAILY = "200"
    PROVIDER = "groq"
-   MODEL = "llama-3.3-70b-versatile"
+   MODEL = "openai/gpt-oss-120b"
    GROQ_API_KEY = "gsk_..."
    ```
 4. **Deploy**, poi copia il link nel `README.md`.
