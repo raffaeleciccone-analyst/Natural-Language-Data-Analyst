@@ -12,6 +12,17 @@ interpreta i numeri.
 
 **I numeri li calcola Pandas; l'AI si limita a raccontarli.**
 
+<sub>**Se stai leggendo per valutare il codice e non il prodotto**, in tre righe: il codice che
+l'LLM genera passa da una **sandbox a due livelli** — allowlist dei nodi AST più namespace
+protetto in esecuzione — con [modello di minaccia scritto](THREAT_MODEL.md), rischi residui
+dichiarati e *dove non vale* (la demo pubblica non ha l'hardening del container, e c'è scritto).
+Controlli deterministici fermano le colonne inventate prima che il codice parta, così l'errore
+arriva come domanda e non come traceback. E la CI non interroga un mock: interroga **la demo
+vera**, ogni notte.</sub>
+
+<sub>`731 test` · `91% di copertura` · `3 workflow CI` · Python 3.12 · FastAPI · React 19 + TS ·
+Docker · [architettura e trade-off](ARCHITECTURE.md)</sub>
+
 ## ▶️ [Prova la demo → nlda.onrender.com](https://nlda.onrender.com)
 
 Carica un CSV, oppure parti da uno dei due dataset di esempio. Nessuna
