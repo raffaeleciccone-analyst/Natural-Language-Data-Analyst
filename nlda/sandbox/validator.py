@@ -43,6 +43,14 @@ _DENY_ATTRS = {
     "style",                           # Styler.to_html/.export scrivono file
     "io", "core", "compat",            # traversata dei moduli interni di pandas
     "ExcelWriter", "ExcelFile", "HDFStore",
+    # Porte d'ingresso di pandas verso matplotlib: l'I/O avviene DENTRO la
+    # chiamata (backend, cache dei font, salvataggio su file in certi backend),
+    # cioè in un punto che l'AST non può vedere. Chiuderle non costa nulla: le
+    # figure le fa Plotly, il prompt chiede px assegnato a 'fig' e la pipeline
+    # riconosce solo figure Plotly, quindi un Axes di matplotlib non sarebbe
+    # comunque disegnabile. Vanno insieme: bloccare 'plot' e lasciare 'hist'
+    # sposta la porta invece di chiuderla.
+    "plot", "hist", "boxplot",
 }
 
 # Ogni metodo che inizia con to_/read_/write_ scrive o legge file/rete ed è vietato,
