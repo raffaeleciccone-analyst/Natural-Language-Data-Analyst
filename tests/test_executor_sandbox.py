@@ -50,6 +50,15 @@ REJECTED = [
     # traversata dei moduli interni di pandas / Styler che scrive file
     "pd.io.common.get_handle('x', 'w')",
     "df.style",
+    # porte di pandas verso matplotlib: l'I/O sta DENTRO la chiamata, dove l'AST
+    # non arriva. Sono tre e vanno verificate tutte: chiuderne una sola sposta la
+    # porta invece di chiuderla.
+    "df.plot()",
+    "df.plot(kind='bar')",
+    "df['Sales'].plot()",
+    "df.hist()",
+    "df['Sales'].hist()",
+    "df.boxplot()",
     # cicli potenzialmente infiniti
     "while True:\n    x = 1",
     # --- costrutti fuori dall'allowlist dei nodi AST ---------------------------
