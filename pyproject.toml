@@ -28,7 +28,7 @@ dependencies = [
 # L'import è lazy (dentro `_call`), quindi l'app parte anche senza gli altri.
 [project.optional-dependencies]
 ollama = ["ollama==0.6.2"]                # modelli locali, nessuna API key
-anthropic = ["anthropic>=0.40,<1.0"]
+anthropic = ["anthropic>=0.40,<2.0"]
 openai = ["openai>=1.40,<3.0"]            # copre anche Groq: API compatibile
 gemini = ["google-genai>=0.3,<3.0"]
 all = [
