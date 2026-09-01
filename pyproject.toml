@@ -20,7 +20,7 @@ dependencies = [
     "streamlit==1.60.0",
     "pandas==3.0.5",
     "numpy==2.5.1",
-    "plotly==6.9.0",
+    "plotly==7.0.0",
     "openpyxl==3.1.5",   # lettura file Excel (.xlsx)
 ]
 
