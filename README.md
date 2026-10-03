@@ -81,6 +81,12 @@ domanda con la risposta e la tabella che l'ha prodotta.*
 
 ---
 
+## Cosa ho deciso io
+
+L'idea è mia: fare domande ai dati in italiano, senza saper programmare. La scelta centrale anche: un modello linguistico può inventarsi i numeri, quindi l'IA traduce la domanda in codice e i conti li fa pandas. Il codice dell'app l'ha scritto l'IA: io l'ho guidata e ho controllato i risultati.
+
+---
+
 ## Cosa sa fare
 
 | | |
