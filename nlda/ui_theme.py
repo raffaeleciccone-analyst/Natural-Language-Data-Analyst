@@ -68,9 +68,10 @@ def console_css() -> str:
              pagina, colonna report, sidebar — e quale delle tre si muove dipende da
              dove sta il puntatore, senza che nulla lo indichi. Scorrere diventava
              imprevedibile: il difetto d'uso più segnalato di questa interfaccia.
-             Ora scorre solo la pagina. Il marker `.scrollcol` resta nel DOM ma non
-             ha più regole: toglierlo da `main.py` è una modifica separata, e un
-             marker senza CSS non fa nulla di male.
+             Ora scorre solo la pagina. Il marker `.scrollcol` NON va tolto da
+             `main.py`: non dà più lo scroll, ma resta l'ancora con cui il blocco
+             SCHERMI PICCOLI riconosce le due colonne principali (le impila, ci
+             mette la linea di stacco, e le distingue dalle file di KPI/grafici).
              ⚠️ Questa modifica va INSIEME alle altezze riservate qui sotto. La
              colonna a scorrimento assorbiva al proprio interno la crescita tardiva
              del contenuto (grafici, sintesi AI): senza di essa quella crescita

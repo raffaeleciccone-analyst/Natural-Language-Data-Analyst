@@ -592,10 +592,12 @@ non lo ripetono.
 l'intero documento a prescindere da dove finisce nel DOM: la posizione non cambia la
 cascata, incide solo su quanto presto arriva al browser.
 
-**Le due colonne (report | chat)** con scroll indipendente, ottenuto **in CSS** e non
-con `st.container(height=...)`: quello resettava lo scroll in cima a ogni rerun, e
-un expander sembrava "non aprirsi". Il marker invisibile `<span class='scrollcol'>`
-serve al CSS per riconoscere le due colonne giuste.
+**Le due colonne (report | chat)** senza contenitore ad altezza fissa: con
+`st.container(height=...)` lo scroll tornava in cima a ogni rerun, e un expander
+sembrava "non aprirsi". Dal 30/07/2026 scorre solo la pagina (prima ogni colonna aveva
+il proprio scroll, e la rotella muoveva un'area diversa a seconda del puntatore). Il
+marker invisibile `<span class='scrollcol'>` serve al CSS per riconoscere le due
+colonne giuste: su schermi piccoli le impila e le separa.
 
 **Principi:** Separation of Concerns, degradazione elegante, testabilità per
 costruzione (la guardia `__main__`), ottimizzazione della latenza *percepita*.
