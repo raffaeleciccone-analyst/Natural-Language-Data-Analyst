@@ -11,14 +11,14 @@
 #     pip install -e ".[ollama]"      solo Ollama (locale, senza API key)
 #
 # Se cambi provider alla demo, sostituisci la riga dell'SDK qui sotto:
-#   anthropic -> anthropic>=0.40,<1.0
+#   anthropic -> anthropic>=0.40,<3.0
 #   gemini    -> google-genai>=0.3,<3.0
 
 streamlit==1.67.0
 pillow>=13.0          # sicurezza: le 12.x hanno CVE note (serve streamlit>=1.66)
 pandas==3.0.5
-numpy==2.5.1          # pinnata: la sua versione determina gli stub di tipo usati in CI
-plotly==6.9.0
+numpy==2.5.4          # pinnata: la sua versione determina gli stub di tipo usati in CI
+plotly==7.1.0
 openpyxl==3.1.5
 
-openai>=1.40,<3.0     # provider della demo (Groq via API compatibile OpenAI)
+openai>=1.40,<4.0     # provider della demo (Groq via API compatibile OpenAI)
