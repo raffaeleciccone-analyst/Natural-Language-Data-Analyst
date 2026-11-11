@@ -17,7 +17,7 @@ license = "MIT"
 # riproducibilità vale più dell'aggiornamento automatico, e numpy in particolare
 # determina gli stub di tipo con cui gira il type-check in CI.
 dependencies = [
-    "streamlit==1.60.0",
+    "streamlit==1.67.0",
     "pandas==3.0.5",
     "numpy==2.5.1",
     "plotly==6.9.0",
@@ -55,7 +55,7 @@ dev = [
     # pandas 3.x, pandas resta senza stub (il type-check resta attivo sul resto).
 ]
 # Script accessori non necessari all'app (vedi scripts/).
-tools = ["pillow>=10.0", "scipy>=1.11"]
+tools = ["pillow>=13.0", "scipy>=1.11"]
 
 [project.urls]
 Repository = "https://github.com/raffaeleciccone-analyst/Natural-Language-Data-Analyst"

@@ -142,7 +142,7 @@ def render_linked_charts(df, insights, top_fig, trend_fig) -> None:
             event = st.plotly_chart(top_fig, width="stretch",
                                     on_select="rerun", key="report_top")
             try:
-                pts = event.selection.points  # type: ignore[attr-defined]
+                pts = event.selection.points
                 if pts:
                     selected_cat = _clicked_category(pts[0])
             except Exception:

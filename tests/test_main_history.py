@@ -5,11 +5,17 @@ un expander. Le sezioni di pagina vivono in `nlda.ui.pages` (importabile, nessun
 render con lo storico si verifica con AppTest, che esercita davvero il nesting
 chat_message dentro expander.
 """
+from pathlib import Path
+
 from streamlit.testing.v1 import AppTest
 
 from nlda.results import ExecutionFailure
 from nlda.service import Turn
 from nlda.ui import pages
+
+# Percorso assoluto: da streamlit 1.66 i percorsi relativi di AppTest.from_file
+# sono risolti rispetto al file del test (tests/), non alla cartella di lavoro.
+MAIN_PY = str(Path(__file__).resolve().parent.parent / "main.py")
 
 
 def _turno(n: int) -> Turn:
@@ -68,7 +74,7 @@ def test_app_completa_si_disegna_senza_errori(monkeypatch):
     # chiama il modello — la sintesi AI — altrimenti il test dipenderebbe da Ollama
     # (decine di secondi) e non sarebbe deterministico. Il resto è tutto Pandas/UI.
     monkeypatch.setattr("nlda.agent.DataAgent.overview", lambda self, *a, **k: "sintesi finta")
-    at = AppTest.from_file("main.py", default_timeout=60).run()
+    at = AppTest.from_file(MAIN_PY, default_timeout=60).run()
 
     assert not at.exception, at.exception
     assert any(t.value == "Natural Language Data Analyst" for t in at.title)
@@ -96,7 +102,7 @@ def test_streaming_di_una_risposta(monkeypatch):
                         lambda self, q, s: iter(["La risposta ", "è pronta."]))
     monkeypatch.setattr("nlda.sandbox.runner.settings", Settings(sandbox_subprocess=False))
 
-    at = AppTest.from_file("main.py", default_timeout=60).run()
+    at = AppTest.from_file(MAIN_PY, default_timeout=60).run()
     at.text_input(key="chat_q").set_value("qual è il totale?")
     next(b for b in at.button if b.label == "Invia").click().run()
 
@@ -109,7 +115,7 @@ def test_il_filtro_restringe_la_pagina(monkeypatch):
     # Seleziona una colonna categoriale e un valore, e verifica che il badge "filtro
     # attivo" compaia senza eccezioni: prova che il filtro alimenta davvero la pagina.
     monkeypatch.setattr("nlda.agent.DataAgent.overview", lambda self, *a, **k: "")
-    at = AppTest.from_file("main.py", default_timeout=60).run()
+    at = AppTest.from_file(MAIN_PY, default_timeout=60).run()
 
     flt = at.selectbox(key="flt_col")
     colonna = flt.options[1]                         # prima categoria reale (0 = "(nessun filtro)")

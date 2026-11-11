@@ -131,8 +131,9 @@ def main() -> None:
     # naturale; le colonne restano allineate in alto (CSS: stHorizontalBlock flex-start).
     col_report, col_chat = st.columns([1.55, 1], gap="large")
     with col_report:
-        # Marcatore invisibile: il CSS lo usa per riconoscere QUESTA colonna e darle
-        # scroll indipendente (i blocchi di KPI/grafici non devono scrollare).
+        # Marcatore invisibile: il CSS lo usa per riconoscere le DUE colonne principali
+        # (report | chat) e, su schermi piccoli, impilarle con la linea di stacco; le
+        # altre file di colonne (KPI, grafici) restano escluse da quelle regole.
         st.markdown("<span class='scrollcol'></span>", unsafe_allow_html=True)
         slot_sintesi = render_report(df, insights, sel_measure, unit)
         render_executive_report(
